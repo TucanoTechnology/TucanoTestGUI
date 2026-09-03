@@ -2,10 +2,17 @@
 
 Rules and guidelines for AI agents working on the Tucano Test GUI.
 
-Shared organisation-wide rules live in the `AgentRules/` directory of
-[TucanoTestAPI](https://github.com/TucanoTechnology/TucanoTestAPI). Follow those for branching,
-git usage, dependencies, code review, security, ticket management and test policy. This file
-records only the rules specific to this repository.
+## Shared rules
+
+Organisation-wide rules live in [`AgentRules/`](AgentRules/) and apply to every repository.
+Read them before making changes for branching, git usage, dependencies, code review, security,
+ticket management and test policy. This file records only what is specific to this repository.
+
+**`AgentRules/` is synced automatically from
+[TucanoAgentRules](https://github.com/TucanoTechnology/TucanoAgentRules), the single source of
+truth shared with [TucanoTestAPI](https://github.com/TucanoTechnology/TucanoTestAPI). Do not edit
+files under `AgentRules/` in this repository — submit changes against TucanoAgentRules instead and
+they will arrive here as an automated pull request.**
 
 ---
 
