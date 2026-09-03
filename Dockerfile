@@ -1,22 +1,24 @@
-FROM node:26-bookworm-slim AS builder
+FROM ubuntu:26.04 AS builder
 
 WORKDIR /build
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN apt-get update \
+    && apt-get install --no-install-recommends --yes nodejs npm ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm ci
+
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.29-alpine
+FROM ubuntu/nginx:latest
 
 ARG BUILD_NUMBER=local
 LABEL org.opencontainers.image.version="${BUILD_NUMBER}"
 
-USER root
-RUN apk update && apk upgrade --no-cache
+RUN rm -f /etc/nginx/sites-enabled/default
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=builder /build/dist /usr/share/nginx/html
 
 EXPOSE 8080
-USER 101
