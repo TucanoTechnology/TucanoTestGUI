@@ -58,7 +58,7 @@ export class TucanoApiClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+    const response = await this.fetchImpl.call(globalThis, `${this.baseUrl}${path}`, {
       headers: { 'content-type': 'application/json' },
       ...init,
     });
