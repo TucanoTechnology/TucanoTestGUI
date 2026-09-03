@@ -1,0 +1,92 @@
+:root {
+  --colour-text: #1b1b1b;
+  --colour-background: #ffffff;
+  --colour-accent: #0b4f6c;
+  --colour-focus: #b8460e;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  /* 16.1:1 against white, comfortably above the 4.5:1 required for WCAG AA. */
+  color: var(--colour-text);
+  background: var(--colour-background);
+}
+
+header,
+main,
+footer {
+  padding: 1rem clamp(1rem, 4vw, 3rem);
+}
+
+main:focus {
+  outline: none;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  padding: 0.75rem 1rem;
+  background: var(--colour-accent);
+  color: #ffffff;
+}
+
+.skip-link:focus {
+  left: 0;
+  z-index: 10;
+}
+
+:focus-visible {
+  outline: 3px solid var(--colour-focus);
+  outline-offset: 2px;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+input[type='search'] {
+  padding: 0.5rem;
+  border: 2px solid var(--colour-text);
+  border-radius: 4px;
+  min-width: min(100%, 20rem);
+}
+
+button {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--colour-accent);
+  border-radius: 4px;
+  background: var(--colour-accent);
+  color: #ffffff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.status {
+  font-weight: 600;
+}
+
+ul {
+  padding-left: 1.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
