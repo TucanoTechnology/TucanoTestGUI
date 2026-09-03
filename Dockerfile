@@ -12,6 +12,9 @@ FROM nginxinc/nginx-unprivileged:1.29-alpine
 ARG BUILD_NUMBER=local
 LABEL org.opencontainers.image.version="${BUILD_NUMBER}"
 
+USER root
+RUN apk update && apk upgrade --no-cache
+
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /build/dist /usr/share/nginx/html
 
