@@ -22,6 +22,100 @@ function clientFailing(status: number, code: string, message: string): TucanoApi
   return new TucanoApiClient('/api', stubFetch);
 }
 
+function mockFullClient(): TucanoApiClient {
+  const projects = ['PROJ-1.json'];
+  const suites = ['SmokeTest.json'];
+  const cases = ['TC-1.json'];
+  const runs = ['RUN-1.json'];
+
+  const stubFetch = (async (url: string, init?: RequestInit) => {
+    const urlStr = String(url);
+    const method = init?.method || 'GET';
+
+    if (urlStr.includes('/projects')) {
+      if (method === 'GET') {
+        if (urlStr.endsWith('/PROJ-1.json')) {
+          return new Response(JSON.stringify({ projectId: 'PROJ-1.json', name: 'Project 1', testSuites: [] }));
+        }
+        return new Response(JSON.stringify(projects));
+      }
+      if (method === 'POST') {
+        const body = JSON.parse(init?.body as string);
+        projects.push(body.projectId);
+        return new Response(JSON.stringify({ id: body.projectId }), { status: 201 });
+      }
+    }
+
+    if (urlStr.includes('/test_suites')) {
+      if (method === 'GET') {
+        if (urlStr.endsWith('/SmokeTest.json')) {
+          return new Response(JSON.stringify({ suiteId: 'SmokeTest.json', name: 'Smoke Test', testCases: [] }));
+        }
+        return new Response(JSON.stringify(suites));
+      }
+      if (method === 'POST') {
+        const body = JSON.parse(init?.body as string);
+        suites.push(body.suiteId);
+        return new Response(JSON.stringify({ id: body.suiteId }), { status: 201 });
+      }
+    }
+
+    if (urlStr.includes('/test_cases')) {
+      if (method === 'GET') {
+        if (urlStr.endsWith('/TC-1.json')) {
+          return new Response(JSON.stringify({
+            testCaseId: 'TC-1.json',
+            title: 'Verify Login',
+            expectedResult: 'Dashboard displays',
+            description: 'Preconditions: user exists',
+            priority: 'High',
+            steps: ['Navigate to /login', 'Enter credentials'],
+            attachments: [],
+          }));
+        }
+        return new Response(JSON.stringify(cases));
+      }
+      if (method === 'POST') {
+        const body = JSON.parse(init?.body as string);
+        cases.push(body.testCaseId);
+        return new Response(JSON.stringify({ id: body.testCaseId }), { status: 201 });
+      }
+    }
+
+    if (urlStr.includes('/test_runs')) {
+      if (method === 'GET') {
+        if (urlStr.endsWith('/RUN-1.json')) {
+          return new Response(JSON.stringify({
+            testRunId: 'RUN-1.json',
+            timestamp: '2026-09-04T00:00:00Z',
+            testCases: [
+              {
+                testCaseId: 'TC-1.json',
+                title: 'Verify Login',
+                expectedResult: 'Dashboard displays',
+                steps: ['Navigate to /login', 'Enter credentials'],
+              },
+            ],
+          }));
+        }
+        return new Response(JSON.stringify(runs));
+      }
+      if (method === 'POST') {
+        const body = JSON.parse(init?.body as string);
+        runs.push(body.testRunId);
+        return new Response(JSON.stringify({ id: body.testRunId }), { status: 201 });
+      }
+      if (method === 'PUT') {
+        return new Response(JSON.stringify({ id: 'RUN-1.json' }), { status: 200 });
+      }
+    }
+
+    return new Response(JSON.stringify([]));
+  }) as unknown as typeof fetch;
+
+  return new TucanoApiClient('/api', stubFetch);
+}
+
 describe('App', () => {
   it('has no detectable WCAG 2.1 AA violations', async () => {
     const { container } = render(<App client={clientReturning(['regression.json'])} />);
@@ -69,6 +163,76 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
     expect(screen.queryByText(/create new test suite/i)).toBeNull();
+  });
+
+  it('allows creating a new project via project modal form', async () => {
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^projects$/i }));
+    await screen.findByText(/1 project found/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ create project/i }));
+    expect(screen.getByRole('dialog', { name: /create new project/i })).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText(/project id/i), { target: { value: 'PROJ-2' } });
+    fireEvent.change(screen.getByLabelText(/project name/i), { target: { value: 'Checkout App' } });
+    fireEvent.submit(screen.getByRole('button', { name: /save project/i }).closest('form')!);
+
+    await screen.findByText(/2 projects found/i);
+  });
+
+  it('allows creating a test case with step-by-step actions', async () => {
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test cases$/i }));
+    await screen.findByText(/1 test case found/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ create test case/i }));
+    expect(screen.getByRole('dialog', { name: /create new test case/i })).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText(/test case id/i), { target: { value: 'TC-2' } });
+    fireEvent.change(screen.getByLabelText(/title/i), { target: { value: 'Submit Order' } });
+    fireEvent.change(screen.getByLabelText(/expected result/i), { target: { value: 'Order ID generated' } });
+    fireEvent.change(screen.getByLabelText(/step 1/i), { target: { value: 'Add item to cart' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ add step/i }));
+    fireEvent.change(screen.getByLabelText(/step 2/i), { target: { value: 'Proceed to checkout' } });
+
+    fireEvent.submit(screen.getByRole('button', { name: /save test case/i }).closest('form')!);
+
+    await screen.findByText(/2 test cases found/i);
+  });
+
+  it('launches tester execution workspace and marks test results', async () => {
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test runs$/i }));
+    await screen.findByText(/1 test run found/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /^execute$/i }));
+    await screen.findByText(/execution workspace: RUN-1.json/i);
+
+    expect(screen.getByText(/verify login/i)).toBeDefined();
+    expect(screen.getByText(/navigate to \/login/i)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /mark passed/i }));
+    await screen.findByText(/marked verify login as passed/i);
+  });
+
+  it('validates WCAG 2.1 AA on test execution workspace', async () => {
+    const { container } = render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test runs$/i }));
+    await screen.findByText(/1 test run found/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /^execute$/i }));
+    await screen.findByText(/execution workspace: RUN-1.json/i);
+
+    const results = await axe.run(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
   });
 
   it('reports API failures without exposing internals', async () => {
