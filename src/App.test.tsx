@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import { describe, expect, it } from 'vitest';
 import App from './App';
@@ -46,6 +46,29 @@ describe('App', () => {
 
     const status = await screen.findByText(/2 test suites found/);
     expect(status.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('allows tab navigation across Projects, Test suites, Test cases, and Test runs', async () => {
+    render(<App client={clientReturning(['PROJ-1', 'TC-1'])} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^projects$/i }));
+    await screen.findByText(/2 projects found/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test cases$/i }));
+    await screen.findByText(/2 test cases found/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /^test runs$/i }));
+    await screen.findByText(/2 test runs found/i);
+  });
+
+  it('opens and closes creation modal when button is clicked', async () => {
+    render(<App client={clientReturning([])} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ create test suite/i }));
+    expect(screen.getByText(/create new test suite/i)).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(screen.queryByText(/create new test suite/i)).toBeNull();
   });
 
   it('reports API failures without exposing internals', async () => {

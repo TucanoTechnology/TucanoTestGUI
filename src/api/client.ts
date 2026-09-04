@@ -18,13 +18,23 @@ export class ApiRequestError extends Error {
   }
 }
 
+export interface Attachment {
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  uploadedAt?: string;
+}
+
 export interface TestCase {
   testCaseId: string;
   title: string;
-  expectedResult: string;
   description?: string;
   steps?: string[];
+  expectedResult: string;
   priority?: string;
+  exploratory?: boolean;
+  attachments?: Attachment[];
 }
 
 export interface TestSuite {
@@ -32,6 +42,21 @@ export interface TestSuite {
   name: string;
   description?: string;
   testCases: TestCase[];
+}
+
+export interface Project {
+  projectId: string;
+  name: string;
+  description?: string;
+  testSuites: TestSuite[];
+}
+
+export interface TestRun {
+  testRunId: string;
+  timestamp: string;
+  projects?: Project[];
+  testSuites?: TestSuite[];
+  testCases?: TestCase[];
 }
 
 export interface ListQuery {
@@ -79,19 +104,39 @@ export class TucanoApiClient {
     return this.request('/health');
   }
 
-  // Server-side filtering is not available yet, so identifiers are filtered here.
+  // --- Projects ---
+  async listProjects(query: ListQuery = {}): Promise<string[]> {
+    const identifiers = await this.request<string[]>('/projects');
+    return applyFilter(identifiers, query.filter);
+  }
+
+  async getProject(id: string): Promise<Project> {
+    return this.request(`/projects/${encodeURIComponent(id)}`);
+  }
+
+  async createProject(project: Project): Promise<{ id: string }> {
+    return this.request('/projects', {
+      method: 'POST',
+      body: JSON.stringify(project),
+    });
+  }
+
+  async updateProject(id: string, project: Project): Promise<{ id: string }> {
+    return this.request(`/projects/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(project),
+    });
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await this.request(`/projects/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Test Suites ---
   async listTestSuites(query: ListQuery = {}): Promise<string[]> {
     const identifiers = await this.request<string[]>('/test_suites');
-    return applyFilter(identifiers, query.filter);
-  }
-
-  async listTestCases(query: ListQuery = {}): Promise<string[]> {
-    const identifiers = await this.request<string[]>('/test_cases');
-    return applyFilter(identifiers, query.filter);
-  }
-
-  async listTestRuns(query: ListQuery = {}): Promise<string[]> {
-    const identifiers = await this.request<string[]>('/test_runs');
     return applyFilter(identifiers, query.filter);
   }
 
@@ -103,6 +148,118 @@ export class TucanoApiClient {
     return this.request('/test_suites', {
       method: 'POST',
       body: JSON.stringify(suite),
+    });
+  }
+
+  async updateTestSuite(id: string, suite: TestSuite): Promise<{ id: string }> {
+    return this.request(`/test_suites/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(suite),
+    });
+  }
+
+  async deleteTestSuite(id: string): Promise<void> {
+    await this.request(`/test_suites/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Test Cases ---
+  async listTestCases(query: ListQuery = {}): Promise<string[]> {
+    const identifiers = await this.request<string[]>('/test_cases');
+    return applyFilter(identifiers, query.filter);
+  }
+
+  async getTestCase(id: string): Promise<TestCase> {
+    return this.request(`/test_cases/${encodeURIComponent(id)}`);
+  }
+
+  async createTestCase(testCase: TestCase): Promise<{ id: string }> {
+    return this.request('/test_cases', {
+      method: 'POST',
+      body: JSON.stringify(testCase),
+    });
+  }
+
+  async updateTestCase(id: string, testCase: TestCase): Promise<{ id: string }> {
+    return this.request(`/test_cases/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(testCase),
+    });
+  }
+
+  async deleteTestCase(id: string): Promise<void> {
+    await this.request(`/test_cases/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // --- Attachments ---
+  async uploadAttachment(testCaseId: string, file: File): Promise<Attachment> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await this.fetchImpl.call(
+      globalThis,
+      `${this.baseUrl}/test_cases/${encodeURIComponent(testCaseId)}/attachments`,
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      const error = (body as { error?: ApiError } | null)?.error ?? {
+        code: 'unknown_error',
+        message: `Request failed with status ${response.status}`,
+      };
+      throw new ApiRequestError(response.status, error);
+    }
+
+    return (await response.json()) as Attachment;
+  }
+
+  getAttachmentUrl(testCaseId: string, filename: string): string {
+    return `${this.baseUrl}/test_cases/${encodeURIComponent(testCaseId)}/attachments/${encodeURIComponent(filename)}`;
+  }
+
+  async deleteAttachment(testCaseId: string, filename: string): Promise<void> {
+    await this.request(
+      `/test_cases/${encodeURIComponent(testCaseId)}/attachments/${encodeURIComponent(filename)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  // --- Test Runs ---
+  async listTestRuns(query: ListQuery = {}): Promise<string[]> {
+    const identifiers = await this.request<string[]>('/test_runs');
+    return applyFilter(identifiers, query.filter);
+  }
+
+  async getTestRun(id: string): Promise<TestRun> {
+    return this.request(`/test_runs/${encodeURIComponent(id)}`);
+  }
+
+  async createTestRun(run: TestRun): Promise<{ id: string }> {
+    return this.request('/test_runs', {
+      method: 'POST',
+      body: JSON.stringify(run),
+    });
+  }
+
+  async updateTestRun(id: string, run: TestRun): Promise<{ id: string }> {
+    return this.request(`/test_runs/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(run),
+    });
+  }
+
+  async deleteTestRun(id: string): Promise<void> {
+    await this.request(`/test_runs/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
     });
   }
 }
