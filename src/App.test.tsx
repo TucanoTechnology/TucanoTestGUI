@@ -27,10 +27,42 @@ function mockFullClient(): TucanoApiClient {
   const suites = ['SmokeTest.json'];
   const cases = ['TC-1.json'];
   const runs = ['RUN-1.json'];
+  const milestones = ['M-1.json'];
 
   const stubFetch = (async (url: string, init?: RequestInit) => {
     const urlStr = String(url);
     const method = init?.method || 'GET';
+
+    if (urlStr.includes('/milestones')) {
+      if (method === 'GET') {
+        if (urlStr.endsWith('/progress')) {
+          return new Response(JSON.stringify({
+            milestoneId: 'M-1.json',
+            totalCases: 2,
+            passed: 1,
+            failed: 1,
+            blocked: 0,
+            untested: 0,
+            retest: 0,
+            passPercentage: 50.0,
+          }));
+        }
+        if (urlStr.endsWith('/M-1.json')) {
+          return new Response(JSON.stringify({
+            milestoneId: 'M-1.json',
+            name: 'v1.0-RC1',
+            status: 'Open',
+            testRunIds: ['RUN-1.json'],
+          }));
+        }
+        return new Response(JSON.stringify(milestones));
+      }
+      if (method === 'POST') {
+        const body = JSON.parse(init?.body as string);
+        milestones.push(body.milestoneId);
+        return new Response(JSON.stringify({ id: body.milestoneId }), { status: 201 });
+      }
+    }
 
     if (urlStr.includes('/projects')) {
       if (method === 'GET') {
@@ -233,6 +265,22 @@ describe('App', () => {
     });
 
     expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  });
+
+  it('allows navigating to Milestones tab and creating a milestone', async () => {
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^milestones$/i }));
+    await screen.findByText(/1 milestone found/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /\+ create milestone/i }));
+    expect(screen.getByRole('dialog', { name: /create new milestone/i })).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText(/milestone id/i), { target: { value: 'M-2' } });
+    fireEvent.change(screen.getByLabelText(/milestone name/i), { target: { value: 'Release v1.0' } });
+    fireEvent.submit(screen.getByRole('button', { name: /save milestone/i }).closest('form')!);
+
+    await screen.findByText(/milestone M-2.json created successfully/i);
   });
 
   it('allows collapsing and expanding hierarchy planes', async () => {
