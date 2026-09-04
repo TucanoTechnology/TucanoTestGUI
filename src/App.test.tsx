@@ -178,7 +178,7 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText(/project name/i), { target: { value: 'Checkout App' } });
     fireEvent.submit(screen.getByRole('button', { name: /save project/i }).closest('form')!);
 
-    await screen.findByText(/2 projects found/i);
+    await screen.findByText(/project PROJ-2.json created successfully/i);
   });
 
   it('allows creating a test case with step-by-step actions', async () => {
@@ -200,7 +200,7 @@ describe('App', () => {
 
     fireEvent.submit(screen.getByRole('button', { name: /save test case/i }).closest('form')!);
 
-    await screen.findByText(/2 test cases found/i);
+    await screen.findByText(/test case TC-2.json created successfully/i);
   });
 
   it('launches tester execution workspace and marks test results', async () => {
@@ -233,6 +233,33 @@ describe('App', () => {
     });
 
     expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  });
+
+  it('allows collapsing and expanding hierarchy planes', async () => {
+    render(<App client={clientReturning(['SmokeTest.json'])} />);
+    await screen.findByText(/1 test suite found/i);
+
+    const collapseBtns = screen.getAllByRole('button', { name: /collapse/i });
+    expect(collapseBtns.length).toBeGreaterThan(0);
+
+    fireEvent.click(collapseBtns[0]!);
+    expect(screen.getAllByRole('button', { name: /expand/i }).length).toBeGreaterThan(0);
+  });
+
+  it('allows editing an existing test suite via edit modal', async () => {
+    render(<App client={mockFullClient()} />);
+    await screen.findByText(/1 test suite found/i);
+
+    const editBtns = screen.getAllByRole('button', { name: /^edit$/i });
+    fireEvent.click(editBtns[0]!);
+
+    const dialog = await screen.findByRole('dialog', { name: /edit test suite/i });
+    expect(dialog).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText(/suite name/i), { target: { value: 'Updated Suite Name' } });
+    fireEvent.submit(screen.getByRole('button', { name: /update test suite/i }).closest('form')!);
+
+    await screen.findByText(/test suite SmokeTest.json updated successfully/i);
   });
 
   it('reports API failures without exposing internals', async () => {

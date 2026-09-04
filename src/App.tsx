@@ -70,6 +70,20 @@ export default function App({ client }: AppProps) {
   const [showRunModal, setShowRunModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
+  // Edit modal states
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null);
+  const [editingCase, setEditingCase] = useState<TestCase | null>(null);
+
+  // Collapsible Planes state
+  const [planeProjectsCollapsed, setPlaneProjectsCollapsed] = useState(false);
+  const [planeSuitesCollapsed, setPlaneSuitesCollapsed] = useState(false);
+  const [planeCasesCollapsed, setPlaneCasesCollapsed] = useState(false);
+
+  // Hierarchy Selection State
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedSuiteId, setSelectedSuiteId] = useState<string | null>(null);
+
   // Execution workspace state
   const [executingRun, setExecutingRun] = useState<TestRun | null>(null);
   const [executingCaseIndex, setExecutingCaseIndex] = useState(0);
@@ -159,22 +173,37 @@ export default function App({ client }: AppProps) {
         testSuites: [],
       };
       await api.createProject(newProject);
-      setMessage(`Project ${newProject.projectId} created successfully.`);
       setShowProjectModal(false);
       setProjectIdInput('');
       setProjectNameInput('');
       setProjectDescInput('');
-      void loadIdentifiers('projects', filter);
+      await loadIdentifiers('projects', filter);
+      setMessage(`Project ${newProject.projectId} created successfully.`);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create project.');
+    }
+  };
+
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProject) return;
+    try {
+      await api.updateProject(editingProject.projectId, editingProject);
+      const updatedId = editingProject.projectId;
+      setEditingProject(null);
+      await loadIdentifiers('projects', filter);
+      setMessage(`Project ${updatedId} updated successfully.`);
+    } catch (err) {
+      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to update project.');
     }
   };
 
   const handleDeleteProject = async (id: string) => {
     try {
       await api.deleteProject(id);
+      if (selectedProjectId === id) setSelectedProjectId(null);
+      await loadIdentifiers('projects', filter);
       setMessage(`Project ${id} deleted.`);
-      void loadIdentifiers('projects', filter);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete project.');
     }
@@ -193,22 +222,37 @@ export default function App({ client }: AppProps) {
         testCases: [],
       };
       await api.createTestSuite(newSuite);
-      setMessage(`Test suite ${newSuite.suiteId} created successfully.`);
       setShowSuiteModal(false);
       setSuiteIdInput('');
       setSuiteNameInput('');
       setSuiteDescInput('');
-      void loadIdentifiers('suites', filter);
+      await loadIdentifiers('suites', filter);
+      setMessage(`Test suite ${newSuite.suiteId} created successfully.`);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create test suite.');
+    }
+  };
+
+  const handleUpdateSuite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSuite) return;
+    try {
+      await api.updateTestSuite(editingSuite.suiteId, editingSuite);
+      const updatedId = editingSuite.suiteId;
+      setEditingSuite(null);
+      await loadIdentifiers('suites', filter);
+      setMessage(`Test suite ${updatedId} updated successfully.`);
+    } catch (err) {
+      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to update test suite.');
     }
   };
 
   const handleDeleteSuite = async (id: string) => {
     try {
       await api.deleteTestSuite(id);
+      if (selectedSuiteId === id) setSelectedSuiteId(null);
+      await loadIdentifiers('suites', filter);
       setMessage(`Test suite ${id} deleted.`);
-      void loadIdentifiers('suites', filter);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete test suite.');
     }
@@ -231,7 +275,6 @@ export default function App({ client }: AppProps) {
         steps: filteredSteps.length > 0 ? filteredSteps : undefined,
       };
       await api.createTestCase(newCase);
-      setMessage(`Test case ${newCase.testCaseId} created successfully.`);
       setShowCaseModal(false);
       setCaseIdInput('');
       setCaseTitleInput('');
@@ -240,17 +283,32 @@ export default function App({ client }: AppProps) {
       setCasePriorityInput('Medium');
       setCaseExploratoryInput(false);
       setCaseStepsInput(['']);
-      void loadIdentifiers('cases', filter);
+      await loadIdentifiers('cases', filter);
+      setMessage(`Test case ${newCase.testCaseId} created successfully.`);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create test case.');
+    }
+  };
+
+  const handleUpdateCase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCase) return;
+    try {
+      await api.updateTestCase(editingCase.testCaseId, editingCase);
+      const updatedId = editingCase.testCaseId;
+      setEditingCase(null);
+      await loadIdentifiers('cases', filter);
+      setMessage(`Test case ${updatedId} updated successfully.`);
+    } catch (err) {
+      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to update test case.');
     }
   };
 
   const handleDeleteCase = async (id: string) => {
     try {
       await api.deleteTestCase(id);
+      await loadIdentifiers('cases', filter);
       setMessage(`Test case ${id} deleted.`);
-      void loadIdentifiers('cases', filter);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete test case.');
     }
@@ -300,10 +358,10 @@ export default function App({ client }: AppProps) {
         testCases: [],
       };
       await api.createTestRun(newRun);
-      setMessage(`Test run ${newRun.testRunId} created successfully.`);
       setShowRunModal(false);
       setRunIdInput('');
-      void loadIdentifiers('runs', filter);
+      await loadIdentifiers('runs', filter);
+      setMessage(`Test run ${newRun.testRunId} created successfully.`);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create test run.');
     }
@@ -312,8 +370,8 @@ export default function App({ client }: AppProps) {
   const handleDeleteRun = async (id: string) => {
     try {
       await api.deleteTestRun(id);
+      await loadIdentifiers('runs', filter);
       setMessage(`Test run ${id} deleted.`);
-      void loadIdentifiers('runs', filter);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete test run.');
     }
@@ -395,6 +453,33 @@ export default function App({ client }: AppProps) {
       setShowDetailModal(true);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test run.');
+    }
+  };
+
+  const handleEditProjectClick = async (id: string) => {
+    try {
+      const proj = await api.getProject(id);
+      setEditingProject(proj);
+    } catch (err) {
+      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch project for edit.');
+    }
+  };
+
+  const handleEditSuiteClick = async (id: string) => {
+    try {
+      const suite = await api.getTestSuite(id);
+      setEditingSuite(suite);
+    } catch (err) {
+      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test suite for edit.');
+    }
+  };
+
+  const handleEditCaseClick = async (id: string) => {
+    try {
+      const c = await api.getTestCase(id);
+      setEditingCase(c);
+    } catch (err) {
+      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test case for edit.');
     }
   };
 
@@ -499,6 +584,225 @@ export default function App({ client }: AppProps) {
           {message}
         </p>
 
+        {/* Visual Hierarchy Breadcrumb Trail */}
+        <nav aria-label="Hierarchy Breadcrumb" className="breadcrumb-trail">
+          <span className="breadcrumb-item">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setSelectedProjectId(null);
+                setSelectedSuiteId(null);
+              }}
+            >
+              All Projects
+            </button>
+          </span>
+          {selectedProjectId && (
+            <span className="breadcrumb-item">
+              &gt;{' '}
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setSelectedSuiteId(null)}
+              >
+                {selectedProjectId}
+              </button>
+            </span>
+          )}
+          {selectedSuiteId && (
+            <span className="breadcrumb-item">
+              &gt; <button type="button" className="btn-secondary">{selectedSuiteId}</button>
+            </span>
+          )}
+        </nav>
+
+        {/* Visual Hierarchy Collapsible Horizontal Planes */}
+        <section aria-label="Visual Hierarchy Workspace" className="hierarchy-grid">
+          {/* Projects Plane */}
+          <div className={`plane ${planeProjectsCollapsed ? 'collapsed' : ''}`}>
+            <div className="plane-header">
+              <h3 className="plane-title">Projects</h3>
+              <div className="plane-actions">
+                <button
+                  type="button"
+                  aria-expanded={!planeProjectsCollapsed}
+                  className="btn-secondary"
+                  onClick={() => setPlaneProjectsCollapsed((c) => !c)}
+                >
+                  {planeProjectsCollapsed ? 'Expand' : 'Collapse'}
+                </button>
+                <button type="button" onClick={() => setShowProjectModal(true)}>
+                  + New
+                </button>
+              </div>
+            </div>
+            <div className="plane-body">
+              {activeTab === 'projects' && state === 'ready' && identifiers.length === 0 ? (
+                <p>No projects found.</p>
+              ) : (
+                <ul className="plane-list" aria-label="Projects Hierarchy List">
+                  {(activeTab === 'projects' ? identifiers : []).map((id) => (
+                    <li
+                      key={id}
+                      className={`plane-item ${selectedProjectId === id ? 'selected' : ''}`}
+                      onClick={() => setSelectedProjectId(id)}
+                    >
+                      <div className="plane-item-header">
+                        <span className="plane-item-title">{id}</span>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleViewProject(id);
+                            }}
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleEditProjectClick(id);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Test Suites Plane */}
+          <div className={`plane ${planeSuitesCollapsed ? 'collapsed' : ''}`}>
+            <div className="plane-header">
+              <h3 className="plane-title">Test Suites</h3>
+              <div className="plane-actions">
+                <button
+                  type="button"
+                  aria-expanded={!planeSuitesCollapsed}
+                  className="btn-secondary"
+                  onClick={() => setPlaneSuitesCollapsed((c) => !c)}
+                >
+                  {planeSuitesCollapsed ? 'Expand' : 'Collapse'}
+                </button>
+                <button type="button" onClick={() => setShowSuiteModal(true)}>
+                  + New
+                </button>
+              </div>
+            </div>
+            <div className="plane-body">
+              {activeTab === 'suites' && state === 'ready' && identifiers.length === 0 ? (
+                <p>No test suites found.</p>
+              ) : (
+                <ul className="plane-list" aria-label="Test Suites Hierarchy List">
+                  {(activeTab === 'suites' ? identifiers : []).map((id) => (
+                    <li
+                      key={id}
+                      className={`plane-item ${selectedSuiteId === id ? 'selected' : ''}`}
+                      onClick={() => setSelectedSuiteId(id)}
+                    >
+                      <div className="plane-item-header">
+                        <span className="plane-item-title">{id}</span>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleViewSuite(id);
+                            }}
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleEditSuiteClick(id);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Test Cases Plane */}
+          <div className={`plane ${planeCasesCollapsed ? 'collapsed' : ''}`}>
+            <div className="plane-header">
+              <h3 className="plane-title">Test Cases</h3>
+              <div className="plane-actions">
+                <button
+                  type="button"
+                  aria-expanded={!planeCasesCollapsed}
+                  className="btn-secondary"
+                  onClick={() => setPlaneCasesCollapsed((c) => !c)}
+                >
+                  {planeCasesCollapsed ? 'Expand' : 'Collapse'}
+                </button>
+                <button type="button" onClick={() => setShowCaseModal(true)}>
+                  + New
+                </button>
+              </div>
+            </div>
+            <div className="plane-body">
+              {activeTab === 'cases' && state === 'ready' && identifiers.length === 0 ? (
+                <p>No test cases found.</p>
+              ) : (
+                <ul className="plane-list" aria-label="Test Cases Hierarchy List">
+                  {(activeTab === 'cases' ? identifiers : []).map((id) => (
+                    <li
+                      key={id}
+                      className="plane-item"
+                      onClick={() => void handleViewCase(id)}
+                    >
+                      <div className="plane-item-header">
+                        <span className="plane-item-title">{id}</span>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleViewCase(id);
+                            }}
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleEditCaseClick(id);
+                            }}
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* Execution Workspace when running a test run */}
         {activeTab === 'runs' && executingRun && (
           <section className="card" style={{ marginBottom: '2rem', borderLeft: '4px solid var(--colour-accent)' }}>
@@ -589,6 +893,9 @@ export default function App({ client }: AppProps) {
                       <button type="button" className="btn-secondary" onClick={() => void handleViewProject(id)}>
                         Details
                       </button>
+                      <button type="button" className="btn-secondary" onClick={() => void handleEditProjectClick(id)}>
+                        Edit
+                      </button>
                       <button type="button" className="btn-danger" onClick={() => void handleDeleteProject(id)}>
                         Delete
                       </button>
@@ -599,6 +906,9 @@ export default function App({ client }: AppProps) {
                       <button type="button" className="btn-secondary" onClick={() => void handleViewSuite(id)}>
                         Details
                       </button>
+                      <button type="button" className="btn-secondary" onClick={() => void handleEditSuiteClick(id)}>
+                        Edit
+                      </button>
                       <button type="button" className="btn-danger" onClick={() => void handleDeleteSuite(id)}>
                         Delete
                       </button>
@@ -608,6 +918,9 @@ export default function App({ client }: AppProps) {
                     <>
                       <button type="button" className="btn-secondary" onClick={() => void handleViewCase(id)}>
                         Details
+                      </button>
+                      <button type="button" className="btn-secondary" onClick={() => void handleEditCaseClick(id)}>
+                        Edit
                       </button>
                       <button type="button" className="btn-danger" onClick={() => void handleDeleteCase(id)}>
                         Delete
@@ -993,6 +1306,143 @@ export default function App({ client }: AppProps) {
                   </ul>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Modal for Project Editing */}
+        {editingProject && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-proj-modal-title">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3 id="edit-proj-modal-title">Edit Project: {editingProject.projectId}</h3>
+                <button type="button" className="btn-secondary" onClick={() => setEditingProject(null)}>
+                  Cancel
+                </button>
+              </div>
+              <form className="form-grid" onSubmit={handleUpdateProject}>
+                <div className="form-group">
+                  <label htmlFor="edit-proj-name-input">Project Name</label>
+                  <input
+                    id="edit-proj-name-input"
+                    type="text"
+                    required
+                    value={editingProject.name}
+                    onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="edit-proj-desc-input">Description</label>
+                  <textarea
+                    id="edit-proj-desc-input"
+                    value={editingProject.description || ''}
+                    onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
+                  />
+                </div>
+                <button type="submit">Update Project</button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal for Test Suite Editing */}
+        {editingSuite && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-suite-modal-title">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3 id="edit-suite-modal-title">Edit Test Suite: {editingSuite.suiteId}</h3>
+                <button type="button" className="btn-secondary" onClick={() => setEditingSuite(null)}>
+                  Cancel
+                </button>
+              </div>
+              <form className="form-grid" onSubmit={handleUpdateSuite}>
+                <div className="form-group">
+                  <label htmlFor="edit-suite-name-input">Suite Name</label>
+                  <input
+                    id="edit-suite-name-input"
+                    type="text"
+                    required
+                    value={editingSuite.name}
+                    onChange={(e) => setEditingSuite({ ...editingSuite, name: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="edit-suite-desc-input">Description</label>
+                  <textarea
+                    id="edit-suite-desc-input"
+                    value={editingSuite.description || ''}
+                    onChange={(e) => setEditingSuite({ ...editingSuite, description: e.target.value })}
+                  />
+                </div>
+                <button type="submit">Update Test Suite</button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal for Test Case Editing */}
+        {editingCase && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-case-modal-title">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3 id="edit-case-modal-title">Edit Test Case: {editingCase.testCaseId}</h3>
+                <button type="button" className="btn-secondary" onClick={() => setEditingCase(null)}>
+                  Cancel
+                </button>
+              </div>
+              <form className="form-grid" onSubmit={handleUpdateCase}>
+                <div className="form-group">
+                  <label htmlFor="edit-case-title-input">Title</label>
+                  <input
+                    id="edit-case-title-input"
+                    type="text"
+                    required
+                    value={editingCase.title}
+                    onChange={(e) => setEditingCase({ ...editingCase, title: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="edit-case-priority-input">Priority</label>
+                  <select
+                    id="edit-case-priority-input"
+                    value={editingCase.priority || 'Medium'}
+                    onChange={(e) => setEditingCase({ ...editingCase, priority: e.target.value })}
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="edit-case-desc-input">Description / Preconditions</label>
+                  <textarea
+                    id="edit-case-desc-input"
+                    value={editingCase.description || ''}
+                    onChange={(e) => setEditingCase({ ...editingCase, description: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="edit-case-expected-input">Expected Result</label>
+                  <textarea
+                    id="edit-case-expected-input"
+                    required
+                    value={editingCase.expectedResult}
+                    onChange={(e) => setEditingCase({ ...editingCase, expectedResult: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={editingCase.exploratory || false}
+                      onChange={(e) => setEditingCase({ ...editingCase, exploratory: e.target.checked })}
+                    />{' '}
+                    Exploratory Test Case
+                  </label>
+                </div>
+                <button type="submit">Update Test Case</button>
+              </form>
             </div>
           </div>
         )}
