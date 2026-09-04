@@ -31,6 +31,49 @@ describe('TucanoApiClient', () => {
     await expect(client.listTestSuites()).resolves.toEqual(['regression.json']);
   });
 
+  it('handles project operations', async () => {
+    const client = new TucanoApiClient(
+      '/api',
+      stubFetch(200, { projectId: 'PROJ-1', name: 'Project 1', testSuites: [] }),
+    );
+    await expect(client.getProject('PROJ-1')).resolves.toEqual({
+      projectId: 'PROJ-1',
+      name: 'Project 1',
+      testSuites: [],
+    });
+  });
+
+  it('handles test case operations', async () => {
+    const client = new TucanoApiClient(
+      '/api',
+      stubFetch(200, { testCaseId: 'TC-1', title: 'Login', expectedResult: 'Success' }),
+    );
+    await expect(client.getTestCase('TC-1')).resolves.toEqual({
+      testCaseId: 'TC-1',
+      title: 'Login',
+      expectedResult: 'Success',
+    });
+  });
+
+  it('handles test run operations', async () => {
+    const client = new TucanoApiClient(
+      '/api',
+      stubFetch(200, { testRunId: 'RUN-1', timestamp: '2026-09-04T00:00:00Z', testCases: [] }),
+    );
+    await expect(client.getTestRun('RUN-1')).resolves.toEqual({
+      testRunId: 'RUN-1',
+      timestamp: '2026-09-04T00:00:00Z',
+      testCases: [],
+    });
+  });
+
+  it('builds attachment URLs correctly', () => {
+    const client = new TucanoApiClient('/api', stubFetch(200, {}));
+    expect(client.getAttachmentUrl('TC-1', 'shot.png')).toBe(
+      '/api/test_cases/TC-1/attachments/shot.png',
+    );
+  });
+
   it('surfaces the API error envelope', async () => {
     const client = new TucanoApiClient(
       '/api',
