@@ -59,6 +59,28 @@ export interface TestRun {
   testCases?: TestCase[];
 }
 
+export interface Milestone {
+  milestoneId: string;
+  name: string;
+  description?: string;
+  startDate?: string;
+  targetDate?: string;
+  status?: string;
+  testSuiteIds?: string[];
+  testRunIds?: string[];
+}
+
+export interface MilestoneProgress {
+  milestoneId: string;
+  totalCases: number;
+  passed: number;
+  failed: number;
+  blocked: number;
+  untested: number;
+  retest: number;
+  passPercentage: number;
+}
+
 export interface ListQuery {
   /** Case-insensitive substring match applied to returned identifiers. */
   filter?: string;
@@ -261,6 +283,40 @@ export class TucanoApiClient {
     await this.request(`/test_runs/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     });
+  }
+
+  // --- Milestones ---
+  async listMilestones(query: ListQuery = {}): Promise<string[]> {
+    const identifiers = await this.request<string[]>('/milestones');
+    return applyFilter(identifiers, query.filter);
+  }
+
+  async getMilestone(id: string): Promise<Milestone> {
+    return this.request(`/milestones/${encodeURIComponent(id)}`);
+  }
+
+  async createMilestone(milestone: Milestone): Promise<{ id: string }> {
+    return this.request('/milestones', {
+      method: 'POST',
+      body: JSON.stringify(milestone),
+    });
+  }
+
+  async updateMilestone(id: string, milestone: Milestone): Promise<{ id: string }> {
+    return this.request(`/milestones/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(milestone),
+    });
+  }
+
+  async deleteMilestone(id: string): Promise<void> {
+    await this.request(`/milestones/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getMilestoneProgress(id: string): Promise<MilestoneProgress> {
+    return this.request(`/milestones/${encodeURIComponent(id)}/progress`);
   }
 }
 

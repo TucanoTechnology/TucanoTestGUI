@@ -67,6 +67,32 @@ describe('TucanoApiClient', () => {
     });
   });
 
+  it('handles milestone and progress operations', async () => {
+    const client = new TucanoApiClient(
+      '/api',
+      stubFetch(200, {
+        milestoneId: 'M-1.json',
+        totalCases: 5,
+        passed: 4,
+        failed: 1,
+        blocked: 0,
+        untested: 0,
+        retest: 0,
+        passPercentage: 80,
+      }),
+    );
+    await expect(client.getMilestoneProgress('M-1.json')).resolves.toEqual({
+      milestoneId: 'M-1.json',
+      totalCases: 5,
+      passed: 4,
+      failed: 1,
+      blocked: 0,
+      untested: 0,
+      retest: 0,
+      passPercentage: 80,
+    });
+  });
+
   it('builds attachment URLs correctly', () => {
     const client = new TucanoApiClient('/api', stubFetch(200, {}));
     expect(client.getAttachmentUrl('TC-1', 'shot.png')).toBe(
