@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { TestCase } from '../api/client';
 
 export interface TestCaseTableProps {
@@ -11,7 +11,7 @@ export interface TestCaseTableProps {
 type SortColumn = 'id' | 'title' | 'priority' | 'status' | 'modified';
 type SortDirection = 'asc' | 'desc';
 
-export default function TestCaseTable({ cases, onSelectionChange, onStatusChange, onRowClick }: TestCaseTableProps) {
+export default function TestCaseTable({ cases, onSelectionChange, onRowClick }: TestCaseTableProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<SortColumn>('id');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -39,8 +39,21 @@ export default function TestCaseTable({ cases, onSelectionChange, onStatusChange
   };
 
   const sortedCases = [...cases].sort((a, b) => {
-    const aVal = a[sortColumn] || '';
-    const bVal = b[sortColumn] || '';
+    let aVal = '';
+    let bVal = '';
+    if (sortColumn === 'id') {
+      aVal = a.testCaseId;
+      bVal = b.testCaseId;
+    } else if (sortColumn === 'title') {
+      aVal = a.title;
+      bVal = b.title;
+    } else if (sortColumn === 'priority') {
+      aVal = a.priority || 'Medium';
+      bVal = b.priority || 'Medium';
+    } else if (sortColumn === 'status') {
+      aVal = a.priority || 'Untested';
+      bVal = b.priority || 'Untested';
+    }
     const comparison = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
     return sortDirection === 'asc' ? comparison : -comparison;
   });
