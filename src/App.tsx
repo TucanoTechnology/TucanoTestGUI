@@ -9,6 +9,8 @@ import {
   TestSuite,
   TucanoApiClient,
 } from './api/client';
+import { AppShell } from './components';
+import { navigationItems } from './components/navigationItems';
 
 type Tab = 'projects' | 'suites' | 'cases' | 'runs' | 'milestones';
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -583,73 +585,24 @@ export default function App({ client }: AppProps) {
   };
 
   return (
-    <>
-      <a className="skip-link" href="#main">
-        Skip to main content
-      </a>
+    <AppShell
+      navigationItems={navigationItems}
+      activeView={activeTab}
+      onNavigate={(id) => handleTabChange(id as Tab)}
+    >
+      <>
+        <a className="skip-link" href="#main">
+          Skip to main content
+        </a>
 
-      <header>
-        <h1 className="app-title">Tucano Test</h1>
-        <nav aria-label="Main Navigation">
-          <ul className="nav-tabs">
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'projects' ? 'active' : ''}`}
-                onClick={() => handleTabChange('projects')}
-                type="button"
-              >
-                Projects
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'suites' ? 'active' : ''}`}
-                onClick={() => handleTabChange('suites')}
-                type="button"
-              >
-                Test suites
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'cases' ? 'active' : ''}`}
-                onClick={() => handleTabChange('cases')}
-                type="button"
-              >
-                Test cases
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'runs' ? 'active' : ''}`}
-                onClick={() => handleTabChange('runs')}
-                type="button"
-              >
-                Test runs
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'milestones' ? 'active' : ''}`}
-                onClick={() => handleTabChange('milestones')}
-                type="button"
-              >
-                Milestones
-              </button>
-            </li>
-          </ul>
-        </nav>
-      </header>
-
-      <main id="main" tabIndex={-1}>
         <div className="page-header">
-          <h2>
-            {activeTab === 'projects' && 'Projects'}
-            {activeTab === 'suites' && 'Test suites'}
-            {activeTab === 'cases' && 'Test cases'}
-            {activeTab === 'runs' && 'Test runs'}
-            {activeTab === 'milestones' && 'Milestones & Releases'}
-          </h2>
+        <h2>
+          {activeTab === 'projects' && 'Projects'}
+          {activeTab === 'suites' && 'Test suites'}
+          {activeTab === 'cases' && 'Test cases'}
+          {activeTab === 'runs' && 'Test runs'}
+          {activeTab === 'milestones' && 'Milestones & Releases'}
+        </h2>
           <div>
             {activeTab === 'projects' && (
               <button type="button" onClick={() => setShowProjectModal(true)}>
@@ -1752,11 +1705,11 @@ export default function App({ client }: AppProps) {
             </div>
           </div>
         )}
-      </main>
 
-      <footer>
+      <footer style={{ marginTop: '48px', paddingTop: '24px', borderTop: '1px solid #e2e8f0', color: '#64748b', fontSize: '14px' }}>
         <p>Data is served by the Tucano Test API.</p>
       </footer>
-    </>
+      </>
+    </AppShell>
   );
 }
