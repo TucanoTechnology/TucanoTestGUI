@@ -9,6 +9,7 @@ import {
   TestSuite,
   TucanoApiClient,
 } from './api/client';
+import ThreePanelLayout from './components/ThreePanelLayout';
 
 type Tab = 'projects' | 'suites' | 'cases' | 'runs' | 'milestones';
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -127,7 +128,22 @@ export default function App({ client }: AppProps) {
   // Attachment upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // Three-panel layout state
+  const [useThreePanelView, setUseThreePanelView] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+
   const statusRef = useRef<HTMLParagraphElement>(null);
+
+  // Fetch projects for three-panel view
+  useEffect(() => {
+    if (useThreePanelView) {
+      api.listProjects({}).then((ids) => {
+        Promise.all(ids.map((id) => api.getProject(id)))
+          .then(setProjects)
+          .catch(console.error);
+      }).catch(console.error);
+    }
+  }, [useThreePanelView, api]);
 
   const loadIdentifiers = useCallback(
     async (tab: Tab, currentFilter: string) => {
@@ -688,6 +704,16 @@ export default function App({ client }: AppProps) {
                 {activeTab === 'milestones' && 'Milestones & Releases'}
               </h2>
               <div>
+                {activeTab === 'cases' && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setUseThreePanelView(!useThreePanelView)}
+                    style={{ marginRight: '0.5rem' }}
+                  >
+                    {useThreePanelView ? ' Standard View' : '◨ Three-Panel View'}
+                  </button>
+                )}
                 {activeTab === 'projects' && (
                   <button type="button" onClick={() => setShowProjectModal(true)}>
                     + Create project
@@ -730,6 +756,18 @@ export default function App({ client }: AppProps) {
               </div>
               <button type="submit">Apply filter</button>
             </form>
+
+        {/* Three-Panel Layout for Cases */}
+        {activeTab === 'cases' && useThreePanelView && (
+          <div style={{ height: 'calc(100vh - 250px)', marginTop: '1rem' }}>
+            <ThreePanelLayout
+              projects={projects}
+              onProjectSelect={(id) => console.log('Project selected:', id)}
+              onSuiteSelect={(id) => console.log('Suite selected:', id)}
+              onCaseSelect={(id) => console.log('Case selected:', id)}
+            />
+          </div>
+        )}
 
         <p aria-live="polite" ref={statusRef} className={`status-message ${state === 'error' ? 'error' : ''}`}>
           {message}
