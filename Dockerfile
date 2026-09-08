@@ -13,6 +13,8 @@ FROM nginx:trixie
 ARG BUILD_NUMBER=local
 LABEL org.opencontainers.image.version="${BUILD_NUMBER}"
 
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 RUN rm -f /etc/nginx/conf.d/default.conf
 
 COPY nginx.conf /etc/nginx/templates/default.conf.template
