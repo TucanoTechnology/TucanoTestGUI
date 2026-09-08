@@ -588,111 +588,148 @@ export default function App({ client }: AppProps) {
         Skip to main content
       </a>
 
-      <header>
-        <h1 className="app-title">Tucano Test</h1>
-        <nav aria-label="Main Navigation">
-          <ul className="nav-tabs">
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'projects' ? 'active' : ''}`}
-                onClick={() => handleTabChange('projects')}
-                type="button"
-              >
-                Projects
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'suites' ? 'active' : ''}`}
-                onClick={() => handleTabChange('suites')}
-                type="button"
-              >
-                Test suites
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'cases' ? 'active' : ''}`}
-                onClick={() => handleTabChange('cases')}
-                type="button"
-              >
-                Test cases
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'runs' ? 'active' : ''}`}
-                onClick={() => handleTabChange('runs')}
-                type="button"
-              >
-                Test runs
-              </button>
-            </li>
-            <li>
-              <button
-                className={`nav-tab-button ${activeTab === 'milestones' ? 'active' : ''}`}
-                onClick={() => handleTabChange('milestones')}
-                type="button"
-              >
-                Milestones
-              </button>
-            </li>
-          </ul>
-        </nav>
-      </header>
-
-      <main id="main" tabIndex={-1}>
-        <div className="page-header">
-          <h2>
-            {activeTab === 'projects' && 'Projects'}
-            {activeTab === 'suites' && 'Test suites'}
-            {activeTab === 'cases' && 'Test cases'}
-            {activeTab === 'runs' && 'Test runs'}
-            {activeTab === 'milestones' && 'Milestones & Releases'}
-          </h2>
+      <header className="topbar">
+        <div className="topbar-brand">
+          <div className="brand-mark" aria-hidden="true">T</div>
           <div>
-            {activeTab === 'projects' && (
-              <button type="button" onClick={() => setShowProjectModal(true)}>
-                + Create project
-              </button>
-            )}
-            {activeTab === 'suites' && (
-              <button type="button" onClick={() => setShowSuiteModal(true)}>
-                + Create test suite
-              </button>
-            )}
-            {activeTab === 'cases' && (
-              <button type="button" onClick={() => setShowCaseModal(true)}>
-                + Create test case
-              </button>
-            )}
-            {activeTab === 'runs' && (
-              <button type="button" onClick={() => setShowRunModal(true)}>
-                + Create test run
-              </button>
-            )}
-            {activeTab === 'milestones' && (
-              <button type="button" onClick={() => setShowMilestoneModal(true)}>
-                + Create milestone
-              </button>
-            )}
+            <div className="eyebrow">QA Workspace</div>
+            <h1 className="app-title">Tucano Test</h1>
           </div>
         </div>
 
-        <form className="search-form" onSubmit={handleSearchSubmit}>
-          <div className="form-group">
-            <label htmlFor={filterId}>Filter {formatTabName(activeTab)}</label>
-            <input
-              id={filterId}
-              name="filter"
-              type="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder={`Search ${formatTabName(activeTab)}...`}
-            />
-          </div>
-          <button type="submit">Apply filter</button>
-        </form>
+        <div className="topbar-context" aria-label="Current project context">
+          <span className="context-pill">Project: All projects</span>
+          <span className="context-pill">Release: vNext</span>
+          <span className="context-pill">Environment: Staging</span>
+        </div>
+
+        <div className="topbar-actions">
+          <button type="button" className="btn-secondary">
+            Refresh
+          </button>
+          <button type="button">Quick create</button>
+        </div>
+      </header>
+
+      <main id="main" tabIndex={-1}>
+        <div className="app-shell">
+          <aside className="app-sidebar" aria-label="Sidebar navigation">
+            <div className="sidebar-section">
+              <p className="sidebar-label">Workspace</p>
+              <nav aria-label="Main Navigation">
+                <ul className="nav-tabs sidebar-nav">
+                  <li>
+                    <button
+                      className={`nav-tab-button ${activeTab === 'projects' ? 'active' : ''}`}
+                      onClick={() => handleTabChange('projects')}
+                      type="button"
+                    >
+                      Projects
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      className={`nav-tab-button ${activeTab === 'suites' ? 'active' : ''}`}
+                      onClick={() => handleTabChange('suites')}
+                      type="button"
+                    >
+                      Test suites
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      className={`nav-tab-button ${activeTab === 'cases' ? 'active' : ''}`}
+                      onClick={() => handleTabChange('cases')}
+                      type="button"
+                    >
+                      Test cases
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      className={`nav-tab-button ${activeTab === 'runs' ? 'active' : ''}`}
+                      onClick={() => handleTabChange('runs')}
+                      type="button"
+                    >
+                      Test runs
+                    </button>
+                  </li>
+                  <li>
+                    <button
+                      className={`nav-tab-button ${activeTab === 'milestones' ? 'active' : ''}`}
+                      onClick={() => handleTabChange('milestones')}
+                      type="button"
+                    >
+                      Milestones
+                    </button>
+                  </li>
+                </ul>
+              </nav>
+            </div>
+
+            <div className="sidebar-section">
+              <p className="sidebar-label">Shortcuts</p>
+              <ul className="shortcut-list">
+                <li>Dashboard</li>
+                <li>Reviews</li>
+                <li>Reports</li>
+                <li>Settings</li>
+              </ul>
+            </div>
+          </aside>
+
+          <div className="workspace-main">
+            <div className="page-header">
+              <h2>
+                {activeTab === 'projects' && 'Projects'}
+                {activeTab === 'suites' && 'Test suites'}
+                {activeTab === 'cases' && 'Test cases'}
+                {activeTab === 'runs' && 'Test runs'}
+                {activeTab === 'milestones' && 'Milestones & Releases'}
+              </h2>
+              <div>
+                {activeTab === 'projects' && (
+                  <button type="button" onClick={() => setShowProjectModal(true)}>
+                    + Create project
+                  </button>
+                )}
+                {activeTab === 'suites' && (
+                  <button type="button" onClick={() => setShowSuiteModal(true)}>
+                    + Create test suite
+                  </button>
+                )}
+                {activeTab === 'cases' && (
+                  <button type="button" onClick={() => setShowCaseModal(true)}>
+                    + Create test case
+                  </button>
+                )}
+                {activeTab === 'runs' && (
+                  <button type="button" onClick={() => setShowRunModal(true)}>
+                    + Create test run
+                  </button>
+                )}
+                {activeTab === 'milestones' && (
+                  <button type="button" onClick={() => setShowMilestoneModal(true)}>
+                    + Create milestone
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <form className="search-form workspace-search" onSubmit={handleSearchSubmit}>
+              <div className="form-group">
+                <label htmlFor={filterId}>Filter {formatTabName(activeTab)}</label>
+                <input
+                  id={filterId}
+                  name="filter"
+                  type="search"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder={`Search ${formatTabName(activeTab)}...`}
+                />
+              </div>
+              <button type="submit">Apply filter</button>
+            </form>
 
         <p aria-live="polite" ref={statusRef} className={`status-message ${state === 'error' ? 'error' : ''}`}>
           {message}
@@ -1752,6 +1789,8 @@ export default function App({ client }: AppProps) {
             </div>
           </div>
         )}
+          </div>
+        </div>
       </main>
 
       <footer>

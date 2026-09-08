@@ -74,11 +74,71 @@ header {
   gap: 1rem;
 }
 
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--colour-text-muted);
+}
+
+.brand-mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, var(--colour-accent), #14b8a6);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
 .app-title {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--colour-accent);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.topbar-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.context-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--colour-border);
+  background: #f8fafc;
+  color: var(--colour-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.topbar-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -92,15 +152,22 @@ header {
   list-style: none;
 }
 
+.sidebar-nav {
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 .nav-tab-button {
-  padding: 0.5rem 1rem;
+  padding: 0.75rem 0.9rem;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 10px;
   background: transparent;
   color: var(--colour-text-muted);
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
+  text-align: left;
+  width: 100%;
 }
 
 .nav-tab-button:hover {
@@ -109,14 +176,135 @@ header {
 }
 
 .nav-tab-button.active {
-  background: var(--colour-accent);
-  color: #ffffff;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--colour-accent);
+  border-color: rgba(15, 118, 110, 0.12);
 }
 
 main {
   padding: 1.5rem clamp(1rem, 4vw, 3rem);
-  max-width: 1200px;
+  max-width: 1440px;
   margin: 0 auto;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.app-sidebar {
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-border);
+  border-radius: 16px;
+  padding: 1rem 0.75rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+.sidebar-section + .sidebar-section {
+  margin-top: 1.5rem;
+}
+
+.sidebar-label {
+  margin: 0 0 0.75rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--colour-text-muted);
+}
+
+.shortcut-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.shortcut-list li {
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: var(--colour-text-muted);
+  font-weight: 600;
+}
+
+.workspace-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--colour-border);
+  border-radius: 16px;
+  background: var(--colour-surface);
+}
+
+.page-header h2 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.workspace-search {
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--colour-border);
+  border-radius: 16px;
+  background: var(--colour-surface);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.card {
+  background: var(--colour-surface);
+  border: 1px solid var(--colour-border);
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+}
+
+.card-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.modal-content {
+  border-radius: 18px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.52);
+  display: grid;
+  place-items: center;
+  z-index: 20;
 }
 
 main:focus {
