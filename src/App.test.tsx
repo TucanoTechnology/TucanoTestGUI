@@ -174,14 +174,14 @@ describe('App', () => {
     expect(status.getAttribute('aria-live')).toBe('polite');
   });
 
-  it('allows tab navigation across Projects, Test suites, Test cases, and Test runs', async () => {
+  it('allows tab navigation across Projects, Tests, and Test runs', async () => {
     render(<App client={clientReturning(['PROJ-1', 'TC-1'])} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^projects$/i }));
     await screen.findByText(/2 projects found/i);
 
-    fireEvent.click(screen.getByRole('button', { name: /^test cases$/i }));
-    await screen.findByText(/2 test cases found/i);
+    fireEvent.click(screen.getByRole('button', { name: /^tests$/i }));
+    await screen.findByText(/2 tests found/i);
 
     fireEvent.click(screen.getByRole('button', { name: /^test runs$/i }));
     await screen.findByText(/2 test runs found/i);
@@ -216,10 +216,11 @@ describe('App', () => {
   it('allows creating a test case with step-by-step actions', async () => {
     render(<App client={mockFullClient()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /^test cases$/i }));
-    await screen.findByText(/1 test case found/i);
+    fireEvent.click(screen.getByRole('button', { name: /^tests$/i }));
+    await screen.findByText(/1 test found/i);
 
-    fireEvent.click(screen.getByRole('button', { name: /\+ create test case/i }));
+    const createCaseBtns = screen.getAllByRole('button', { name: /\+ create test case/i });
+    fireEvent.click(createCaseBtns[0]!);
     expect(screen.getByRole('dialog', { name: /create new test case/i })).toBeDefined();
 
     fireEvent.change(screen.getByLabelText(/test case id/i), { target: { value: 'TC-2' } });
@@ -316,5 +317,47 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText(/could not load test suites/i)).toBeDefined();
     });
+  });
+
+  it('renders three-panel layout and opens test case detail when row is clicked', async () => {
+    render(<App client={mockFullClient()} />);
+
+    // Switch to Tests tab
+    fireEvent.click(screen.getByRole('button', { name: /^tests$/i }));
+    await screen.findByText(/1 test found/i);
+
+    // Verify folder hierarchy panel (Pane 1)
+    expect(screen.getByText(/test case folders/i)).toBeDefined();
+    expect(screen.getAllByText(/all test cases/i).length).toBeGreaterThan(0);
+
+    // Verify table (Pane 2) and wait for cases to load
+    const caseRow = await screen.findByText(/verify login/i);
+    expect(caseRow).toBeDefined();
+
+    // Click on row to open DetailView (Pane 3)
+    fireEvent.click(caseRow);
+
+    // Verify Detail panel header and content
+    const closeBtn = await screen.findByRole('button', { name: /close detail panel/i });
+    expect(closeBtn).toBeDefined();
+    expect(await screen.findByRole('button', { name: /steps & description/i })).toBeDefined();
+  });
+
+  it('passes WCAG 2.1 AA accessibility checks on the three-panel layout', async () => {
+    const { container } = render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^tests$/i }));
+    await screen.findByText(/1 test found/i);
+
+    // Open detail panel
+    const caseRow = await screen.findByText(/verify login/i);
+    fireEvent.click(caseRow);
+    await screen.findByRole('button', { name: /steps & description/i });
+
+    const results = await axe.run(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
   });
 });

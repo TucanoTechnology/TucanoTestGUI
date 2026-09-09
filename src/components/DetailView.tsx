@@ -1,19 +1,58 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import DuplicateButton from './DuplicateButton';
+import StatusBadge, { TestCaseStatus } from './StatusBadge';
+import { Attachment, TucanoApiClient } from '../api/client';
 
 export type DetailItemType = 'case' | 'suite' | 'project' | 'run' | 'milestone';
 
 export interface DetailViewProps {
   itemId: string | null;
   itemType: DetailItemType;
+  client?: TucanoApiClient;
+  breadcrumb?: string;
   onClose: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  onPassAndNext?: () => void;
+  onStatusChange?: (newStatus: TestCaseStatus) => void;
+  onRecordResult?: (status: TestCaseStatus, notes: string) => Promise<void>;
+  onItemUpdated?: () => void;
+  onItemDeleted?: () => void;
 }
 
-export default function DetailView({ itemId, itemType, onClose }: DetailViewProps) {
+export default function DetailView({
+  itemId,
+  itemType,
+  client,
+  breadcrumb,
+  onClose,
+  onPrev,
+  onNext,
+  hasPrev = false,
+  hasNext = false,
+  onPassAndNext,
+  onStatusChange,
+  onRecordResult,
+  onItemUpdated,
+  onItemDeleted,
+}: DetailViewProps) {
+  const api = React.useMemo(() => client ?? new TucanoApiClient(), [client]);
   const [item, setItem] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'details' | 'results' | 'attachments'>('details');
+
+  // Inline result recorder state
+  const [resultStatus, setResultStatus] = useState<TestCaseStatus>('Passed');
+  const [resultNotes, setResultNotes] = useState('');
+  const [isSubmittingResult, setIsSubmittingResult] = useState(false);
+
+  // Attachment upload state
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (!itemId) {
@@ -25,10 +64,18 @@ export default function DetailView({ itemId, itemType, onClose }: DetailViewProp
       setLoading(true);
       setError(null);
       try {
-        const endpoint = `/api/${itemType}s/${encodeURIComponent(itemId)}`;
-        const response = await fetch(endpoint);
-        if (!response.ok) throw new Error('Failed to fetch item');
-        const data = await response.json();
+        let data: any;
+        if (itemType === 'case') {
+          data = await api.getTestCase(itemId);
+        } else if (itemType === 'suite') {
+          data = await api.getTestSuite(itemId);
+        } else if (itemType === 'project') {
+          data = await api.getProject(itemId);
+        } else if (itemType === 'run') {
+          data = await api.getTestRun(itemId);
+        } else if (itemType === 'milestone') {
+          data = await api.getMilestone(itemId);
+        }
         setItem(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -38,30 +85,44 @@ export default function DetailView({ itemId, itemType, onClose }: DetailViewProp
     };
 
     fetchItem();
-  }, [itemId, itemType]);
+  }, [itemId, itemType, api]);
 
   const handleSave = async () => {
     if (!item || !itemId) return;
     try {
-      const endpoint = `/api/${itemType}s/${encodeURIComponent(itemId)}`;
-      const response = await fetch(endpoint, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item),
-      });
-      if (!response.ok) throw new Error('Failed to save');
+      if (itemType === 'case') {
+        await api.updateTestCase(itemId, item);
+      } else if (itemType === 'suite') {
+        await api.updateTestSuite(itemId, item);
+      } else if (itemType === 'project') {
+        await api.updateProject(itemId, item);
+      } else if (itemType === 'run') {
+        await api.updateTestRun(itemId, item);
+      } else if (itemType === 'milestone') {
+        await api.updateMilestone(itemId, item);
+      }
       setEditing(false);
+      onItemUpdated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     }
   };
 
   const handleDelete = async () => {
-    if (!itemId || !window.confirm('Are you sure you want to delete this item?')) return;
+    if (!itemId || !window.confirm(`Are you sure you want to delete this ${itemType}?`)) return;
     try {
-      const endpoint = `/api/${itemType}s/${encodeURIComponent(itemId)}`;
-      const response = await fetch(endpoint, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete');
+      if (itemType === 'case') {
+        await api.deleteTestCase(itemId);
+      } else if (itemType === 'suite') {
+        await api.deleteTestSuite(itemId);
+      } else if (itemType === 'project') {
+        await api.deleteProject(itemId);
+      } else if (itemType === 'run') {
+        await api.deleteTestRun(itemId);
+      } else if (itemType === 'milestone') {
+        await api.deleteMilestone(itemId);
+      }
+      onItemDeleted?.();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
@@ -70,30 +131,100 @@ export default function DetailView({ itemId, itemType, onClose }: DetailViewProp
 
   const handleDuplicate = (newId: string) => {
     alert(`Item duplicated as: ${newId}`);
+    onItemUpdated?.();
+  };
+
+  const handleLocalStatusChange = (newStatus: TestCaseStatus) => {
+    if (item && itemType === 'case') {
+      const updated = { ...item, priority: newStatus };
+      setItem(updated);
+      onStatusChange?.(newStatus);
+    }
+  };
+
+  const handleSubmitResult = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onRecordResult) return;
+    setIsSubmittingResult(true);
+    try {
+      await onRecordResult(resultStatus, resultNotes);
+      setResultNotes('');
+      // Update local item view
+      if (item) {
+        setItem({ ...item, priority: resultStatus });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record result');
+    } finally {
+      setIsSubmittingResult(false);
+    }
+  };
+
+  const handleUploadAttachment = async () => {
+    if (!uploadFile || !itemId || itemType !== 'case') return;
+    setIsUploading(true);
+    try {
+      const attachment = await api.uploadAttachment(itemId, uploadFile);
+      const updatedAttachments = [...(item.attachments || []), attachment];
+      setItem({ ...item, attachments: updatedAttachments });
+      setUploadFile(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to upload attachment');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (filename: string) => {
+    if (!itemId || itemType !== 'case') return;
+    try {
+      await api.deleteAttachment(itemId, filename);
+      const updated = (item.attachments || []).filter((a: Attachment) => a.filename !== filename);
+      setItem({ ...item, attachments: updated });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete attachment');
+    }
   };
 
   if (!itemId) {
     return (
-      <div style={{ padding: '24px', textAlign: 'center', color: '#6c757d' }}>
-        <p>Select an item to view details</p>
+      <div style={{ padding: '40px 24px', textAlign: 'center', color: '#64748b' }}>
+        <span style={{ fontSize: '32px', display: 'block', marginBottom: '12px' }}>📋</span>
+        <h3 style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 6px 0', color: '#1e293b' }}>
+          No item selected
+        </h3>
+        <p style={{ fontSize: '13px', margin: 0, color: '#94a3b8' }}>
+          Click on any row in the test case table to view and edit its details.
+        </p>
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div style={{ padding: '24px', textAlign: 'center', color: '#6c757d' }}>
-        <p>Loading...</p>
+      <div style={{ padding: '40px 24px', textAlign: 'center', color: '#64748b' }}>
+        <p style={{ fontSize: '14px', margin: 0 }}>Loading details...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{ padding: '24px', textAlign: 'center', color: '#dc3545' }}>
-        <p>Error: {error}</p>
-        <button onClick={() => window.location.reload()} style={{ marginTop: '12px' }}>
-          Retry
+      <div style={{ padding: '24px', textAlign: 'center', color: '#b91c1c' }}>
+        <p style={{ fontSize: '14px', fontWeight: 600 }}>Error: {error}</p>
+        <button
+          type="button"
+          onClick={() => setEditing(false)}
+          style={{
+            marginTop: '12px',
+            padding: '6px 14px',
+            background: '#f8fafc',
+            border: '1px solid #cbd5e1',
+            borderRadius: '6px',
+            cursor: 'pointer',
+          }}
+        >
+          Dismiss
         </button>
       </div>
     );
@@ -101,362 +232,656 @@ export default function DetailView({ itemId, itemType, onClose }: DetailViewProp
 
   if (!item) {
     return (
-      <div style={{ padding: '24px', textAlign: 'center', color: '#6c757d' }}>
-        <p>Item not found</p>
+      <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+        <p>Item not found.</p>
       </div>
     );
   }
 
+  const currentStatus: TestCaseStatus =
+    item.priority === 'Passed' || item.priority === 'Failed' || item.priority === 'Blocked' || item.priority === 'Retest'
+      ? (item.priority as TestCaseStatus)
+      : 'Untested';
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Header */}
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        background: '#ffffff',
+        borderLeft: '1px solid #e2e8f0',
+      }}
+    >
+      {/* Sticky Panel Toolbar */}
       <div
         style={{
-          padding: '16px',
-          borderBottom: '1px solid #dee2e6',
+          position: 'sticky',
+          top: 0,
+          background: '#ffffff',
+          zIndex: 20,
+          padding: '10px 16px',
+          borderBottom: '1px solid #e2e8f0',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '8px',
         }}
       >
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>
-          {itemType === 'case' && 'Test Case'}
-          {itemType === 'suite' && 'Test Suite'}
-          {itemType === 'project' && 'Project'}
-          {itemType === 'run' && 'Test Run'}
-          {itemType === 'milestone' && 'Milestone'}
-        </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            fontSize: '20px',
-            cursor: 'pointer',
-            color: '#6c757d',
-            padding: '4px 8px',
-          }}
-          aria-label="Close detail panel"
-        >
-          ×
-        </button>
+        {/* Left Toolbar Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {itemType === 'case' && onPassAndNext && (
+            <button
+              type="button"
+              onClick={onPassAndNext}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '5px 12px',
+                background: '#15803d',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              }}
+              title="Mark Passed & advance to next test case"
+            >
+              <span>✓ Pass & next</span>
+            </button>
+          )}
+
+          {itemType === 'case' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('results')}
+              style={{
+                padding: '5px 10px',
+                background: activeTab === 'results' ? '#e0f2fe' : '#f8fafc',
+                color: activeTab === 'results' ? '#0369a1' : '#334155',
+                border: '1px solid #cbd5e1',
+                borderRadius: '6px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              + Add result
+            </button>
+          )}
+        </div>
+
+        {/* Right Toolbar Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {onPrev && (
+            <button
+              type="button"
+              onClick={onPrev}
+              disabled={!hasPrev}
+              style={{
+                padding: '4px 8px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '4px',
+                cursor: hasPrev ? 'pointer' : 'not-allowed',
+                opacity: hasPrev ? 1 : 0.4,
+                fontSize: '12px',
+              }}
+              aria-label="Previous test case"
+            >
+              ◀
+            </button>
+          )}
+
+          {onNext && (
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={!hasNext}
+              style={{
+                padding: '4px 8px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '4px',
+                cursor: hasNext ? 'pointer' : 'not-allowed',
+                opacity: hasNext ? 1 : 0.4,
+                fontSize: '12px',
+              }}
+              aria-label="Next test case"
+            >
+              ▶
+            </button>
+          )}
+
+          <DuplicateButton
+            resourceId={itemId}
+            resourceType={itemType === 'case' ? 'case' : itemType === 'suite' ? 'suite' : (itemType as any)}
+            onDuplicate={handleDuplicate}
+          />
+
+          <button
+            type="button"
+            onClick={() => setEditing(!editing)}
+            style={{
+              padding: '4px 8px',
+              background: editing ? '#fef3c7' : '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: '4px',
+              color: editing ? '#92400e' : '#334155',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 600,
+            }}
+            aria-label="Edit item"
+          >
+            {editing ? 'Cancel' : '✎ Edit'}
+          </button>
+
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              color: '#64748b',
+              padding: '2px 8px',
+              marginLeft: '4px',
+            }}
+            aria-label="Close detail panel"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
+      {/* Main Content Area */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+        {/* Breadcrumb path */}
+        <div style={{ fontSize: '11.5px', color: '#64748b', fontWeight: 500, marginBottom: '6px' }}>
+          {breadcrumb || `All Test Cases / ${itemId}`}
+        </div>
+
+        {/* Item Title & Status Pill */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '16px' }}>
+          <div style={{ flex: 1 }}>
+            {editing ? (
+              <input
+                type="text"
+                value={item.title || item.name || ''}
+                onChange={(e) =>
+                  itemType === 'case'
+                    ? setItem({ ...item, title: e.target.value })
+                    : setItem({ ...item, name: e.target.value })
+                }
+                style={{
+                  width: '100%',
+                  padding: '6px 10px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  border: '1px solid #cbd5e1',
+                  borderRadius: '6px',
+                }}
+              />
+            ) : (
+              <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>
+                {item.title || item.name}
+              </h3>
+            )}
+            <div style={{ fontSize: '12px', color: '#64748b', fontFamily: 'monospace', marginTop: '4px' }}>
+              ID: {itemId}
+            </div>
+          </div>
+
+          {itemType === 'case' && (
+            <StatusBadge
+              status={currentStatus}
+              size="medium"
+              interactive={true}
+              onStatusChange={handleLocalStatusChange}
+            />
+          )}
+        </div>
+
+        {/* Metadata Grid Card */}
         {itemType === 'case' && (
-          <>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Title
-              </label>
-              {editing ? (
-                <input
-                  type="text"
-                  value={item.title || ''}
-                  onChange={(e) => setItem({ ...item, title: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                />
-              ) : (
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{item.title}</div>
-              )}
+          <div
+            style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '12px 14px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))',
+              gap: '10px',
+              marginBottom: '20px',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                Template
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', marginTop: '2px' }}>
+                📄 Steps
+              </div>
             </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Description
-              </label>
-              {editing ? (
-                <textarea
-                  value={item.description || ''}
-                  onChange={(e) => setItem({ ...item, description: e.target.value })}
-                  rows={4}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                />
-              ) : (
-                <div style={{ fontSize: '14px', color: '#495057' }}>{item.description || 'No description'}</div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Expected Result
-              </label>
-              {editing ? (
-                <textarea
-                  value={item.expectedResult || ''}
-                  onChange={(e) => setItem({ ...item, expectedResult: e.target.value })}
-                  rows={3}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                />
-              ) : (
-                <div style={{ fontSize: '14px', color: '#495057' }}>{item.expectedResult || 'Not specified'}</div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
                 Priority
-              </label>
-              {editing ? (
-                <select
-                  value={item.priority || 'Medium'}
-                  onChange={(e) => setItem({ ...item, priority: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                >
-                  <option>Low</option>
-                  <option>Medium</option>
-                  <option>High</option>
-                  <option>Critical</option>
-                </select>
-              ) : (
-                <div style={{ fontSize: '14px' }}>{item.priority || 'Medium'}</div>
-              )}
-            </div>
-
-            {item.steps && item.steps.length > 0 && (
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#495057' }}>
-                  Steps
-                </label>
-                <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '14px' }}>
-                  {item.steps.map((step: string, idx: number) => (
-                    <li key={idx} style={{ marginBottom: '4px' }}>
-                      {step}
-                    </li>
-                  ))}
-                </ol>
               </div>
-            )}
-          </>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', marginTop: '2px' }}>
+                {item.priority || 'Medium'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                Severity
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', marginTop: '2px' }}>
+                {item.severity || 'Major'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
+                Test Type
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', marginTop: '2px' }}>
+                {item.testType || 'Functional'}
+              </div>
+            </div>
+          </div>
         )}
 
-        {itemType === 'suite' && (
-          <>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Name
-              </label>
-              {editing ? (
-                <input
-                  type="text"
-                  value={item.name || ''}
-                  onChange={(e) => setItem({ ...item, name: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                />
-              ) : (
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{item.name}</div>
-              )}
-            </div>
+        {/* Local Tab Navigation */}
+        <div
+          style={{
+            display: 'flex',
+            borderBottom: '1px solid #e2e8f0',
+            marginBottom: '16px',
+            gap: '16px',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab('details')}
+            style={{
+              padding: '8px 4px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'details' ? '2px solid #0f766e' : '2px solid transparent',
+              color: activeTab === 'details' ? '#0f766e' : '#64748b',
+              fontWeight: 600,
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
+          >
+            Steps & Description
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('results')}
+            style={{
+              padding: '8px 4px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'results' ? '2px solid #0f766e' : '2px solid transparent',
+              color: activeTab === 'results' ? '#0f766e' : '#64748b',
+              fontWeight: 600,
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
+          >
+            Execution & Results
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('attachments')}
+            style={{
+              padding: '8px 4px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'attachments' ? '2px solid #0f766e' : '2px solid transparent',
+              color: activeTab === 'attachments' ? '#0f766e' : '#64748b',
+              fontWeight: 600,
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
+          >
+            Attachments ({item.attachments?.length || 0})
+          </button>
+        </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
+        {/* Tab 1: Details & Steps */}
+        {activeTab === 'details' && (
+          <div>
+            {/* Description */}
+            <div style={{ marginBottom: '18px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
                 Description
-              </label>
+              </div>
               {editing ? (
                 <textarea
                   value={item.description || ''}
                   onChange={(e) => setItem({ ...item, description: e.target.value })}
-                  rows={4}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
+                  rows={3}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px' }}
                 />
               ) : (
-                <div style={{ fontSize: '14px', color: '#495057' }}>{item.description || 'No description'}</div>
+                <p style={{ margin: 0, fontSize: '13.5px', color: '#334155', lineHeight: 1.5 }}>
+                  {item.description || 'No description provided.'}
+                </p>
               )}
             </div>
 
-            {item.testCases && (
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#495057' }}>
-                  Test Cases ({item.testCases.length})
-                </label>
-                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px' }}>
-                  {item.testCases.map((tc: any) => (
-                    <li key={tc.testCaseId} style={{ marginBottom: '4px' }}>
-                      {tc.title}
-                    </li>
-                  ))}
-                </ul>
+            {/* Preconditions */}
+            {item.preconditions && (
+              <div style={{ marginBottom: '18px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Preconditions
+                </div>
+                <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '6px', fontSize: '13px', color: '#334155' }}>
+                  {item.preconditions}
+                </div>
               </div>
             )}
-          </>
-        )}
 
-        {itemType === 'project' && (
-          <>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Name
-              </label>
-              {editing ? (
-                <input
-                  type="text"
-                  value={item.name || ''}
-                  onChange={(e) => setItem({ ...item, name: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                />
+            {/* Steps & Expected Results */}
+            <div style={{ marginBottom: '18px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '8px' }}>
+                Test Steps
+              </div>
+              {item.steps && item.steps.length > 0 ? (
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                  {item.steps.map((step: any, idx: number) => {
+                    const action = typeof step === 'string' ? step : step.action;
+                    const expected = typeof step === 'object' && step?.expectedResult ? step.expectedResult : null;
+
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: '10px 14px',
+                          borderBottom: idx < item.steps.length - 1 ? '1px solid #f1f5f9' : 'none',
+                          background: idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                        }}
+                      >
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <span style={{ fontWeight: 700, color: '#0f766e', fontSize: '13px' }}>
+                            {idx + 1}.
+                          </span>
+                          <div style={{ flex: 1, fontSize: '13.5px', color: '#1e293b' }}>
+                            {action}
+                          </div>
+                        </div>
+                        {expected && (
+                          <div
+                            style={{
+                              marginLeft: '20px',
+                              marginTop: '4px',
+                              fontSize: '12.5px',
+                              color: '#15803d',
+                              fontWeight: 500,
+                            }}
+                          >
+                            ↳ <em>Expected:</em> {expected}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{item.name}</div>
+                <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>No steps documented.</p>
               )}
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Description
-              </label>
-              {editing ? (
-                <textarea
-                  value={item.description || ''}
-                  onChange={(e) => setItem({ ...item, description: e.target.value })}
-                  rows={4}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                />
-              ) : (
-                <div style={{ fontSize: '14px', color: '#495057' }}>{item.description || 'No description'}</div>
-              )}
-            </div>
-
-            {item.testSuites && (
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#495057' }}>
-                  Test Suites ({item.testSuites.length})
-                </label>
-                <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '14px' }}>
-                  {item.testSuites.map((suite: any) => (
-                    <li key={suite.suiteId} style={{ marginBottom: '4px' }}>
-                      {suite.name}
-                    </li>
-                  ))}
-                </ul>
+            {/* Overall Expected Result */}
+            {item.expectedResult && (
+              <div style={{ marginBottom: '18px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Expected Result
+                </div>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px 12px', borderRadius: '6px', fontSize: '13px', color: '#166534' }}>
+                  {item.expectedResult}
+                </div>
               </div>
             )}
-          </>
+          </div>
         )}
 
-        {(itemType === 'run' || itemType === 'milestone') && (
-          <>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Name
-              </label>
-              {editing ? (
-                <input
-                  type="text"
-                  value={item.name || ''}
-                  onChange={(e) => setItem({ ...item, name: e.target.value })}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
+        {/* Tab 2: Execution & Results */}
+        {activeTab === 'results' && (
+          <div>
+            <form onSubmit={handleSubmitResult} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px', marginBottom: '20px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginBottom: '10px' }}>
+                Log Test Result
+              </div>
+
+              {/* Status choice pills */}
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                {(['Passed', 'Failed', 'Blocked', 'Retest', 'Untested'] as TestCaseStatus[]).map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setResultStatus(st)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: resultStatus === st ? '2px solid #0f766e' : '1px solid #cbd5e1',
+                      background: resultStatus === st ? '#e0f2fe' : '#ffffff',
+                      color: resultStatus === st ? '#0369a1' : '#475569',
+                    }}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+
+              {/* Notes input */}
+              <div style={{ marginBottom: '12px' }}>
+                <textarea
+                  value={resultNotes}
+                  onChange={(e) => setResultNotes(e.target.value)}
+                  placeholder="Add execution comments or defect notes..."
+                  rows={3}
+                  style={{ width: '100%', padding: '8px', fontSize: '12.5px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
                 />
-              ) : (
-                <div style={{ fontSize: '14px', fontWeight: 500 }}>{item.name}</div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmittingResult}
+                style={{
+                  background: '#0f766e',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 14px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {isSubmittingResult ? 'Saving...' : 'Record Result'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Tab 3: Attachments */}
+        {activeTab === 'attachments' && (
+          <div>
+            {/* Upload form */}
+            <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '14px', marginBottom: '16px', textAlign: 'center' }}>
+              <input
+                type="file"
+                id="detail-file-input"
+                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                style={{ fontSize: '12px', marginBottom: '8px' }}
+              />
+              {uploadFile && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleUploadAttachment}
+                    disabled={isUploading}
+                    style={{
+                      background: '#0f766e',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      padding: '5px 12px',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isUploading ? 'Uploading...' : 'Upload Attachment'}
+                  </button>
+                </div>
               )}
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: '#495057' }}>
-                Description
-              </label>
-              {editing ? (
-                <textarea
-                  value={item.description || ''}
-                  onChange={(e) => setItem({ ...item, description: e.target.value })}
-                  rows={4}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ced4da', borderRadius: '4px' }}
-                />
-              ) : (
-                <div style={{ fontSize: '14px', color: '#495057' }}>{item.description || 'No description'}</div>
-              )}
-            </div>
-          </>
+            {/* Attachment Chips */}
+            {item.attachments && item.attachments.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {item.attachments.map((att: Attachment) => (
+                  <div
+                    key={att.filename}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📎</span>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
+                          {att.originalName}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>
+                          {Math.round(att.size / 1024)} KB
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <a
+                        href={`/api/test_cases/${encodeURIComponent(itemId)}/attachments/${encodeURIComponent(att.filename)}`}
+                        download
+                        style={{
+                          padding: '4px 8px',
+                          background: '#f1f5f9',
+                          borderRadius: '4px',
+                          fontSize: '11.5px',
+                          textDecoration: 'none',
+                          color: '#334155',
+                          fontWeight: 500,
+                        }}
+                      >
+                        Download
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAttachment(att.filename)}
+                        style={{
+                          padding: '4px 8px',
+                          background: '#fee2e2',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontSize: '11.5px',
+                          color: '#b91c1c',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', margin: '20px 0' }}>
+                No attachments uploaded yet.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
       {/* Footer Actions */}
-      <div
-        style={{
-          padding: '16px',
-          borderTop: '1px solid #dee2e6',
-          display: 'flex',
-          gap: '8px',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {editing ? (
-            <>
-              <button
-                type="button"
-                onClick={handleSave}
-                style={{
-                  padding: '8px 16px',
-                  background: '#28a745',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                }}
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditing(false)}
-                style={{
-                  padding: '8px 16px',
-                  background: '#6c757d',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                }}
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                style={{
-                  padding: '8px 16px',
-                  background: '#0066cc',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                }}
-              >
-                Edit
-              </button>
-              <DuplicateButton
-                resourceId={itemId}
-                resourceType={itemType as any}
-                onDuplicate={handleDuplicate}
-              />
-            </>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={handleDelete}
+      {editing && (
+        <div
           style={{
-            padding: '8px 16px',
-            background: '#dc3545',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px',
+            padding: '12px 20px',
+            borderTop: '1px solid #e2e8f0',
+            background: '#f8fafc',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
           }}
         >
-          Delete
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={handleDelete}
+            style={{
+              padding: '6px 12px',
+              background: '#fee2e2',
+              border: 'none',
+              borderRadius: '6px',
+              color: '#b91c1c',
+              fontSize: '12.5px',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            Delete {itemType}
+          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              style={{
+                padding: '6px 12px',
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: '6px',
+                fontSize: '12.5px',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              style={{
+                padding: '6px 14px',
+                background: '#0f766e',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '12.5px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
