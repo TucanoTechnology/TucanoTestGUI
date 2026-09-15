@@ -11,8 +11,8 @@ import {
 } from './api/client';
 import ThreePanelLayout from './components/ThreePanelLayout';
 import { TestCaseStatus } from './components/StatusBadge';
+import AppShell, { type Tab } from './components/AppShell';
 
-type Tab = 'projects' | 'suites' | 'cases' | 'runs' | 'milestones';
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
 function formatTabName(tab: Tab): string {
@@ -668,103 +668,25 @@ export default function App({ client }: AppProps) {
   }, [projectsList, suitesList, casesList]);
 
   return (
-    <div className="app-container">
-      <a className="skip-link" href="#main">
-        Skip to main content
-      </a>
-
-      {/* Top Application Header */}
-      <header className="app-header">
-        <div className="header-left">
-          <div className="brand-logo" aria-label="Tucano Test">
-            <span className="brand-icon" aria-hidden="true">🦜</span>
-            <span className="brand-title">Tucano Test</span>
-          </div>
-
-          {/* Project Switcher */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <button
-              type="button"
-              className="project-selector-btn"
-              onClick={() => handleTabChange('projects')}
-              aria-label="Current Project: Tucano Core Storefront"
-            >
-              <span>📦</span>
-              <span>{currentProject === 'all' ? 'Tucano Core Storefront' : currentProject}</span>
-              <span style={{ fontSize: '10px', opacity: 0.8 }}>▼</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="header-right">
-          <span className="header-context-badge">Release: v1.0</span>
-          <span className="header-context-badge">Environment: Staging</span>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => void fetchAllWorkspaceData()}
-            style={{ padding: '4px 8px', fontSize: '12px', background: 'rgba(255,255,255,0.15)', color: '#ffffff', border: '1px solid rgba(255,255,255,0.2)' }}
-          >
-            ↻ Refresh
-          </button>
-          <div className="avatar-badge" title="User: Alex (QA Lead)">
-            A
-          </div>
-        </div>
-      </header>
-
-      {/* Master Body Layout */}
-      <div className="app-body">
-        {/* Left Icon Rail Navigation */}
-        <nav className="icon-rail" aria-label="Main Navigation">
-          <button
-            type="button"
-            className={`rail-btn ${activeTab === 'projects' ? 'active' : ''}`}
-            onClick={() => handleTabChange('projects')}
-            aria-label="Projects"
-          >
-            <span className="rail-icon">🏢</span>
-            <span className="rail-label">Projects</span>
-          </button>
-
-          <button
-            type="button"
-            className={`rail-btn ${activeTab === 'cases' ? 'active' : ''}`}
-            onClick={() => handleTabChange('cases')}
-            aria-label="Tests"
-          >
-            <span className="rail-icon">📋</span>
-            <span className="rail-label">Tests</span>
-            <span className="rail-badge">{totalCaseCount || identifiers.length || 0}</span>
-          </button>
-
-          <button
-            type="button"
-            className={`rail-btn ${activeTab === 'runs' ? 'active' : ''}`}
-            onClick={() => handleTabChange('runs')}
-            aria-label="Test runs"
-          >
-            <span className="rail-icon">▶️</span>
-            <span className="rail-label">Test runs</span>
-            <span className="rail-badge">{runsList.length || 0}</span>
-          </button>
-
-          <button
-            type="button"
-            className={`rail-btn ${activeTab === 'milestones' ? 'active' : ''}`}
-            onClick={() => handleTabChange('milestones')}
-            aria-label="Milestones"
-          >
-            <span className="rail-icon">🎯</span>
-            <span className="rail-label">Milestones</span>
-            <span className="rail-badge">{milestonesList.length || identifiers.length || 0}</span>
-          </button>
-        </nav>
-
-        {/* Central Workspace Canvas */}
-        <main id="main" tabIndex={-1} className="workspace-canvas">
-          {/* Top Context & Actions Header */}
-          <div className="workspace-topbar">
+    <>
+      <AppShell
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        projects={projectsList}
+        currentProject={currentProject}
+        onProjectChange={(id) => setCurrentProject(id)}
+        searchValue={filter}
+        onSearchChange={(value) => setFilter(value)}
+        onSearchSubmit={() => {
+          void loadIdentifiers(activeTab, filter);
+        }}
+        onRefresh={() => {
+          void fetchAllWorkspaceData();
+        }}
+        counts={{ cases: totalCaseCount, runs: runsList.length, milestones: milestonesList.length }}
+      >
+        {/* Top Context & Actions Header */}
+        <div className="workspace-topbar">
             <div className="workspace-title-group">
               <h2>
                 {activeTab === 'cases' && 'Tests'}
@@ -1174,8 +1096,7 @@ export default function App({ client }: AppProps) {
               </div>
             </div>
           )}
-        </main>
-      </div>
+        </AppShell>
 
       {/* MODALS */}
       {/* Create Project Modal */}
@@ -1832,6 +1753,6 @@ export default function App({ client }: AppProps) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
