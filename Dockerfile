@@ -11,9 +11,10 @@ RUN npm run build
 FROM nginx:trixie
 
 ARG BUILD_NUMBER=local
+ARG CACHEBUST=1
 LABEL org.opencontainers.image.version="${BUILD_NUMBER}"
 
-RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+RUN echo "cachebust=${CACHEBUST}" && apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
 RUN rm -f /etc/nginx/conf.d/default.conf
 

@@ -39,7 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build application image
-        run: docker build --pull --file Dockerfile --tag tucano-test-gui .
+        run: docker build --pull --build-arg CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }} --file Dockerfile --tag tucano-test-gui .
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: tucano-test-gui
