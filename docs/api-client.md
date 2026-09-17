@@ -86,3 +86,23 @@ those tests fail and the table has to be revisited.
 The same retirement applies to `/test_suites`, `/test_cases`, `/test_runs` and
 `/milestones`. No global listing operation exists for any of them, so a view that
 lists a resource lists it per project.
+
+## Release and environment have no contract source
+
+The app shell's context bar offers a release and an environment selector. Neither
+can be populated from the contract as it stands:
+
+| Selector | Nearest contract model | What is missing |
+| --- | --- | --- |
+| Release | `Milestone` (`milestoneId`, `name`, `description`, `startDate`, `targetDate`, `status`, `testSuiteIds`, `testRunIds`) | a release field, and any route listing releases |
+| Environment | `TestConfiguration` (`configId`, `name`, `browser`, `os`, `device`, `resolution`) | an environment field, and any route listing environments |
+
+`src/components/AppShell.tsx` therefore keeps its `RELEASES` and `ENVIRONMENTS`
+placeholders; the two selects hold local state and change nothing else. Deriving a
+release from a milestone name or an environment from a configuration name would be
+the GUI guessing at context the API has not published, which the API-first rule in
+`AGENTS.md` forbids.
+
+The API half is tracked as TucanoTestAPI#262. When it lands, move the pin with
+`npm run sync:openapi -- --ref <sha>`, regenerate, and pass the values to
+`AppShell` the way `projects` and `currentProject` already are.

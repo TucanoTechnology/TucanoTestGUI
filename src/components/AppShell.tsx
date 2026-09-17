@@ -18,6 +18,9 @@ const NAV_DESTINATIONS: NavDestination[] = [
   { tab: 'milestones', label: 'Milestones', icon: '🎯' },
 ];
 
+// Placeholders, not data: the contract publishes no release or environment
+// collection (TucanoTestAPI#262), and the GUI does not invent context the API
+// cannot supply. Both lists become props once that endpoint exists.
 const RELEASES = ['v1.0', 'v1.1', 'main'];
 const ENVIRONMENTS = ['Staging', 'Production', 'Development'];
 

@@ -1,16 +1,53 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import { describe, expect, it } from 'vitest';
 import App from './App';
 import { TucanoApiClient } from './api/client';
 
+/** Detail routes and the entity each one answers with, keyed by URL segment. */
+const DETAIL_BODIES: Array<[string, (id: string) => object]> = [
+  ['/projects/', (id) => ({ projectId: id, name: id, testSuites: [] })],
+  ['/test_suites/', (id) => ({ suiteId: id, name: id, testCases: [] })],
+  ['/test_cases/', (id) => ({ testCaseId: id, title: id, steps: [] })],
+  ['/test_runs/', (id) => ({ testRunId: id, timestamp: '2026-09-04T00:00:00Z', testCases: [] })],
+  ['/milestones/', (id) => ({ milestoneId: id, name: id, status: 'Open', testRunIds: [] })],
+];
+
+/**
+ * A client whose list routes answer with `identifiers` and whose detail routes
+ * answer with a well-formed entity. The detail responses have to carry their id
+ * field: the shell preloads those entities and the folder tree keys nodes by it.
+ *
+ * One id list stands in for every collection, so this client serves the tests
+ * that assert on counts and shell chrome. A view that composes two collections
+ * would draw ids from the same list twice — the folder tree merges projects and
+ * standalone suites into one node array — so tests that render one use
+ * `mockFullClient`, whose collections are namespaced apart.
+ */
 function clientReturning(identifiers: string[]): TucanoApiClient {
-  const stubFetch = (async () =>
-    new Response(JSON.stringify(identifiers), {
+  const stubFetch = (async (url: string) => {
+    const urlStr = String(url);
+    const route = DETAIL_BODIES.find(([segment]) => urlStr.includes(segment));
+    const id = route ? urlStr.split('/').pop() : undefined;
+    const body = route && id ? route[1](decodeURIComponent(id)) : identifiers;
+    return new Response(JSON.stringify(body), {
       status: 200,
       headers: { 'content-type': 'application/json' },
-    })) as unknown as typeof fetch;
+    });
+  }) as unknown as typeof fetch;
   return new TucanoApiClient('/api', stubFetch);
+}
+
+/**
+ * Renders the shell and lets its two async loads settle. The shell preloads the
+ * workspace and resolves the active tab's identifiers on mount, so a test that
+ * asserts synchronously has to drain those promises inside `act`.
+ */
+async function renderShell(client: TucanoApiClient): Promise<void> {
+  render(<App client={client} />);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }
 
 function clientFailing(status: number, code: string, message: string): TucanoApiClient {
@@ -161,7 +198,7 @@ describe('App', () => {
   });
 
   it('exposes a skip link and a labelled filter control', async () => {
-    render(<App client={clientReturning([])} />);
+    await renderShell(clientReturning([]));
 
     expect(screen.getByRole('link', { name: /skip to main content/i })).toBeDefined();
     expect(screen.getByLabelText(/filter test suites/i)).toBeDefined();
@@ -175,20 +212,25 @@ describe('App', () => {
   });
 
   it('allows tab navigation across Projects, Tests, and Test runs', async () => {
-    render(<App client={clientReturning(['PROJ-1', 'TC-1'])} />);
+    render(<App client={mockFullClient()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^projects$/i }));
-    await screen.findByText(/2 projects found/i);
+    await screen.findByText(/1 project found/i);
+    expect(await screen.findByRole('button', { name: 'Details for PROJ-1.json' })).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: /^tests$/i }));
-    await screen.findByText(/2 tests found/i);
+    await screen.findByText(/1 test found/i);
+    expect(await screen.findByRole('button', { name: 'Actions for Verify Login' })).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: /^test runs$/i }));
-    await screen.findByText(/2 test runs found/i);
+    await screen.findByText(/1 test run found/i);
+    expect(
+      await screen.findByRole('button', { name: /^execute RUN-1\.json$/i }),
+    ).toBeDefined();
   });
 
   it('supports arrow-key navigation within the icon rail', async () => {
-    render(<App client={clientReturning([])} />);
+    await renderShell(clientReturning([]));
 
     const projects = screen.getByRole('button', { name: /^projects$/i });
     const suites = screen.getByRole('button', { name: /^test suites$/i });
@@ -208,7 +250,7 @@ describe('App', () => {
   });
 
   it('opens and closes creation modal when button is clicked', async () => {
-    render(<App client={clientReturning([])} />);
+    await renderShell(clientReturning([]));
 
     fireEvent.click(screen.getByRole('button', { name: /\+ create test suite/i }));
     expect(screen.getByText(/create new test suite/i)).toBeDefined();
