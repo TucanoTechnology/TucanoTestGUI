@@ -77,6 +77,12 @@ npm run sync:openapi -- --ref <sha>    # move the pin to another TucanoTestAPI r
 
 Every action available in the GUI must have an API equivalent, and every API error must be renderable here. When a view needs data the API cannot serve, raise an API issue instead of adding a workaround — the GUI is a display layer and more logic belongs in the API, not less. See [docs/api-client.md](docs/api-client.md).
 
+## Authentication
+
+The login screen exchanges credentials for a bearer token pair via `POST /auth/login`. The access token lives in memory only; the refresh token is stored in `localStorage` and rotated on every refresh. A 401 response triggers an automatic refresh-and-retry before redirecting to the login screen.
+
+Set `VITE_DEBUG_LOGIN=true` at build time to pre-fill the form with demo credentials for each authority level.
+
 ## Container
 
 ```sh

@@ -1,0 +1,83 @@
+/* generated using openapi-typescript-codegen -- do not edit */
+/* istanbul ignore file */
+/* tslint:disable */
+/* eslint-disable */
+export { TucanoApi } from './TucanoApi';
+
+export { ApiError } from './core/ApiError';
+export { BaseHttpRequest } from './core/BaseHttpRequest';
+export { CancelablePromise, CancelError } from './core/CancelablePromise';
+export { OpenAPI } from './core/OpenAPI';
+export type { OpenAPIConfig } from './core/OpenAPI';
+
+export type { Attachment } from './models/Attachment';
+export type { AttachmentUpload } from './models/AttachmentUpload';
+export type { case_id } from './models/case_id';
+export type { CaseHistoryEntry } from './models/CaseHistoryEntry';
+export type { CompositionRequest } from './models/CompositionRequest';
+export type { CompositionResponse } from './models/CompositionResponse';
+export type { config_id } from './models/config_id';
+export type { configuration } from './models/configuration';
+export type { CoverageReport } from './models/CoverageReport';
+export type { CreateResponse } from './models/CreateResponse';
+export type { DefectLink } from './models/DefectLink';
+export type { DefectLinkRequest } from './models/DefectLinkRequest';
+export type { DuplicateCaseRequest } from './models/DuplicateCaseRequest';
+export type { DuplicateRequest } from './models/DuplicateRequest';
+export type { DuplicateRunRequest } from './models/DuplicateRunRequest';
+export type { Error } from './models/Error';
+export type { filename } from './models/filename';
+export type { filter } from './models/filter';
+export type { id } from './models/id';
+export type { ImportCounts } from './models/ImportCounts';
+export type { ImportEntry } from './models/ImportEntry';
+export type { ImportSummary } from './models/ImportSummary';
+export type { link_id } from './models/link_id';
+export type { LoginRequest } from './models/LoginRequest';
+export type { LogoutRequest } from './models/LogoutRequest';
+export type { MeResponse } from './models/MeResponse';
+export type { MessageResponse } from './models/MessageResponse';
+export type { Milestone } from './models/Milestone';
+export type { milestone_id } from './models/milestone_id';
+export type { MilestoneCreateRequest } from './models/MilestoneCreateRequest';
+export type { MilestoneProgress } from './models/MilestoneProgress';
+export type { MilestoneUpdateRequest } from './models/MilestoneUpdateRequest';
+export type { Project } from './models/Project';
+export type { ProjectCreateRequest } from './models/ProjectCreateRequest';
+export type { ProjectUpdateRequest } from './models/ProjectUpdateRequest';
+export type { ReadyResponse } from './models/ReadyResponse';
+export type { RefreshRequest } from './models/RefreshRequest';
+export type { run_id } from './models/run_id';
+export type { SessionResponse } from './models/SessionResponse';
+export type { step_index } from './models/step_index';
+export type { StepAttachment } from './models/StepAttachment';
+export type { StorageDiagnostics } from './models/StorageDiagnostics';
+export type { suite_id } from './models/suite_id';
+export type { SuiteCoverage } from './models/SuiteCoverage';
+export type { SummaryReport } from './models/SummaryReport';
+export type { tags } from './models/tags';
+export type { TestCase } from './models/TestCase';
+export type { TestCaseResult } from './models/TestCaseResult';
+export type { TestCaseUpdateRequest } from './models/TestCaseUpdateRequest';
+export type { TestConfiguration } from './models/TestConfiguration';
+export type { TestConfigurationCreateRequest } from './models/TestConfigurationCreateRequest';
+export type { TestConfigurationUpdateRequest } from './models/TestConfigurationUpdateRequest';
+export type { TestResultRequest } from './models/TestResultRequest';
+export type { TestRun } from './models/TestRun';
+export type { TestRunCreateRequest } from './models/TestRunCreateRequest';
+export type { TestRunUpdateRequest } from './models/TestRunUpdateRequest';
+export type { TestStep } from './models/TestStep';
+export type { TestSuite } from './models/TestSuite';
+export type { TestSuiteUpdateRequest } from './models/TestSuiteUpdateRequest';
+export type { UploadResponse } from './models/UploadResponse';
+export type { version } from './models/version';
+
+export { AuthService } from './services/AuthService';
+export { ConfigurationsService } from './services/ConfigurationsService';
+export { MilestonesService } from './services/MilestonesService';
+export { ProjectsService } from './services/ProjectsService';
+export { ReportsService } from './services/ReportsService';
+export { ServiceService } from './services/ServiceService';
+export { TestCasesService } from './services/TestCasesService';
+export { TestRunsService } from './services/TestRunsService';
+export { TestSuitesService } from './services/TestSuitesService';
