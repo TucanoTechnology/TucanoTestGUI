@@ -187,6 +187,26 @@ describe('App', () => {
     await screen.findByText(/2 test runs found/i);
   });
 
+  it('supports arrow-key navigation within the icon rail', async () => {
+    render(<App client={clientReturning([])} />);
+
+    const projects = screen.getByRole('button', { name: /^projects$/i });
+    const suites = screen.getByRole('button', { name: /^test suites$/i });
+    const milestones = screen.getByRole('button', { name: /^milestones$/i });
+
+    projects.focus();
+    expect(document.activeElement).toBe(projects);
+
+    fireEvent.keyDown(projects, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(suites);
+
+    fireEvent.keyDown(suites, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(projects);
+
+    fireEvent.keyDown(projects, { key: 'End' });
+    expect(document.activeElement).toBe(milestones);
+  });
+
   it('opens and closes creation modal when button is clicked', async () => {
     render(<App client={clientReturning([])} />);
 
