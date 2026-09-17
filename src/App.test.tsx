@@ -277,10 +277,11 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /^test runs$/i }));
     await screen.findByText(/1 test run found/i);
 
-    fireEvent.click(screen.getByRole('button', { name: /^execute$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^execute RUN-1\.json$/i }));
     await screen.findByText(/execution workspace: RUN-1.json/i);
 
-    expect(screen.getByText(/verify login/i)).toBeDefined();
+    // The case title also appears in the board's live region, so target the heading.
+    expect(screen.getByRole('heading', { name: /verify login/i })).toBeDefined();
     expect(screen.getByText(/navigate to \/login/i)).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: /mark passed/i }));
@@ -293,7 +294,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /^test runs$/i }));
     await screen.findByText(/1 test run found/i);
 
-    fireEvent.click(screen.getByRole('button', { name: /^execute$/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^execute RUN-1\.json$/i }));
     await screen.findByText(/execution workspace: RUN-1.json/i);
 
     const results = await axe.run(container, {
@@ -339,7 +340,7 @@ describe('App', () => {
     render(<App client={mockFullClient()} />);
     await screen.findByText(/1 test suite found/i);
 
-    fireEvent.click(screen.getByRole('button', { name: /edit SmokeTest\.json/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /edit SmokeTest\.json/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /edit test suite/i });
     expect(dialog).toBeDefined();

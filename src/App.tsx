@@ -12,6 +12,7 @@ import {
 import AppShell, { type Tab } from './components/AppShell';
 import ProjectsModule from './features/projects/ProjectsModule';
 import TestCasesModule from './features/test-cases/TestCasesModule';
+import TestRunsModule from './features/test-runs/TestRunsModule';
 import TestSuitesModule from './features/test-suites/TestSuitesModule';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -84,7 +85,6 @@ export default function App({ client }: AppProps) {
   const [activeMilestoneProgress, setActiveMilestoneProgress] = useState<MilestoneProgress | null>(null);
 
   // Form modal visibility flags
-  const [showRunModal, setShowRunModal] = useState(false);
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
@@ -100,12 +100,8 @@ export default function App({ client }: AppProps) {
   // Bumped to ask the Test Cases module to open its create form
   const [caseCreateRequest, setCaseCreateRequest] = useState(0);
 
-  // Execution workspace state
-  const [executingRun, setExecutingRun] = useState<TestRun | null>(null);
-  const [executingCaseIndex, setExecutingCaseIndex] = useState(0);
-
-  // Form input states
-  const [runIdInput, setRunIdInput] = useState('');
+  // Bumped to ask the Test Runs module to open its create form
+  const [runCreateRequest, setRunCreateRequest] = useState(0);
 
   const [milestoneIdInput, setMilestoneIdInput] = useState('');
   const [milestoneNameInput, setMilestoneNameInput] = useState('');
@@ -188,12 +184,12 @@ export default function App({ client }: AppProps) {
   const handleTabChange = (newTab: Tab) => {
     setActiveTab(newTab);
     setFilter('');
-    setExecutingRun(null);
     setShowDetailModal(false);
     // Leaving the tab ends the outstanding "open the form" request.
     setProjectCreateRequest(0);
     setSuiteCreateRequest(0);
     setCaseCreateRequest(0);
+    setRunCreateRequest(0);
   };
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -252,76 +248,18 @@ export default function App({ client }: AppProps) {
   };
 
   // CRUD Handlers: Test Run
-  const handleCreateRun = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const rawId = runIdInput || `RUN-${Date.now()}`;
-      const id = rawId.endsWith('.json') ? rawId : `${rawId}.json`;
-      const newRun: TestRun = {
-        testRunId: id,
-        timestamp: new Date().toISOString(),
-        projects: [],
-        testSuites: [],
-        testCases: casesList.slice(0, 5),
-      };
-      await api.createTestRun(newRun);
-      setShowRunModal(false);
-      setRunIdInput('');
-      await loadIdentifiers('runs', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test run ${newRun.testRunId} created successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create test run.');
-    }
-  };
+  // Test runs are owned by the Test Runs module: the run list, the execution
+  // board and the result recording all live there. The shell keeps only the
+  // wiring — refresh, the shared live region and the create request.
+  const handleRunsChanged = useCallback(async () => {
+    await loadIdentifiers('runs', filter);
+    await fetchAllWorkspaceData();
+  }, [loadIdentifiers, filter, fetchAllWorkspaceData]);
 
-  const handleDeleteRun = async (id: string) => {
-    try {
-      await api.deleteTestRun(id);
-      await loadIdentifiers('runs', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test run ${id} deleted.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete test run.');
-    }
-  };
-
-  const handleStartRun = async (id: string) => {
-    try {
-      const run = await api.getTestRun(id);
-      setExecutingRun(run);
-      setExecutingCaseIndex(0);
-      setMessage(`Started executing run ${run.testRunId}.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not start test run.');
-    }
-  };
-
-  const handleSetResultStatus = async (status: 'Passed' | 'Failed' | 'Blocked' | 'Untested') => {
-    if (!executingRun || !executingRun.testCases || executingRun.testCases.length === 0) return;
-    const currentCase = executingRun.testCases[executingCaseIndex];
-    if (!currentCase) return;
-
-    const updatedCase: TestCase = {
-      ...currentCase,
-      priority: status,
-    };
-
-    const updatedCases = [...executingRun.testCases];
-    updatedCases[executingCaseIndex] = updatedCase;
-
-    const updatedRun: TestRun = {
-      ...executingRun,
-      testCases: updatedCases,
-    };
-
-    try {
-      await api.updateTestRun(updatedRun.testRunId, updatedRun);
-      setExecutingRun(updatedRun);
-      setMessage(`Marked ${currentCase.title} as ${status}.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to save test result.');
-    }
+  const openRunForm = () => {
+    setActiveTab('runs');
+    setShowDetailModal(false);
+    setRunCreateRequest((request) => request + 1);
   };
 
   // CRUD Handlers: Milestone
@@ -394,14 +332,9 @@ export default function App({ client }: AppProps) {
     setShowDetailModal(true);
   };
 
-  const handleViewRun = async (id: string) => {
-    try {
-      const run = await api.getTestRun(id);
-      setActiveRun(run);
-      setShowDetailModal(true);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test run.');
-    }
+  const handleViewRun = (run: TestRun) => {
+    setActiveRun(run);
+    setShowDetailModal(true);
   };
 
   const handleViewMilestone = async (id: string) => {
@@ -493,7 +426,7 @@ export default function App({ client }: AppProps) {
                 </>
               )}
               {activeTab === 'runs' && (
-                <button type="button" onClick={() => setShowRunModal(true)}>
+                <button type="button" onClick={openRunForm}>
                   + Create test run
                 </button>
               )}
@@ -557,118 +490,23 @@ export default function App({ client }: AppProps) {
                 onChanged={handleCasesChanged}
                 onCreateSuite={openSuiteForm}
                 onCreateProject={openProjectForm}
-                onCreateTestRun={() => setShowRunModal(true)}
+                onCreateTestRun={openRunForm}
               />
             </div>
           )}
 
-          {/* 3. TEST RUNS VIEW & EXECUTION WORKSPACE */}
+          {/* 3. TEST RUNS MODULE — run list and execution board */}
           {activeTab === 'runs' && (
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-              {executingRun && (
-                <section className="card" style={{ marginBottom: '24px', borderLeft: '4px solid #0f766e' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, fontSize: '16px' }}>Execution Workspace: {executingRun.testRunId}</h3>
-                    <button type="button" className="btn-secondary" onClick={() => setExecutingRun(null)}>
-                      Close Execution
-                    </button>
-                  </div>
-                  <p style={{ fontSize: '13px', color: '#64748b' }}>
-                    <strong>Timestamp:</strong> {executingRun.timestamp}
-                  </p>
-
-                  {!executingRun.testCases || executingRun.testCases.length === 0 ? (
-                    <p style={{ color: '#94a3b8' }}>No test cases in this run to execute.</p>
-                  ) : (
-                    <div>
-                      <div style={{ margin: '12px 0' }}>
-                        <span className="badge badge-untested">
-                          Case {executingCaseIndex + 1} of {executingRun.testCases.length}
-                        </span>
-                      </div>
-                      {executingRun.testCases[executingCaseIndex] && (
-                        <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                          <h4 style={{ margin: '0 0 8px 0', fontSize: '15px' }}>
-                            {executingRun.testCases[executingCaseIndex].title} ({executingRun.testCases[executingCaseIndex].testCaseId})
-                          </h4>
-                          <p style={{ fontSize: '13px', margin: '4px 0' }}>
-                            <strong>Expected Result:</strong> {executingRun.testCases[executingCaseIndex].expectedResult}
-                          </p>
-                          {executingRun.testCases[executingCaseIndex].description && (
-                            <p style={{ fontSize: '13px', margin: '4px 0' }}>
-                              <strong>Description:</strong> {executingRun.testCases[executingCaseIndex].description}
-                            </p>
-                          )}
-                          {executingRun.testCases[executingCaseIndex].steps && (
-                            <div style={{ marginTop: '8px' }}>
-                              <strong style={{ fontSize: '13px' }}>Steps:</strong>
-                              <ol style={{ fontSize: '13px', paddingLeft: '20px', margin: '4px 0' }}>
-                                {executingRun.testCases[executingCaseIndex].steps?.map((step: any, idx) => (
-                                  <li key={idx}>{typeof step === 'string' ? step : step.action}</li>
-                                ))}
-                              </ol>
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
-                            <button type="button" style={{ background: '#15803d' }} onClick={() => void handleSetResultStatus('Passed')}>
-                              Mark Passed
-                            </button>
-                            <button type="button" className="btn-danger" onClick={() => void handleSetResultStatus('Failed')}>
-                              Mark Failed
-                            </button>
-                            <button type="button" style={{ background: '#b45309' }} onClick={() => void handleSetResultStatus('Blocked')}>
-                              Mark Blocked
-                            </button>
-                            <button type="button" className="btn-secondary" onClick={() => void handleSetResultStatus('Untested')}>
-                              Reset Untested
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={executingCaseIndex === 0}
-                          onClick={() => setExecutingCaseIndex((i) => Math.max(0, i - 1))}
-                        >
-                          Previous Case
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={executingCaseIndex >= executingRun.testCases.length - 1}
-                          onClick={() => setExecutingCaseIndex((i) => Math.min(executingRun.testCases!.length - 1, i + 1))}
-                        >
-                          Next Case
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {/* Run Cards */}
-              <div className="view-grid-cards">
-                {identifiers.map((id) => (
-                  <div key={id} className="entity-card">
-                    <div>
-                      <h3 className="entity-card-title">▶️ {id}</h3>
-                    </div>
-                    <div className="entity-card-actions">
-                      <button type="button" onClick={() => void handleStartRun(id)}>
-                        Execute
-                      </button>
-                      <button type="button" className="btn-secondary" onClick={() => void handleViewRun(id)}>
-                        Details
-                      </button>
-                      <button type="button" className="btn-danger" onClick={() => void handleDeleteRun(id)}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="three-panel-container">
+              <TestRunsModule
+                client={api}
+                identifiers={identifiers}
+                suites={suitesList}
+                createRequest={runCreateRequest}
+                onStatus={handleModuleStatus}
+                onViewRun={handleViewRun}
+                onChanged={handleRunsChanged}
+              />
             </div>
           )}
 
@@ -727,34 +565,6 @@ export default function App({ client }: AppProps) {
         </AppShell>
 
       {/* MODALS */}
-      {/* Create Run Modal */}
-      {showRunModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="run-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="run-modal-title">Create New Test Run</h3>
-              <button type="button" className="btn-secondary" onClick={() => setShowRunModal(false)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleCreateRun}>
-              <div className="form-group">
-                <label htmlFor="run-id-input">Run ID (Filename)</label>
-                <input
-                  id="run-id-input"
-                  type="text"
-                  required
-                  value={runIdInput}
-                  onChange={(e) => setRunIdInput(e.target.value)}
-                  placeholder="e.g. Run-Sprint42.json"
-                />
-              </div>
-              <button type="submit">Save Test Run</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Create Milestone Modal */}
       {showMilestoneModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="milestone-modal-title">
