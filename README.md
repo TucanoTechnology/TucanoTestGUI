@@ -34,7 +34,15 @@ Baseline requirements:
 
 Automated testing catches roughly a third of accessibility defects. Manual keyboard and screen reader checks are still required before release.
 
-> **Known gap:** `axe-core` cannot evaluate the colour-contrast rule under jsdom because there is no canvas. Contrast values in `src/styles.css` were chosen to meet AA, but browser-based verification is tracked as a follow-up.
+> **Known gap:** `axe-core` cannot evaluate the colour-contrast rule under jsdom because there is no canvas. `src/styles.test.ts` closes most of that gap by computing the WCAG ratio for every painted colour pair from the tokens themselves, but browser-based verification is still tracked as a follow-up.
+
+## Design tokens
+
+Colour, spacing, radius and type values live in one token layer at the top of `src/styles.css`, and the
+status and priority vocabularies are derived from the pinned API contract rather than invented here.
+`src/styles.test.ts` enforces the layer: no colour literal outside `:root`, no unused token, a
+stylesheet rule for every class the components render, and a passing contrast ratio for every pair
+the GUI paints. See [docs/design-tokens.md](docs/design-tokens.md) before changing a colour.
 
 ## Prerequisites
 

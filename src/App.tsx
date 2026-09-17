@@ -1473,7 +1473,7 @@ export default function App({ client }: AppProps) {
                     </ol>
                   </div>
                 )}
-                <hr style={{ margin: '1rem 0', borderColor: 'var(--colour-border)' }} />
+                <hr style={{ margin: '1rem 0', borderColor: 'var(--color-border)' }} />
                 <h5>Attachments ({activeCase.attachments?.length ?? 0})</h5>
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
                   <label htmlFor="file-upload-input">Upload Evidence / Screenshot</label>
@@ -1545,7 +1545,7 @@ export default function App({ client }: AppProps) {
                 <p>{activeMilestone.description || 'No description provided.'}</p>
 
                 {activeMilestoneProgress && (
-                  <div style={{ margin: '1rem 0', background: '#f8fafc', padding: '1rem', borderRadius: '6px', border: '1px solid var(--colour-border)' }}>
+                  <div style={{ margin: '1rem 0', background: 'var(--color-bg)', padding: '1rem', borderRadius: 'var(--radius-control)', border: '1px solid var(--color-border)' }}>
                     <h5>Aggregated Release Progress</h5>
                     <p><strong>Pass Rate:</strong> {activeMilestoneProgress.passPercentage.toFixed(1)}%</p>
                     <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.85rem' }}>
@@ -1553,6 +1553,7 @@ export default function App({ client }: AppProps) {
                       <span className="badge badge-fail">Failed: {activeMilestoneProgress.failed}</span>
                       <span className="badge badge-blocked">Blocked: {activeMilestoneProgress.blocked}</span>
                       <span className="badge badge-untested">Untested: {activeMilestoneProgress.untested}</span>
+                      <span className="badge badge-retest">Retest: {activeMilestoneProgress.retest}</span>
                     </div>
                   </div>
                 )}
