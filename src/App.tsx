@@ -13,6 +13,7 @@ import ThreePanelLayout from './components/ThreePanelLayout';
 import { TestCaseStatus } from './components/StatusBadge';
 import AppShell, { type Tab } from './components/AppShell';
 import ProjectsModule from './features/projects/ProjectsModule';
+import TestSuitesModule from './features/test-suites/TestSuitesModule';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -85,36 +86,29 @@ export default function App({ client }: AppProps) {
   const [activeMilestoneProgress, setActiveMilestoneProgress] = useState<MilestoneProgress | null>(null);
 
   // Form modal visibility flags
-  const [showSuiteModal, setShowSuiteModal] = useState(false);
   const [showCaseModal, setShowCaseModal] = useState(false);
   const [showRunModal, setShowRunModal] = useState(false);
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Edit modal states
-  const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null);
   const [editingCase, setEditingCase] = useState<TestCase | null>(null);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
   // Collapsible planes state for standard view
-  const [planeSuitesCollapsed, setPlaneSuitesCollapsed] = useState(false);
   const [planeCasesCollapsed, setPlaneCasesCollapsed] = useState(false);
-
-  // Hierarchy Selection State
-  const [selectedSuiteId, setSelectedSuiteId] = useState<string | null>(null);
 
   // Bumped to ask the Projects module to open its create form
   const [projectCreateRequest, setProjectCreateRequest] = useState(0);
+
+  // Bumped to ask the Test Suites module to open its create form
+  const [suiteCreateRequest, setSuiteCreateRequest] = useState(0);
 
   // Execution workspace state
   const [executingRun, setExecutingRun] = useState<TestRun | null>(null);
   const [executingCaseIndex, setExecutingCaseIndex] = useState(0);
 
   // Form input states
-  const [suiteIdInput, setSuiteIdInput] = useState('');
-  const [suiteNameInput, setSuiteNameInput] = useState('');
-  const [suiteDescInput, setSuiteDescInput] = useState('');
-
   const [caseIdInput, setCaseIdInput] = useState('');
   const [caseTitleInput, setCaseTitleInput] = useState('');
   const [caseDescInput, setCaseDescInput] = useState('');
@@ -216,6 +210,7 @@ export default function App({ client }: AppProps) {
     setShowDetailModal(false);
     // Leaving the tab ends the outstanding "open the form" request.
     setProjectCreateRequest(0);
+    setSuiteCreateRequest(0);
   };
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -245,55 +240,17 @@ export default function App({ client }: AppProps) {
   };
 
   // CRUD Handlers: Suite
-  const handleCreateSuite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const rawId = suiteIdInput || `SUITE-${Date.now()}`;
-      const id = rawId.endsWith('.json') ? rawId : `${rawId}.json`;
-      const newSuite: TestSuite = {
-        suiteId: id,
-        name: suiteNameInput,
-        description: suiteDescInput || undefined,
-        testCases: [],
-      };
-      await api.createTestSuite(newSuite);
-      setShowSuiteModal(false);
-      setSuiteIdInput('');
-      setSuiteNameInput('');
-      setSuiteDescInput('');
-      await loadIdentifiers('suites', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test suite ${newSuite.suiteId} created successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create test suite.');
-    }
-  };
+  // Test suites are owned by the Test Suites module. The shell keeps only the
+  // wiring: the shared live region, the identifier refresh and the detail panel.
+  const handleSuitesChanged = useCallback(async () => {
+    await loadIdentifiers('suites', filter);
+    await fetchAllWorkspaceData();
+  }, [loadIdentifiers, filter, fetchAllWorkspaceData]);
 
-  const handleUpdateSuite = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingSuite) return;
-    try {
-      await api.updateTestSuite(editingSuite.suiteId, editingSuite);
-      const updatedId = editingSuite.suiteId;
-      setEditingSuite(null);
-      await loadIdentifiers('suites', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test suite ${updatedId} updated successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to update test suite.');
-    }
-  };
-
-  const handleDeleteSuite = async (id: string) => {
-    try {
-      await api.deleteTestSuite(id);
-      if (selectedSuiteId === id) setSelectedSuiteId(null);
-      await loadIdentifiers('suites', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test suite ${id} deleted.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete test suite.');
-    }
+  const openSuiteForm = () => {
+    setActiveTab('suites');
+    setShowDetailModal(false);
+    setSuiteCreateRequest((request) => request + 1);
   };
 
   // CRUD Handlers: Case
@@ -537,14 +494,9 @@ export default function App({ client }: AppProps) {
     setShowDetailModal(true);
   };
 
-  const handleViewSuite = async (id: string) => {
-    try {
-      const suite = await api.getTestSuite(id);
-      setActiveSuite(suite);
-      setShowDetailModal(true);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test suite.');
-    }
+  const handleViewSuite = (suite: TestSuite) => {
+    setActiveSuite(suite);
+    setShowDetailModal(true);
   };
 
   const handleViewCase = async (id: string) => {
@@ -589,15 +541,6 @@ export default function App({ client }: AppProps) {
       setEditingMilestone(milestone);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch milestone for edit.');
-    }
-  };
-
-  const handleEditSuiteClick = async (id: string) => {
-    try {
-      const suite = await api.getTestSuite(id);
-      setEditingSuite(suite);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test suite for edit.');
     }
   };
 
@@ -650,7 +593,7 @@ export default function App({ client }: AppProps) {
                 {activeTab === 'projects' && 'Projects'}
               </h2>
 
-              {(activeTab === 'cases' || activeTab === 'suites') && (
+              {activeTab === 'cases' && (
                 <button
                   type="button"
                   className="view-toggle-btn"
@@ -669,13 +612,13 @@ export default function App({ client }: AppProps) {
                 </button>
               )}
               {activeTab === 'suites' && (
-                <button type="button" onClick={() => setShowSuiteModal(true)}>
+                <button type="button" onClick={openSuiteForm}>
                   + Create test suite
                 </button>
               )}
               {activeTab === 'cases' && (
                 <>
-                  <button type="button" className="btn-secondary" onClick={() => setShowSuiteModal(true)}>
+                  <button type="button" className="btn-secondary" onClick={openSuiteForm}>
                     + Create test suite
                   </button>
                   <button type="button" onClick={() => setShowCaseModal(true)}>
@@ -747,7 +690,7 @@ export default function App({ client }: AppProps) {
                 onStatusChange={handleCaseStatusChange}
                 onCreateCase={() => setShowCaseModal(true)}
                 onQuickCreate={() => setShowCaseModal(true)}
-                onCreateSuite={() => setShowSuiteModal(true)}
+                onCreateSuite={openSuiteForm}
                 onCreateProject={openProjectForm}
                 onCreateTestRun={() => setShowRunModal(true)}
                 onDataRefreshNeeded={fetchAllWorkspaceData}
@@ -755,58 +698,13 @@ export default function App({ client }: AppProps) {
             </div>
           ) : null}
 
-          {/* 2. STANDARD PLANES & CARDS VIEW FOR SUITES OR TOGGLED CASES */}
-          {activeTab === 'suites' || (activeTab === 'cases' && !useThreePanelView) ? (
+          {/* 2. STANDARD PLANES VIEW FOR TOGGLED CASES */}
+          {activeTab === 'cases' && !useThreePanelView ? (
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {/* Hierarchy Planes */}
               <section aria-label="Visual Hierarchy Workspace" className="hierarchy-grid">
                 {/* Projects live in their own module on the Projects tab. */}
-
-                {/* Test Suites Plane */}
-                <div className={`plane ${planeSuitesCollapsed ? 'collapsed' : ''}`}>
-                  <div className="plane-header">
-                    <h3 className="plane-title">Test Suites</h3>
-                    <div className="plane-actions">
-                      <button
-                        type="button"
-                        aria-expanded={!planeSuitesCollapsed}
-                        className="btn-secondary"
-                        onClick={() => setPlaneSuitesCollapsed((c) => !c)}
-                      >
-                        {planeSuitesCollapsed ? 'Expand' : 'Collapse'}
-                      </button>
-                      <button type="button" onClick={() => setShowSuiteModal(true)}>
-                        + New
-                      </button>
-                    </div>
-                  </div>
-                  <div className="plane-body">
-                    <ul className="plane-list" aria-label="Test Suites Hierarchy List">
-                      {(activeTab === 'suites' ? identifiers : []).map((id) => (
-                        <li key={id} className="plane-item" onClick={() => void handleViewSuite(id)}>
-                          <div className="plane-item-header">
-                            <span className="plane-item-title">{id}</span>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <button type="button" className="btn-secondary" onClick={() => void handleEditSuiteClick(id)}>
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-danger"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleDeleteSuite(id);
-                                }}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
+                {/* Test suites live in their own module on the Test suites tab. */}
 
                 {/* Test Cases Plane */}
                 <div className={`plane ${planeCasesCollapsed ? 'collapsed' : ''}`}>
@@ -1006,57 +904,22 @@ export default function App({ client }: AppProps) {
               />
             </div>
           )}
+          {/* 6. TEST SUITES MODULE */}
+          {activeTab === 'suites' && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              <TestSuitesModule
+                client={api}
+                identifiers={identifiers}
+                createRequest={suiteCreateRequest}
+                onStatus={handleModuleStatus}
+                onViewSuite={handleViewSuite}
+                onChanged={handleSuitesChanged}
+              />
+            </div>
+          )}
         </AppShell>
 
       {/* MODALS */}
-      {/* Create Suite Modal */}
-      {showSuiteModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="suite-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="suite-modal-title">Create New Test Suite</h3>
-              <button type="button" className="btn-secondary" onClick={() => setShowSuiteModal(false)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleCreateSuite}>
-              <div className="form-group">
-                <label htmlFor="suite-id-input">Suite ID (Filename)</label>
-                <input
-                  id="suite-id-input"
-                  type="text"
-                  required
-                  value={suiteIdInput}
-                  onChange={(e) => setSuiteIdInput(e.target.value)}
-                  placeholder="e.g. SmokeTest.json"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="suite-name-input">Suite Name</label>
-                <input
-                  id="suite-name-input"
-                  type="text"
-                  required
-                  value={suiteNameInput}
-                  onChange={(e) => setSuiteNameInput(e.target.value)}
-                  placeholder="Smoke Test Suite"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="suite-desc-input">Description</label>
-                <textarea
-                  id="suite-desc-input"
-                  value={suiteDescInput}
-                  onChange={(e) => setSuiteDescInput(e.target.value)}
-                  placeholder="Suite overview..."
-                />
-              </div>
-              <button type="submit">Save Test Suite</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Create Test Case Modal */}
       {showCaseModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="case-modal-title">
@@ -1421,41 +1284,6 @@ export default function App({ client }: AppProps) {
                 )}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Edit Suite Modal */}
-      {editingSuite && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-suite-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="edit-suite-modal-title">Edit Test Suite: {editingSuite.suiteId}</h3>
-              <button type="button" className="btn-secondary" onClick={() => setEditingSuite(null)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleUpdateSuite}>
-              <div className="form-group">
-                <label htmlFor="edit-suite-name-input">Suite Name</label>
-                <input
-                  id="edit-suite-name-input"
-                  type="text"
-                  required
-                  value={editingSuite.name}
-                  onChange={(e) => setEditingSuite({ ...editingSuite, name: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-suite-desc-input">Description</label>
-                <textarea
-                  id="edit-suite-desc-input"
-                  value={editingSuite.description || ''}
-                  onChange={(e) => setEditingSuite({ ...editingSuite, description: e.target.value })}
-                />
-              </div>
-              <button type="submit">Update Test Suite</button>
-            </form>
           </div>
         </div>
       )}
