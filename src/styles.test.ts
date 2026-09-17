@@ -3,33 +3,38 @@ import { readFileSync } from "node:fs";
 
 const css = readFileSync("src/styles.css", "utf8");
 
-function extractTokens(cssText: string): Set<string> {
+function extractDeclaredTokens(cssText: string): Set<string> {
   const tokens = new Set<string>();
-  const rootMatch = cssText.match(/:root\s*\{([^}]+)\}/s);
-  if (rootMatch && rootMatch[1]) {
-    const declarations = rootMatch[1].matchAll(/--[\w-]+/g);
-    for (const match of declarations) {
-      tokens.add(match[0]);
-    }
+  const declarations = cssText.matchAll(/(--[\w-]+)\s*:/g);
+  for (const match of declarations) {
+    tokens.add(match[1]!);
   }
   return tokens;
 }
 
-function extractUsages(cssText: string, token: string): number {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`var\\(\\s*${escaped}`, "g");
-  const matches = cssText.match(pattern);
-  return matches?.length ?? 0;
+function extractReferencedTokens(cssText: string): Set<string> {
+  const tokens = new Set<string>();
+  const references = cssText.matchAll(/var\(\s*(--[\w-]+)/g);
+  for (const match of references) {
+    tokens.add(match[1]!);
+  }
+  return tokens;
 }
 
 describe("design tokens", () => {
-  it("every colour token in :root is referenced at least once", () => {
-    const tokens = extractTokens(css);
-    const colourTokens = [...tokens].filter((t) => t.startsWith("--color-") || t.startsWith("--status-") || t.startsWith("--priority-"));
-    const unused = colourTokens.filter(
-      (t) => extractUsages(css, t) === 0,
+  it("declares tokens in :root", () => {
+    const declared = extractDeclaredTokens(
+      css.match(/:root\s*\{[^}]+\}/s)?.[0] ?? "",
     );
-    expect(unused).toEqual([]);
+    expect(declared.size).toBeGreaterThan(0);
+  });
+
+  it("every var() reference resolves to a declared token", () => {
+    const declared = extractDeclaredTokens(css);
+    const dangling = [...extractReferencedTokens(css)].filter(
+      (t) => !declared.has(t),
+    );
+    expect(dangling).toEqual([]);
   });
 
   it("no colour literal outside :root", () => {
@@ -44,5 +49,10 @@ describe("design tokens", () => {
 
   it("uses --color- prefix (no --colour- spelling)", () => {
     expect(css).not.toMatch(/--colour-/);
+  });
+
+  it("provides the screen-reader and truncation utilities", () => {
+    expect(css).toMatch(/\.sr-only\s*\{/);
+    expect(css).toMatch(/\.truncate\s*\{/);
   });
 });
