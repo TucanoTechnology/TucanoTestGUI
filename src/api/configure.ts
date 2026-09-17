@@ -2,7 +2,7 @@
 // `src/api/generated` is overwritten by `npm run generate:client`, so the
 // runtime configuration the GUI actually needs lives here instead.
 
-import { TucanoApi, type OpenAPIConfig } from './generated';
+import { ApiError, TucanoApi, type OpenAPIConfig } from './generated';
 
 /**
  * Path the browser always calls. nginx proxies it to the real API host (see
@@ -44,4 +44,28 @@ export function createApiClient(options: ApiClientOptions = {}): TucanoApi {
   }
 
   return new TucanoApi(config);
+}
+
+/** The API's error envelope, as its contract publishes it. */
+export interface ApiErrorEnvelope {
+  code: string;
+  message: string;
+}
+
+/**
+ * Reads `{"error": {"code": ..., "message": ...}}` off a failed generated-client
+ * call. A transport failure, a non-JSON body (the router answers `413` in plain
+ * text) or a plain-text status with no envelope returns `null`, so a caller
+ * renders its own wording rather than a raw response.
+ */
+export function apiErrorEnvelope(error: unknown): ApiErrorEnvelope | null {
+  if (!(error instanceof ApiError)) return null;
+
+  const envelope = (error.body as { error?: unknown } | null | undefined)?.error;
+  if (typeof envelope !== 'object' || envelope === null) return null;
+
+  const { code, message } = envelope as { code?: unknown; message?: unknown };
+  if (typeof code !== 'string' || typeof message !== 'string') return null;
+
+  return { code, message };
 }
