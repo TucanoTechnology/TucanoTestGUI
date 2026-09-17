@@ -112,7 +112,7 @@ export default function TestCaseTable({
     }
   };
 
-  const handleSelectRow = (id: string, e?: React.MouseEvent) => {
+  const handleSelectRow = (id: string, e?: React.SyntheticEvent) => {
     if (e) e.stopPropagation();
     const newSelected = new Set(selectedIds);
     if (newSelected.has(id)) {
@@ -125,140 +125,45 @@ export default function TestCaseTable({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#ffffff' }}>
+    <div className="panel-column">
       {/* Table Toolbar */}
-      <div
-        style={{
-          padding: '12px 16px',
-          borderBottom: '1px solid #e2e8f0',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '12px',
-          background: '#ffffff',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="table-toolbar">
+        <div className="table-toolbar-group">
           {onCreateCase && (
-            <button
-              type="button"
-              onClick={onCreateCase}
-              style={{
-                background: '#0f766e',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '6px 14px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-              }}
-            >
+            <button type="button" onClick={onCreateCase}>
               <span>+ Create test case</span>
             </button>
           )}
 
           {onCreateSuite && (
-            <button
-              type="button"
-              onClick={onCreateSuite}
-              style={{
-                background: '#f8fafc',
-                color: '#0f766e',
-                border: '1px solid #0f766e',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
+            <button type="button" className="btn-outline" onClick={onCreateSuite}>
               <span>+ Add test suite</span>
             </button>
           )}
 
           {onQuickCreate && (
-            <button
-              type="button"
-              onClick={onQuickCreate}
-              style={{
-                background: '#f8fafc',
-                color: '#334155',
-                border: '1px solid #cbd5e1',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
+            <button type="button" className="btn-quiet" onClick={onQuickCreate}>
               <span>⚡ Quick create</span>
             </button>
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="table-toolbar-group">
           {onCreateTestRun && (
-            <button
-              type="button"
-              onClick={onCreateTestRun}
-              style={{
-                background: '#0284c7',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '6px',
-                padding: '6px 12px',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-            >
+            <button type="button" className="btn-info" onClick={onCreateTestRun}>
               <span>🚀 Create test run</span>
             </button>
           )}
 
-          <div style={{ position: 'relative' }}>
+          <div className="table-search">
             <input
               type="search"
               placeholder="Filter by keyword"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               aria-label="Filter by keyword"
-              style={{
-                padding: '6px 10px 6px 28px',
-                fontSize: '12.5px',
-                border: '1px solid #cbd5e1',
-                borderRadius: '6px',
-                background: '#f8fafc',
-                width: '180px',
-                outline: 'none',
-              }}
             />
-            <span
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                left: '8px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                fontSize: '12px',
-                color: '#94a3b8',
-              }}
-            >
+            <span className="table-search-icon" aria-hidden="true">
               🔍
             </span>
           </div>
@@ -266,19 +171,11 @@ export default function TestCaseTable({
       </div>
 
       {/* Table Content */}
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
+      <div className="table-scroll">
+        <table className="data-table">
           <thead>
-            <tr
-              style={{
-                background: '#f8fafc',
-                borderBottom: '1px solid #e2e8f0',
-                position: 'sticky',
-                top: 0,
-                zIndex: 10,
-              }}
-            >
-              <th style={{ width: '36px', padding: '10px 8px 10px 14px', textAlign: 'left' }}>
+            <tr className="data-table-head-row">
+              <th className="is-narrow">
                 <input
                   type="checkbox"
                   checked={selectedIds.size === filteredCases.length && filteredCases.length > 0}
@@ -286,73 +183,17 @@ export default function TestCaseTable({
                   aria-label="Select all test cases"
                 />
               </th>
-              <th
-                style={{
-                  width: '110px',
-                  padding: '10px 12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  fontSize: '11.5px',
-                  fontWeight: 700,
-                  color: '#475569',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-                onClick={() => handleSort('id')}
-              >
+              <th className="is-sortable" onClick={() => handleSort('id')}>
                 ID {sortColumn === 'id' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
-              <th
-                style={{
-                  padding: '10px 12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  fontSize: '11.5px',
-                  fontWeight: 700,
-                  color: '#475569',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-                onClick={() => handleSort('title')}
-              >
+              <th className="is-sortable" onClick={() => handleSort('title')}>
                 TITLE {sortColumn === 'title' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
-              <th
-                style={{
-                  width: '130px',
-                  padding: '10px 12px',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  fontSize: '11.5px',
-                  fontWeight: 700,
-                  color: '#475569',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-                onClick={() => handleSort('priority')}
-              >
+              <th className="is-sortable" onClick={() => handleSort('priority')}>
                 OWNER / PRIORITY {sortColumn === 'priority' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
-              <th
-                style={{
-                  width: '140px',
-                  padding: '10px 12px',
-                  textAlign: 'left',
-                  fontSize: '11.5px',
-                  fontWeight: 700,
-                  color: '#475569',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                LAST RESULT
-              </th>
-              <th style={{ width: '40px', padding: '10px 14px', textAlign: 'center', color: '#94a3b8' }}>
-                ⚙️
-              </th>
+              <th>LAST RESULT</th>
+              <th className="is-actions">⚙️</th>
             </tr>
           </thead>
           <tbody>
@@ -364,27 +205,13 @@ export default function TestCaseTable({
                 <React.Fragment key={group.groupId}>
                   {/* Group Header Row if more than 1 group or named */}
                   {group.groupName && (
-                    <tr
-                      style={{
-                        background: '#f8fafc',
-                        borderTop: '1px solid #e2e8f0',
-                        borderBottom: '1px solid #e2e8f0',
-                        cursor: 'pointer',
-                      }}
-                      onClick={() => toggleGroupCollapse(group.groupId)}
-                    >
-                      <td colSpan={6} style={{ padding: '8px 14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>
-                            {isCollapsed ? '▶' : '▼'}
-                          </span>
-                          <span style={{ fontSize: '14px' }}>📁</span>
-                          <span style={{ fontWeight: 600, fontSize: '13px', color: '#1e293b' }}>
-                            {group.groupName}
-                          </span>
-                          <span style={{ fontSize: '11px', color: '#64748b' }}>
-                            | {groupCases.length}
-                          </span>
+                    <tr className="group-row" onClick={() => toggleGroupCollapse(group.groupId)}>
+                      <td colSpan={6} className="group-row-cell">
+                        <div className="group-row-content">
+                          <span className="group-row-caret">{isCollapsed ? '▶' : '▼'}</span>
+                          <span className="group-row-icon">📁</span>
+                          <span className="group-row-title">{group.groupName}</span>
+                          <span className="group-row-count">| {groupCases.length}</span>
                         </div>
                       </td>
                     </tr>
@@ -398,83 +225,49 @@ export default function TestCaseTable({
                       const statusVal = (testCase.priority === 'Passed' || testCase.priority === 'Failed' || testCase.priority === 'Blocked' || testCase.priority === 'Retest')
                         ? testCase.priority
                         : 'Untested';
+                      const rowClassName = `case-row${isActive ? ' is-active' : isSelected ? ' is-selected' : ''}`;
 
                       return (
                         <tr
                           key={testCase.testCaseId}
+                          className={rowClassName}
                           onClick={() => onRowClick?.(testCase)}
-                          style={{
-                            borderBottom: '1px solid #f1f5f9',
-                            background: isActive
-                              ? '#e6f4ea'
-                              : isSelected
-                              ? '#eff6ff'
-                              : 'transparent',
-                            cursor: 'pointer',
-                            transition: 'background 120ms ease',
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!isActive && !isSelected) {
-                              (e.currentTarget as HTMLTableRowElement).style.background = '#f8fafc';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!isActive && !isSelected) {
-                              (e.currentTarget as HTMLTableRowElement).style.background = 'transparent';
-                            }
-                          }}
                         >
                           {/* Drag handle & Checkbox */}
-                          <td style={{ padding: '9px 8px 9px 14px' }} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span
-                                aria-hidden="true"
-                                style={{ color: '#cbd5e1', cursor: 'grab', fontSize: '12px' }}
-                              >
+                          <td className="data-table-cell is-narrow" onClick={(e) => e.stopPropagation()}>
+                            <div className="case-select">
+                              <span className="drag-handle" aria-hidden="true">
                                 ⋮⋮
                               </span>
                               <input
                                 type="checkbox"
                                 checked={isSelected}
-                                onChange={(e) => handleSelectRow(testCase.testCaseId, e as any)}
+                                onChange={(e) => handleSelectRow(testCase.testCaseId, e)}
                                 aria-label={`Select ${testCase.title}`}
                               />
                             </div>
                           </td>
 
                           {/* ID */}
-                          <td style={{ padding: '9px 12px', fontFamily: 'monospace', fontSize: '12.5px', color: '#475569', fontWeight: 600 }}>
-                            {testCase.testCaseId}
-                          </td>
+                          <td className="data-table-cell is-id">{testCase.testCaseId}</td>
 
                           {/* Title */}
-                          <td style={{ padding: '9px 12px', color: '#0f172a' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ color: '#94a3b8', fontSize: '13px' }}>📄</span>
-                              <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {testCase.title}
+                          <td className="data-table-cell">
+                            <div className="case-title">
+                              <span className="case-title-icon" aria-hidden="true">
+                                📄
                               </span>
+                              <span className="case-title-text">{testCase.title}</span>
                             </div>
                           </td>
 
                           {/* Owner / Priority */}
-                          <td style={{ padding: '9px 12px', color: '#475569', fontSize: '12.5px' }}>
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                background: '#f1f5f9',
-                                color: '#334155',
-                                fontWeight: 500,
-                              }}
-                            >
-                              {testCase.priority || 'Medium'}
-                            </span>
+                          <td className="data-table-cell">
+                            <span className="case-priority">{testCase.priority || 'Medium'}</span>
                           </td>
 
                           {/* Last Result Status Pill */}
-                          <td style={{ padding: '9px 12px' }}>
+                          <td className="data-table-cell">
                             <StatusBadge
                               status={statusVal}
                               size="small"
@@ -484,21 +277,13 @@ export default function TestCaseTable({
                           </td>
 
                           {/* Row Actions */}
-                          <td style={{ padding: '9px 14px', textAlign: 'center', color: '#94a3b8' }}>
+                          <td className="data-table-cell is-actions">
                             <button
                               type="button"
+                              className="row-actions-btn"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onRowClick?.(testCase);
-                              }}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#64748b',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                                padding: '2px 6px',
-                                borderRadius: '4px',
                               }}
                               aria-label={`Actions for ${testCase.title}`}
                             >
@@ -515,9 +300,9 @@ export default function TestCaseTable({
         </table>
 
         {filteredCases.length === 0 && (
-          <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748b' }}>
-            <p style={{ fontSize: '15px', fontWeight: 500, margin: '0 0 8px 0' }}>No test cases found.</p>
-            <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>
+          <div className="empty-state">
+            <p className="empty-state-title">No test cases found.</p>
+            <p className="empty-state-hint">
               Create a new test case or adjust your folder selection and search filters.
             </p>
           </div>
