@@ -1,15 +1,16 @@
 import { useState } from 'react';
+import { TEST_RESULT_STATUSES, type TestResultStatus } from '../api/client';
 
 /**
  * Status taxonomy for test case results.
  *
  * The API owns this vocabulary — `TestCaseResult.status` in api/openapi.json is
  * the single source of truth (TucanoTestAPI validates it server-side). The list
- * below exists so the GUI can render the union exhaustively, and
- * src/components/StatusBadge.test.tsx fails if the two ever drift apart.
+ * is re-exported from src/api/client.ts so every view shares one declaration,
+ * and src/components/StatusBadge.test.tsx fails if the two ever drift apart.
  */
-export const VALID_STATUSES = ['Passed', 'Failed', 'Blocked', 'Untested', 'Retest'] as const;
-export type TestCaseStatus = (typeof VALID_STATUSES)[number];
+export const VALID_STATUSES = TEST_RESULT_STATUSES;
+export type TestCaseStatus = TestResultStatus;
 
 export interface StatusConfig {
   label: string;

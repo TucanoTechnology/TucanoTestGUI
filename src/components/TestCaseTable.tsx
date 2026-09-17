@@ -1,6 +1,12 @@
-import React, { useState, useMemo } from 'react';
-import { TestCase } from '../api/client';
-import StatusBadge, { TestCaseStatus } from './StatusBadge';
+import React, { useId, useState, useMemo } from 'react';
+import {
+  TestCase,
+  TestRun,
+  TestResultStatus,
+  TEST_RESULT_STATUSES,
+  resultStatus,
+} from '../api/client';
+import StatusBadge, { STATUS_CONFIG } from './StatusBadge';
 
 export interface TestCaseGroup {
   groupId: string;
@@ -15,7 +21,16 @@ export interface TestCaseTableProps {
   /** Checked rows. Pass this to let the owner drive the selection (bulk actions). */
   selectedIds?: readonly string[];
   onSelectionChange?: (selectedIds: string[]) => void;
-  onStatusChange?: (id: string, status: TestCaseStatus) => void;
+  /**
+   * Runs the LAST RESULT column reads from. Every run the shell has loaded is
+   * offered so the reader can pick which execution to display; omit the prop
+   * to hide the control entirely.
+   */
+  runs?: readonly TestRun[];
+  activeRunId?: string | null;
+  onRunChange?: (testRunId: string) => void;
+  /** Records a result against the active run — statuses are never stored on the case. */
+  onRecordResult?: (testCaseId: string, status: TestResultStatus) => void;
   onRowClick?: (testCase: TestCase) => void;
   onEditCase?: (testCase: TestCase) => void;
   onDeleteCase?: (testCase: TestCase) => void;
@@ -27,8 +42,11 @@ export interface TestCaseTableProps {
   onCreateTestRun?: () => void;
 }
 
-type SortColumn = 'id' | 'title' | 'priority' | 'status';
+type SortColumn = 'id' | 'title' | 'priority';
 type SortDirection = 'asc' | 'desc';
+
+/** Columns in the table, so the group row can span them all. */
+const COLUMN_COUNT = 7;
 
 export default function TestCaseTable({
   cases,
@@ -36,7 +54,10 @@ export default function TestCaseTable({
   selectedCaseId,
   selectedIds,
   onSelectionChange,
-  onStatusChange,
+  runs,
+  activeRunId,
+  onRunChange,
+  onRecordResult,
   onRowClick,
   onEditCase,
   onDeleteCase,
@@ -51,10 +72,16 @@ export default function TestCaseTable({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const runSelectId = useId();
 
   const selectedSet = useMemo(
     () => (selectedIds ? new Set(selectedIds) : internalSelectedIds),
     [selectedIds, internalSelectedIds]
+  );
+
+  const activeRun = useMemo(
+    () => runs?.find((run) => run.testRunId === activeRunId) ?? null,
+    [runs, activeRunId]
   );
 
   const applySelection = (next: Set<string>) => {
@@ -72,7 +99,8 @@ export default function TestCaseTable({
       (c) =>
         c.testCaseId.toLowerCase().includes(q) ||
         c.title.toLowerCase().includes(q) ||
-        (c.priority && c.priority.toLowerCase().includes(q))
+        (c.priority && c.priority.toLowerCase().includes(q)) ||
+        (c.severity && c.severity.toLowerCase().includes(q))
     );
   }, [cases, searchKeyword]);
 
@@ -91,7 +119,8 @@ export default function TestCaseTable({
             (c) =>
               c.testCaseId.toLowerCase().includes(q) ||
               c.title.toLowerCase().includes(q) ||
-              (c.priority && c.priority.toLowerCase().includes(q))
+              (c.priority && c.priority.toLowerCase().includes(q)) ||
+              (c.severity && c.severity.toLowerCase().includes(q))
           ),
         }))
         .filter((g) => g.cases.length > 0);
@@ -170,6 +199,26 @@ export default function TestCaseTable({
         </div>
 
         <div className="table-toolbar-group">
+          {runs !== undefined &&
+            (runs.length === 0 ? (
+              <span className="table-run-hint">No test runs yet — create one to record results.</span>
+            ) : (
+              <div className="table-run-select">
+                <label htmlFor={runSelectId}>Results run</label>
+                <select
+                  id={runSelectId}
+                  value={activeRunId ?? ''}
+                  onChange={(event) => onRunChange?.(event.target.value)}
+                >
+                  {runs.map((run) => (
+                    <option key={run.testRunId} value={run.testRunId}>
+                      {run.testRunId}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+
           {onCreateTestRun && (
             <button type="button" className="btn-info" onClick={onCreateTestRun}>
               <span>🚀 Create test run</span>
@@ -213,8 +262,9 @@ export default function TestCaseTable({
                 TITLE {sortColumn === 'title' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
               <th className="is-sortable" onClick={() => handleSort('priority')}>
-                OWNER / PRIORITY {sortColumn === 'priority' && (sortDirection === 'asc' ? '▲' : '▼')}
+                PRIORITY {sortColumn === 'priority' && (sortDirection === 'asc' ? '▲' : '▼')}
               </th>
+              <th>SEVERITY</th>
               <th>LAST RESULT</th>
               <th className="is-actions">⚙️</th>
             </tr>
@@ -229,7 +279,7 @@ export default function TestCaseTable({
                   {/* Group Header Row if more than 1 group or named */}
                   {group.groupName && (
                     <tr className="group-row" onClick={() => toggleGroupCollapse(group.groupId)}>
-                      <td colSpan={6} className="group-row-cell">
+                      <td colSpan={COLUMN_COUNT} className="group-row-cell">
                         <div className="group-row-content">
                           <span className="group-row-caret">{isCollapsed ? '▶' : '▼'}</span>
                           <span className="group-row-icon">📁</span>
@@ -245,10 +295,8 @@ export default function TestCaseTable({
                     groupCases.map((testCase) => {
                       const isSelected = selectedSet.has(testCase.testCaseId);
                       const isActive = selectedCaseId === testCase.testCaseId;
-                      const statusVal = (testCase.priority === 'Passed' || testCase.priority === 'Failed' || testCase.priority === 'Blocked' || testCase.priority === 'Retest')
-                        ? testCase.priority
-                        : 'Untested';
                       const rowClassName = `case-row${isActive ? ' is-active' : isSelected ? ' is-selected' : ''}`;
+                      const recorded = resultStatus(activeRun, testCase.testCaseId);
 
                       return (
                         <tr
@@ -284,19 +332,45 @@ export default function TestCaseTable({
                             </div>
                           </td>
 
-                          {/* Owner / Priority */}
+                          {/* Priority */}
                           <td className="data-table-cell">
                             <span className="case-priority">{testCase.priority || 'Medium'}</span>
                           </td>
 
-                          {/* Last Result Status Pill */}
+                          {/* Severity */}
                           <td className="data-table-cell">
-                            <StatusBadge
-                              status={statusVal}
-                              size="small"
-                              interactive={Boolean(onStatusChange)}
-                              onStatusChange={(newStatus) => onStatusChange?.(testCase.testCaseId, newStatus)}
-                            />
+                            <span className="case-severity">{testCase.severity || 'Major'}</span>
+                          </td>
+
+                          {/* Last result, read from the active run */}
+                          <td className="data-table-cell" onClick={(e) => e.stopPropagation()}>
+                            <div className="case-result">
+                              {recorded ? (
+                                <StatusBadge status={recorded} size="small" />
+                              ) : (
+                                <span className="case-result-empty">
+                                  {activeRun ? 'No result yet' : 'No run selected'}
+                                </span>
+                              )}
+                              <select
+                                className="case-result-select"
+                                value=""
+                                aria-label={`Record result for ${testCase.title}`}
+                                disabled={!activeRun || !onRecordResult}
+                                title={activeRun ? undefined : 'Select a run first'}
+                                onChange={(event) => {
+                                  const next = event.target.value as TestResultStatus;
+                                  if (next) onRecordResult?.(testCase.testCaseId, next);
+                                }}
+                              >
+                                <option value="">Record…</option>
+                                {TEST_RESULT_STATUSES.map((status) => (
+                                  <option key={status} value={status}>
+                                    {STATUS_CONFIG[status].label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </td>
 
                           {/* Row Actions */}

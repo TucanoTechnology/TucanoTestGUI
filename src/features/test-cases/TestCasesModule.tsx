@@ -1,8 +1,22 @@
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { ApiRequestError, Project, TestCase, TestSuite, TucanoApiClient } from '../../api/client';
+import {
+  ApiRequestError,
+  Project,
+  TestCase,
+  TestCasePriority,
+  TestCaseSeverity,
+  TestResultStatus,
+  TestRun,
+  TestSuite,
+  TEST_CASE_PRIORITIES,
+  TEST_CASE_SEVERITIES,
+  TucanoApiClient,
+  latestTestRun,
+  resultStatus,
+} from '../../api/client';
 import DetailView from '../../components/DetailView';
 import FolderHierarchyTree from '../../components/FolderHierarchyTree';
-import { STATUS_CONFIG, TestCaseStatus } from '../../components/StatusBadge';
+import { STATUS_CONFIG } from '../../components/StatusBadge';
 import TestCaseTable, { TestCaseGroup } from '../../components/TestCaseTable';
 import BulkActionToolbar from './BulkActionToolbar';
 
@@ -16,6 +30,11 @@ import BulkActionToolbar from './BulkActionToolbar';
  * Folder membership comes from the suite structures the shell already loaded —
  * the API owns those relationships, so the board never guesses where a case
  * lives. Cases that appear in no suite stay reachable through the unfiled node.
+ *
+ * Statuses are run-scoped (issue #65): the LAST RESULT column and the detail
+ * pane read the selected run's embedded results, and recording an outcome calls
+ * `recordTestRunResult` against that run. The case document only ever carries
+ * priority and severity.
  */
 
 export interface TestCasesModuleProps {
@@ -23,6 +42,8 @@ export interface TestCasesModuleProps {
   identifiers: readonly string[];
   projects: Project[];
   suites: TestSuite[];
+  /** Runs the shell loaded; the board reads statuses from the selected one. */
+  runs?: readonly TestRun[];
   createRequest?: number;
   onStatus: (message: string, state?: 'info' | 'error') => void;
   onChanged?: () => void | Promise<void>;
@@ -60,6 +81,7 @@ export default function TestCasesModule({
   identifiers,
   projects,
   suites,
+  runs,
   createRequest = 0,
   onStatus,
   onChanged,
@@ -76,7 +98,8 @@ export default function TestCasesModule({
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseDescription, setNewCaseDescription] = useState('');
   const [newCaseExpected, setNewCaseExpected] = useState('');
-  const [newCasePriority, setNewCasePriority] = useState('Medium');
+  const [newCasePriority, setNewCasePriority] = useState<TestCasePriority>('Medium');
+  const [newCaseSeverity, setNewCaseSeverity] = useState<TestCaseSeverity>('Major');
   const [newCaseExploratory, setNewCaseExploratory] = useState(false);
   const [newCaseSteps, setNewCaseSteps] = useState<string[]>(['']);
 
@@ -84,6 +107,7 @@ export default function TestCasesModule({
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [bulkSelection, setBulkSelection] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
   const [folderId, setFolderId] = useState<string>('all');
   const [folderType, setFolderType] = useState<'all' | 'project' | 'suite' | 'case'>('all');
@@ -140,6 +164,17 @@ export default function TestCasesModule({
       return next.size === previous.size ? previous : next;
     });
   }, [cases]);
+
+  /**
+   * The run the board reads and records results against: whatever the reader
+   * picked, else the newest run the shell loaded. Results are run-scoped
+   * (issue #65), so with no run there is nothing to show and nothing to write.
+   */
+  const activeRun = useMemo(() => {
+    const available = runs ?? [];
+    if (available.length === 0) return null;
+    return available.find((run) => run.testRunId === selectedRunId) ?? latestTestRun(available);
+  }, [runs, selectedRunId]);
 
   // Where each case lives, derived from the structures the API returned.
   const membership = useMemo(() => {
@@ -271,6 +306,7 @@ export default function TestCasesModule({
     setNewCaseDescription('');
     setNewCaseExpected('');
     setNewCasePriority('Medium');
+    setNewCaseSeverity('Major');
     setNewCaseExploratory(false);
     setNewCaseSteps(['']);
   };
@@ -299,6 +335,7 @@ export default function TestCasesModule({
       description: newCaseDescription || undefined,
       expectedResult: newCaseExpected,
       priority: newCasePriority,
+      severity: newCaseSeverity,
       exploratory: newCaseExploratory,
       steps: steps.length > 0 ? steps : undefined,
     };
@@ -343,32 +380,48 @@ export default function TestCasesModule({
     }
   };
 
-  const applyStatus = async (id: string, status: TestCaseStatus): Promise<boolean> => {
-    const current = await client.getTestCase(id);
-    await client.updateTestCase(id, { ...current, priority: status });
+  /**
+   * Records one case's outcome against the active run. Status lives on the run
+   * (issue #65), so the case document is never read or rewritten here.
+   */
+  const applyResult = async (
+    id: string,
+    status: TestResultStatus,
+    notes?: string,
+  ): Promise<boolean> => {
+    if (!activeRun) return false;
+    await client.recordTestRunResult(activeRun.testRunId, { testCaseId: id, status, notes });
     return true;
   };
 
-  const handleStatusChange = async (id: string, status: TestCaseStatus) => {
+  const handleStatusChange = async (id: string, status: TestResultStatus, notes?: string) => {
+    if (!activeRun) {
+      onStatus('Select a test run before recording a result.', 'error');
+      return;
+    }
     try {
-      await applyStatus(id, status);
+      await applyResult(id, status, notes);
       await onChanged?.();
-      onStatus(`Updated ${id} status to ${status}.`);
+      onStatus(`Recorded ${STATUS_CONFIG[status].label} for ${id} in ${activeRun.testRunId}.`);
     } catch (error) {
       const failure = toFailure(error, 'The API refused the request.');
-      onStatus(`Could not update ${id} status: ${failure.message}`, 'error');
+      onStatus(`Could not record a result for ${id}: ${failure.message}`, 'error');
     }
   };
 
-  const handleBulkStatus = async (status: TestCaseStatus) => {
+  const handleBulkStatus = async (status: TestResultStatus) => {
     const ids = Array.from(bulkSelection);
     if (ids.length === 0) return;
+    if (!activeRun) {
+      onStatus('Select a test run before recording results.', 'error');
+      return;
+    }
 
     setBusy(true);
     let failures = 0;
     for (const id of ids) {
       try {
-        await applyStatus(id, status);
+        await applyResult(id, status);
       } catch {
         failures += 1;
       }
@@ -378,9 +431,14 @@ export default function TestCasesModule({
     await onChanged?.();
 
     if (failures > 0) {
-      onStatus(`Could not update ${failures} of ${ids.length} selected test cases.`, 'error');
+      onStatus(
+        `Could not record ${failures} of ${ids.length} selected test cases in ${activeRun.testRunId}.`,
+        'error'
+      );
     } else {
-      onStatus(`Marked ${ids.length} ${caseWord(ids.length)} as ${STATUS_CONFIG[status].label}.`);
+      onStatus(
+        `Recorded ${STATUS_CONFIG[status].label} for ${ids.length} ${caseWord(ids.length)} in ${activeRun.testRunId}.`
+      );
     }
   };
 
@@ -488,7 +546,10 @@ export default function TestCasesModule({
             selectedCaseId={selectedCaseId}
             selectedIds={Array.from(bulkSelection)}
             onSelectionChange={(ids) => setBulkSelection(new Set(ids))}
-            onStatusChange={handleStatusChange}
+            runs={runs}
+            activeRunId={activeRun?.testRunId ?? null}
+            onRunChange={setSelectedRunId}
+            onRecordResult={(id, status) => void handleStatusChange(id, status)}
             onRowClick={(testCase) => setSelectedCaseId(testCase.testCaseId)}
             onEditCase={(testCase) => {
               setPendingDelete(null);
@@ -523,7 +584,9 @@ export default function TestCasesModule({
               hasPrev={hasPrev}
               hasNext={hasNext}
               onPassAndNext={handlePassAndNext}
-              onStatusChange={(status) => void handleStatusChange(selectedCaseId, status)}
+              recordedStatus={activeRun ? resultStatus(activeRun, selectedCaseId) : null}
+              runSelected={Boolean(activeRun)}
+              onRecordResult={(status, notes) => handleStatusChange(selectedCaseId, status, notes)}
               onItemUpdated={onChanged}
               onItemDeleted={() => {
                 setSelectedCaseId(null);
@@ -577,12 +640,27 @@ export default function TestCasesModule({
                 <select
                   id={`${fieldId}-create-priority`}
                   value={newCasePriority}
-                  onChange={(event) => setNewCasePriority(event.target.value)}
+                  onChange={(event) => setNewCasePriority(event.target.value as TestCasePriority)}
                 >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
+                  {TEST_CASE_PRIORITIES.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priority}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor={`${fieldId}-create-severity`}>Severity</label>
+                <select
+                  id={`${fieldId}-create-severity`}
+                  value={newCaseSeverity}
+                  onChange={(event) => setNewCaseSeverity(event.target.value as TestCaseSeverity)}
+                >
+                  {TEST_CASE_SEVERITIES.map((severity) => (
+                    <option key={severity} value={severity}>
+                      {severity}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">
@@ -690,12 +768,31 @@ export default function TestCasesModule({
                 <select
                   id={`${fieldId}-edit-priority`}
                   value={editing.priority ?? 'Medium'}
-                  onChange={(event) => setEditing({ ...editing, priority: event.target.value })}
+                  onChange={(event) =>
+                    setEditing({ ...editing, priority: event.target.value as TestCasePriority })
+                  }
                 >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
+                  {TEST_CASE_PRIORITIES.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {priority}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label htmlFor={`${fieldId}-edit-severity`}>Severity</label>
+                <select
+                  id={`${fieldId}-edit-severity`}
+                  value={editing.severity ?? 'Major'}
+                  onChange={(event) =>
+                    setEditing({ ...editing, severity: event.target.value as TestCaseSeverity })
+                  }
+                >
+                  {TEST_CASE_SEVERITIES.map((severity) => (
+                    <option key={severity} value={severity}>
+                      {severity}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="form-group">

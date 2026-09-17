@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ApiRequestError, TucanoApiClient, applyFilter } from './client';
+import {
+  ApiRequestError,
+  TucanoApiClient,
+  TestRun,
+  applyFilter,
+  latestTestRun,
+  resultStatus,
+} from './client';
 
 function stubFetch(status: number, body: unknown): typeof fetch {
   return (async () =>
@@ -7,6 +14,23 @@ function stubFetch(status: number, body: unknown): typeof fetch {
       status,
       headers: { 'content-type': 'application/json' },
     })) as unknown as typeof fetch;
+}
+
+/** Captures the request so a test can assert the verb, URL and payload. */
+function recordingFetch(body: unknown, status = 200) {
+  const requests: { url: string; method: string; body: unknown }[] = [];
+  const fetchImpl = (async (url: string, init?: RequestInit) => {
+    requests.push({
+      url: String(url),
+      method: init?.method ?? 'GET',
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as unknown as typeof fetch;
+  return { fetchImpl, requests };
 }
 
 describe('applyFilter', () => {
@@ -113,5 +137,76 @@ describe('TucanoApiClient', () => {
     const client = new TucanoApiClient('/api', stubFetch(503, 'unavailable'));
 
     await expect(client.listTestRuns()).rejects.toMatchObject({ code: 'unknown_error' });
+  });
+
+  it('records a result against the run, not the case', async () => {
+    const { fetchImpl, requests } = recordingFetch({ message: 'Recorded Passed for TC-1.json.' });
+    const client = new TucanoApiClient('/api', fetchImpl);
+
+    await expect(
+      client.recordTestRunResult('RUN-1.json', { testCaseId: 'TC-1.json', status: 'Passed' }),
+    ).resolves.toEqual({ message: 'Recorded Passed for TC-1.json.' });
+
+    // The run owns the result, so this is the only URL a status can travel on.
+    expect(requests).toEqual([
+      {
+        url: '/api/test_runs/RUN-1.json/results',
+        method: 'POST',
+        body: { testCaseId: 'TC-1.json', status: 'Passed' },
+      },
+    ]);
+  });
+});
+
+describe('resultStatus', () => {
+  const run: TestRun = {
+    testRunId: 'RUN-1.json',
+    timestamp: '2026-09-04T00:00:00Z',
+    results: [
+      { testCaseId: 'TC-1.json', status: 'Failed' },
+      { testCaseId: 'TC-2.json', status: 'Blocked' },
+      { testCaseId: 'TC-1.json', status: 'Passed' },
+    ],
+  };
+
+  it('reads the status the run recorded for a case', () => {
+    expect(resultStatus(run, 'TC-2.json')).toBe('Blocked');
+  });
+
+  it('takes the most recent entry when a case was recorded more than once', () => {
+    expect(resultStatus(run, 'TC-1.json')).toBe('Passed');
+  });
+
+  it('returns null instead of inventing a status', () => {
+    expect(resultStatus(run, 'TC-9.json')).toBeNull();
+    expect(resultStatus(run, '')).toBeNull();
+    expect(resultStatus(undefined, 'TC-1.json')).toBeNull();
+    expect(resultStatus({ testRunId: 'RUN-2.json', timestamp: '2026-09-04T00:00:00Z' }, 'TC-1.json')).toBeNull();
+  });
+});
+
+describe('latestTestRun', () => {
+  it('picks the newest run by timestamp', () => {
+    const older: TestRun = { testRunId: 'RUN-1.json', timestamp: '2026-09-01T00:00:00Z' };
+    const newer: TestRun = { testRunId: 'RUN-2.json', timestamp: '2026-09-04T00:00:00Z' };
+    expect(latestTestRun([older, newer])?.testRunId).toBe('RUN-2.json');
+    expect(latestTestRun([newer, older])?.testRunId).toBe('RUN-2.json');
+  });
+
+  it('compares Unix-second timestamps numerically, not as strings', () => {
+    const older: TestRun = { testRunId: 'RUN-1.json', timestamp: '1757030400' };
+    const newer: TestRun = { testRunId: 'RUN-2.json', timestamp: '1757289600' };
+    expect(latestTestRun([newer, older])?.testRunId).toBe('RUN-2.json');
+  });
+
+  it('lets the later entry win a tie so the newest write is shown', () => {
+    const first: TestRun = { testRunId: 'RUN-1.json', timestamp: '2026-09-04T00:00:00Z' };
+    const second: TestRun = { testRunId: 'RUN-2.json', timestamp: '2026-09-04T00:00:00Z' };
+    expect(latestTestRun([first, second])?.testRunId).toBe('RUN-2.json');
+  });
+
+  it('returns null when there is no run to read', () => {
+    expect(latestTestRun([])).toBeNull();
+    expect(latestTestRun(undefined)).toBeNull();
   });
 });

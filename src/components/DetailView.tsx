@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DuplicateButton from './DuplicateButton';
-import StatusBadge, { TestCaseStatus } from './StatusBadge';
-import { Attachment, TucanoApiClient } from '../api/client';
+import StatusBadge from './StatusBadge';
+import { Attachment, TestResultStatus, TEST_RESULT_STATUSES, TucanoApiClient } from '../api/client';
 
 export type DetailItemType = 'case' | 'suite' | 'project' | 'run' | 'milestone';
 
@@ -16,8 +16,15 @@ export interface DetailViewProps {
   hasPrev?: boolean;
   hasNext?: boolean;
   onPassAndNext?: () => void;
-  onStatusChange?: (newStatus: TestCaseStatus) => void;
-  onRecordResult?: (status: TestCaseStatus, notes: string) => Promise<void>;
+  /**
+   * The status the selected run recorded for this case, or `null` when it holds
+   * none. Run-scoped (issue #65): the case document carries no status, so a
+   * missing run or result renders an empty state instead of a value.
+   */
+  recordedStatus?: TestResultStatus | null;
+  /** Whether a run is selected at all; gates the controls that record a result. */
+  runSelected?: boolean;
+  onRecordResult?: (status: TestResultStatus, notes: string) => Promise<void>;
   onItemUpdated?: () => void;
   onItemDeleted?: () => void;
 }
@@ -33,7 +40,8 @@ export default function DetailView({
   hasPrev = false,
   hasNext = false,
   onPassAndNext,
-  onStatusChange,
+  recordedStatus = null,
+  runSelected = false,
   onRecordResult,
   onItemUpdated,
   onItemDeleted,
@@ -46,7 +54,7 @@ export default function DetailView({
   const [activeTab, setActiveTab] = useState<'details' | 'results' | 'attachments'>('details');
 
   // Inline result recorder state
-  const [resultStatus, setResultStatus] = useState<TestCaseStatus>('Passed');
+  const [resultStatus, setResultStatus] = useState<TestResultStatus>('Passed');
   const [resultNotes, setResultNotes] = useState('');
   const [isSubmittingResult, setIsSubmittingResult] = useState(false);
 
@@ -134,25 +142,18 @@ export default function DetailView({
     onItemUpdated?.();
   };
 
-  const handleLocalStatusChange = (newStatus: TestCaseStatus) => {
-    if (item && itemType === 'case') {
-      const updated = { ...item, priority: newStatus };
-      setItem(updated);
-      onStatusChange?.(newStatus);
-    }
-  };
-
+  /**
+   * Recording an outcome writes to the selected run only. The case document
+   * keeps its priority and severity untouched (issue #65); the pane re-renders
+   * from the status the owner passes back down.
+   */
   const handleSubmitResult = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!onRecordResult) return;
+    if (!onRecordResult || !runSelected) return;
     setIsSubmittingResult(true);
     try {
       await onRecordResult(resultStatus, resultNotes);
       setResultNotes('');
-      // Update local item view
-      if (item) {
-        setItem({ ...item, priority: resultStatus });
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to record result');
     } finally {
@@ -238,11 +239,6 @@ export default function DetailView({
     );
   }
 
-  const currentStatus: TestCaseStatus =
-    item.priority === 'Passed' || item.priority === 'Failed' || item.priority === 'Blocked' || item.priority === 'Retest'
-      ? (item.priority as TestCaseStatus)
-      : 'Untested';
-
   return (
     <div
       style={{
@@ -274,6 +270,7 @@ export default function DetailView({
             <button
               type="button"
               onClick={onPassAndNext}
+              disabled={!runSelected}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -285,10 +282,15 @@ export default function DetailView({
                 borderRadius: '6px',
                 fontSize: '12.5px',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: runSelected ? 'pointer' : 'not-allowed',
+                opacity: runSelected ? 1 : 0.6,
                 boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
               }}
-              title="Mark Passed & advance to next test case"
+              title={
+                runSelected
+                  ? 'Mark Passed & advance to next test case'
+                  : 'Select a test run before recording a result'
+              }
             >
               <span>✓ Pass & next</span>
             </button>
@@ -437,14 +439,14 @@ export default function DetailView({
             </div>
           </div>
 
-          {itemType === 'case' && (
-            <StatusBadge
-              status={currentStatus}
-              size="medium"
-              interactive={true}
-              onStatusChange={handleLocalStatusChange}
-            />
-          )}
+          {itemType === 'case' &&
+            (recordedStatus ? (
+              <StatusBadge status={recordedStatus} size="medium" />
+            ) : (
+              <span className="case-result-empty">
+                {runSelected ? 'No result yet' : 'No run selected'}
+              </span>
+            ))}
         </div>
 
         {/* Metadata Grid Card */}
@@ -658,22 +660,30 @@ export default function DetailView({
           <div>
             <form onSubmit={handleSubmitResult} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px', marginBottom: '20px' }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', marginBottom: '10px' }}>
-                Log Test Result
+                Record Test Result
               </div>
+
+              {!runSelected && (
+                <p className="case-result-empty" style={{ margin: '0 0 10px 0' }}>
+                  Select a test run on the board before recording a result.
+                </p>
+              )}
 
               {/* Status choice pills */}
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                {(['Passed', 'Failed', 'Blocked', 'Retest', 'Untested'] as TestCaseStatus[]).map((st) => (
+                {TEST_RESULT_STATUSES.map((st) => (
                   <button
                     key={st}
                     type="button"
+                    disabled={!runSelected}
                     onClick={() => setResultStatus(st)}
                     style={{
                       padding: '4px 10px',
                       borderRadius: '999px',
                       fontSize: '12px',
                       fontWeight: 600,
-                      cursor: 'pointer',
+                      cursor: runSelected ? 'pointer' : 'not-allowed',
+                      opacity: runSelected ? 1 : 0.6,
                       border: resultStatus === st ? '2px solid #0f766e' : '1px solid #cbd5e1',
                       background: resultStatus === st ? '#e0f2fe' : '#ffffff',
                       color: resultStatus === st ? '#0369a1' : '#475569',
@@ -689,6 +699,8 @@ export default function DetailView({
                 <textarea
                   value={resultNotes}
                   onChange={(e) => setResultNotes(e.target.value)}
+                  disabled={!runSelected}
+                  aria-label="Result notes"
                   placeholder="Add execution comments or defect notes..."
                   rows={3}
                   style={{ width: '100%', padding: '8px', fontSize: '12.5px', border: '1px solid #cbd5e1', borderRadius: '6px' }}
@@ -697,7 +709,7 @@ export default function DetailView({
 
               <button
                 type="submit"
-                disabled={isSubmittingResult}
+                disabled={isSubmittingResult || !runSelected}
                 style={{
                   background: '#0f766e',
                   color: '#ffffff',
@@ -706,7 +718,8 @@ export default function DetailView({
                   padding: '6px 14px',
                   fontSize: '13px',
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: isSubmittingResult || !runSelected ? 'not-allowed' : 'pointer',
+                  opacity: isSubmittingResult || !runSelected ? 0.6 : 1,
                 }}
               >
                 {isSubmittingResult ? 'Saving...' : 'Record Result'}
