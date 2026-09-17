@@ -26,9 +26,19 @@ jobs:
         run: npm ci
       - name: Type check
         run: npm run typecheck
+      # The suite and the bundle need the application source. While `src/` is
+      # absent (the GUI v2 reset, #102) there is nothing to run, so these steps
+      # are keyed on its presence: they skip with a warning now and re-arm by
+      # themselves as soon as the rebuild lands the new source tree.
+      - name: Note the absent application source
+        if: ${{ hashFiles('src/**') == '' }}
+        run: |
+          echo "::warning::src/ is absent (GUI v2 reset, #102) — unit/accessibility tests and the production bundle are skipped until the rebuild lands src/."
       - name: Run unit and accessibility tests
+        if: ${{ hashFiles('src/**') != '' }}
         run: npm test
       - name: Build production bundle
+        if: ${{ hashFiles('src/**') != '' }}
         run: npm run build
 
   client-drift:
@@ -41,9 +51,17 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      # Drift can only be judged against a committed client. Both steps return
+      # with `src/api/generated` (the GUI v2 reset, #102).
+      - name: Note the absent generated client
+        if: ${{ hashFiles('src/api/generated/**') == '' }}
+        run: |
+          echo "::warning::src/api/generated is absent (GUI v2 reset, #102) — contract drift cannot be judged until the client is regenerated."
       - name: Regenerate the API client from the pinned contract
+        if: ${{ hashFiles('src/api/generated/**') != '' }}
         run: npm run generate:client
       - name: Fail if the committed client is stale
+        if: ${{ hashFiles('src/api/generated/**') != '' }}
         run: |
           if [ -n "$(git status --porcelain -- src/api/generated)" ]; then
             git status --short -- src/api/generated
@@ -55,9 +73,17 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v5
+      # `Dockerfile` copies `src/` to build the bundle, so a source-less tree has
+      # no image to build or scan (the GUI v2 reset, #102).
+      - name: Note the absent application source
+        if: ${{ hashFiles('src/**') == '' }}
+        run: |
+          echo "::warning::src/ is absent (GUI v2 reset, #102) — the image build and its vulnerability scan are skipped until the rebuild lands src/."
       - name: Build application image
+        if: ${{ hashFiles('src/**') != '' }}
         run: docker build --pull --build-arg CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }} --file Dockerfile --tag tucano-test-gui .
       - uses: aquasecurity/trivy-action@v0.36.0
+        if: ${{ hashFiles('src/**') != '' }}
         with:
           image-ref: tucano-test-gui
           format: table

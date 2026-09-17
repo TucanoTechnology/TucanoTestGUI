@@ -38,9 +38,18 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v5
+      # `Dockerfile` copies `src/` to build the bundle, so a source-less tree has
+      # no image to scan (the GUI v2 reset, #102). The guard re-arms by itself
+      # once the rebuild lands the new source tree.
+      - name: Note the absent application source
+        if: ${{ hashFiles('src/**') == '' }}
+        run: |
+          echo "::warning::src/ is absent (GUI v2 reset, #102) — the image build and its vulnerability scan are skipped until the rebuild lands src/."
       - name: Build application image
+        if: ${{ hashFiles('src/**') != '' }}
         run: docker build --pull --build-arg CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }} --file Dockerfile --tag tucano-test-gui .
       - uses: aquasecurity/trivy-action@v0.36.0
+        if: ${{ hashFiles('src/**') != '' }}
         with:
           image-ref: tucano-test-gui
           format: table
