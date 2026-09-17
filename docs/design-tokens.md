@@ -1,93 +1,80 @@
 # Design tokens
 
-Every colour, space, radius and type value in the GUI lives in the `:root` block at the top of
-[`src/styles.css`](../src/styles.css). Components reference the tokens instead of literals, so the
-palette can be checked in one place and the status taxonomy stays tied to the API contract.
+Every colour, spacing, radius, type and layout value in the GUI lives in the `:root` block at the top
+of [`src/styles.css`](../src/styles.css). Components reference the tokens through `var(...)` instead
+of literals, so the palette can be reviewed and changed in one place.
 
-The rules below are not conventions on trust: [`src/styles.test.ts`](../src/styles.test.ts) parses the
-stylesheet, resolves every token and fails the build when one is broken, unused or out of the
-`--color-*` spelling.
+`src/styles.css` is currently the **token layer plus global resets and utilities only**. Component
+rules are added back ticket by ticket (#127 onwards), so until those land the components render
+unstyled in a browser. The token names and values are frozen: later tickets consume them, they do
+not re-define them.
 
-## Rules for contributors
+## What the suite enforces
 
-1. **No colour literal outside `:root`.** A hex or `rgb()`/`rgba()` value anywhere else fails
-   `styles.test.ts`. Add a token and reference it.
-2. **No unused token.** Every `:root` custom property has to be referenced by a `var(...)` somewhere
-   in the stylesheet, so dead tokens are removed rather than left behind.
-3. **One spelling.** The colour prefix is `--color-`; the legacy `--colour-` spelling is rejected.
-4. **Prefer the semantic token.** Use `--color-border-light` for a divider, not `--color-bg-subtle`;
-   both are the same grey today, but only one says what it is for.
-5. **Check contrast before choosing a value.** Run `npm test` — the arithmetic checks below are part
-   of the suite, not a separate optional step.
+[`src/styles.test.ts`](../src/styles.test.ts) parses the stylesheet as text and fails the build when
+any of these invariants breaks:
+
+1. **Tokens are declared in `:root`.** The layer cannot be emptied out.
+2. **Every `var(...)` reference resolves.** A `var(--x)` with no matching declaration in the
+   stylesheet is a dangling custom property and fails the test.
+3. **No colour literal outside `:root`.** A hex or `rgb()`/`rgba()` value anywhere else fails the
+   test. Add a token and reference it.
+4. **One spelling.** The colour prefix is `--color-`; the legacy `--colour-` spelling is rejected.
+5. **The utilities exist.** `.sr-only` and `.truncate` are part of the public surface the components
+   rely on.
+
+Note that the suite does **not** assert that every token is referenced. Tokens are the interface for
+rules that land in later tickets, so an unreferenced token is expected state here, not debt.
 
 ## Token groups
 
 | Group | Tokens | Notes |
 | --- | --- | --- |
-| Surfaces, borders, text | `--color-bg`, `--color-bg-subtle`, `--color-surface`, `--color-border`, `--color-border-light`, `--color-text`, `--color-text-body`, `--color-text-muted`, `--color-text-subtle` | `--color-text-subtle` is the lightest value safe for text on white (4.76:1) |
-| Brand and interaction | `--color-primary`, `--color-primary-hover`, `--color-primary-soft`, `--color-selected-bg`, `--color-danger`, `--color-danger-hover`, `--color-danger-bg`, `--color-info`, `--color-info-hover`, `--color-success`, `--color-focus`, `--color-focus-on-dark`, `--color-on-solid` | `--color-on-solid` is the label colour for every filled control |
-| Dark chrome | `--color-header-bg`, `--color-header-border`, `--color-rail-bg`, `--color-rail-hover`, `--color-rail-active`, `--color-on-dark`, `--color-on-dark-muted`, `--color-chrome-*` | The chrome surfaces are translucent white over the header, so they are contrast-checked composited |
-| Status taxonomy | `--status-{pass,fail,blocked,untested,retest}-{bg,text,border}` | Driven by the API's `TestCaseResult.status` union |
-| Priority taxonomy | `--priority-{medium,low}-{bg,text}` | Driven by the API's `Priority` union; high and critical share the danger palette |
-| Spacing | `--space-1` … `--space-4` (4/8/12/16px) | |
-| Radii | `--radius`, `--radius-control`, `--radius-card`, `--radius-pill` | |
-| Type | `--font-size-sm` … `--font-size-xl`, `--weight-medium`, `--weight-semibold` | 12/14/16/18px |
-| Density | `--row-padding-y` | Row padding shared by the list and table surfaces |
+| Neutrals | `--color-bg`, `--color-surface`, `--color-surface-hover`, `--color-surface-active`, `--color-border`, `--color-border-light`, `--color-text`, `--color-text-secondary`, `--color-text-muted` | Surfaces, dividers and the three text weights |
+| Brand | `--color-primary`, `--color-primary-hover`, `--color-primary-light`, `--color-primary-text` | `--color-primary-text` is the label colour on a filled primary control |
+| Semantic | `--color-{success,warning,danger,info}` and their `-light` backgrounds | Status and feedback. The API's status and priority vocabularies map onto these rather than getting tokens of their own |
+| Spacing | `--space-1` … `--space-12` | 4px base: 4, 8, 12, 16, 20, 24, 32, 40, 48 |
+| Typography | `--font-family`, `--font-size-xs` … `--font-size-2xl`, `--font-weight-{normal,medium,semibold,bold}`, `--line-height-{tight,normal}` | 11–24px sizes |
+| Borders | `--radius-{sm,md,lg,full}` | |
+| Shadows | `--shadow-{sm,md,lg}` | |
+| Layout | `--topbar-height`, `--navrail-width`, `--leftpane-width`, `--rightpane-width` | The shell geometry shared by the three-pane layout |
+| Transitions | `--transition-{fast,normal}` | |
 
-## Taxonomy follows the contract
+## Global resets
 
-The status vocabulary is owned by TucanoTestAPI, so the GUI does not invent it:
+Alongside the tokens, the stylesheet owns the resets the whole application depends on: a
+`border-box` box-sizing and zero margin/padding reset on `*`, the `body` default type and colours,
+`font: inherit` on `button`/`input`/`select`/`textarea`, and a `:focus-visible` outline drawn from
+`--color-primary`. The focus ring is a release gate, not decoration: every interactive control needs
+a visible focus indicator.
 
-- `TestCaseResult.status` — `Passed`, `Failed`, `Blocked`, `Untested`, `Retest`.
-  [`StatusBadge.tsx`](../src/components/StatusBadge.tsx) renders the union exhaustively, and
-  `StatusBadge.test.tsx` fails if the two lists drift apart in either direction.
-- `TestResultRequest.status` — the same five values, for the write path.
-- `ImportEntry.status` — `Passed`, `Failed`, `Blocked`, a strict subset; imports cannot carry a
-  test that was never run.
-- `TestCase.priority` — `Low`, `Medium`, `High`, `Critical`. No priority chip is rendered yet; the
-  `.badge-priority-*` rules are a prepared primitive and are checked against the contract instead of
-  against component sources.
+A `prefers-reduced-motion: reduce` block that collapses animation and transition durations is also
+kept here as a global accessibility guarantee.
 
-Anything the API cannot express is deliberately **not** in the GUI: there is no `Draft`, `Approved`,
-`Not run` or `Caution` state. A status the contract does not define renders as `Untested` rather
-than passing through, which keeps invented vocabulary from leaking into stored results.
+## Contrast
 
-> **Known separation of concerns:** `statusVal` in the test-case views still conflates the result
-> status with the case's execution state. That is tracked separately and was left untouched here.
+The GUI targets **WCAG 2.1 Level AA**: 4.5:1 for text (1.4.3) and 3:1 for focus rings and markers
+(1.4.11).
 
-## Contrast policy
+Two things are worth knowing about how that is checked:
 
-`styles.test.ts` computes the WCAG 2.1 ratio for every pair the GUI actually paints —
-**4.5:1** for text (1.4.3) and **3:1** for focus rings and markers (1.4.11) — from the token values
-themselves, including the translucent chrome tokens composited over the header. The suite fails if a
-pair regresses.
+- `axe-core` runs in `src/App.test.tsx`, but it cannot evaluate its own colour-contrast rule under
+  jsdom, because there is no canvas. Colour contrast therefore cannot be asserted from the unit
+  suite at all.
+- `src/styles.test.ts` covers structure — no literal outside the token layer — not arithmetic.
+  It does not compute WCAG ratios, so a passing `npm test` is not evidence that a pair meets 4.5:1.
 
-Two exclusions are recorded in the test file next to the pair lists, not hidden:
-
-- `--color-on-dark-muted` is painted only on `--color-rail-bg` (5.78:1). The hover, active and
-  dropdown states switch the label to `--color-on-dark`, so the muted value is never landed on
-  `--color-rail-hover`, `--color-rail-active` or the translucent header chips.
-- `--color-border`, `--color-border-light` and `--color-success` are decorative dividers and a
-  progress fill, not text or identifiers; the milestone percentage is also rendered as text.
-
-This arithmetic is necessary because `axe-core` cannot evaluate its own colour-contrast rule under
-jsdom — there is no canvas — and `styles.css` is imported only by `src/main.tsx`, so the component
-tests never load it. Vitest therefore runs with `test.css` enabled in
-[`vite.config.ts`](../vite.config.ts), which is what lets the tests read the stylesheet as text
-through `?raw`. Component-level `axe-core` runs still cover structure, names and roles.
+Before release, verify any new colour pair in a real browser (or with an axe browser run), and check
+it against the token it is composited on rather than against white alone.
 
 ## Decisions recorded here
 
-- The legacy half of `styles.css` (a second copy of the button/input/label/modal rules using an
-  undefined `--colour-accent`) was deleted. It silently dropped the primary button's background
-  because the later definition won.
-- `--color-info` moved from `#0284c7` (4.10:1 on white) to `#0369a1` (5.93:1).
-- `--color-focus-on-dark` was added: `--color-focus` on the dark chrome did not reach 3:1.
-- `.badge-retest` and the `.tree-node` rules did not exist at all and were added.
-- A `--color-text-faint` token was considered for hint text and rejected: `#94a3b8` is 2.56:1 on
-  white. Hint text uses `--color-text-subtle` instead.
-- Two visible normalisations are intentional: muted headings that were `#1e293b` now use
-  `--color-text` (`#0f172a`), and the header context chip label is now `--color-on-dark` (white)
-  instead of a light border grey, which was 2.99:1 on the composited header.
-- The two `1px solid #f1f5f9` dividers (`.case-row`, `.entity-card-actions`) became
-  `--color-border-light` so they match every other divider in the file.
+- The ~700 lines of legacy component rules that referenced the pre-rebuild token names were deleted
+  with this rewrite rather than migrated, because they named 44 custom properties the new `:root`
+  does not define. The components are being rebuilt from the token layer up.
+- The semantic colours are four pairs (`success`/`warning`/`danger`/`info`, each with a `-light`
+  companion) instead of the previous per-status and per-priority token families. Mapping the API's
+  status and priority unions onto these is the responsibility of the tickets that render them, so
+  no `--status-*` or `--priority-*` token exists.
+- `--color-text-muted` is the lightest text value in the layer. It is reserved for non-essential
+  text; verify it against its actual background before putting real content in it.
