@@ -13,6 +13,7 @@ import {
   getRefreshToken,
   setAccessToken,
   setRefreshToken,
+  setApiClient,
 } from "../api/client.js";
 import { createApiClient, type ApiClient } from "../api/configure.js";
 
@@ -37,19 +38,24 @@ export function useAuth(): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
+  const [tokenVersion, setTokenVersion] = useState(0);
 
   const client = useMemo(() => {
     const token = getAccessToken();
-    return createApiClient({ baseUrl: "/api", token: token ?? undefined });
-  }, []);
+    const newClient = createApiClient({ baseUrl: "/api", token: token ?? undefined });
+    setApiClient(newClient);
+    return newClient;
+  }, [tokenVersion]);
 
   const login = useCallback(
     async (user: string, password: string) => {
-      const session = await client.auth.login({
+      const loginClient = createApiClient({ baseUrl: "/api" });
+      const session = await loginClient.auth.login({
         requestBody: { username: user, password },
       });
       setAccessToken(session.accessToken);
       setRefreshToken(session.refreshToken);
+      setTokenVersion((v) => v + 1);
 
       const tokenClient = createApiClient({
         baseUrl: "/api",
@@ -59,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUsername(me.username);
       setIsAuthenticated(true);
     },
-    [client],
+    [],
   );
 
   const logout = useCallback(async () => {
@@ -74,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // best-effort logout
     }
     clearTokens();
+    setTokenVersion((v) => v + 1);
     setIsAuthenticated(false);
     setUsername(null);
   }, [client]);
@@ -82,12 +89,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const rt = getRefreshToken();
     if (!rt) return;
 
-    client.auth
+    const bootstrapClient = createApiClient({ baseUrl: "/api" });
+    bootstrapClient.auth
       .refreshSession({ requestBody: { refreshToken: rt } })
       .then((session) => {
         setAccessToken(session.accessToken);
         setRefreshToken(session.refreshToken);
-        return client.auth.getCurrentUser();
+        setTokenVersion((v) => v + 1);
+        const tokenClient = createApiClient({
+          baseUrl: "/api",
+          token: session.accessToken,
+        });
+        return tokenClient.auth.getCurrentUser();
       })
       .then((me) => {
         setUsername(me.username);
@@ -96,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {
         clearTokens();
       });
-  }, [client]);
+  }, []);
 
   const value = useMemo(
     () => ({ isAuthenticated, username, client, login, logout }),
