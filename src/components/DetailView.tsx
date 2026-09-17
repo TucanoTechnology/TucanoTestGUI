@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import DuplicateButton from './DuplicateButton';
 import StatusBadge from './StatusBadge';
-import { Attachment, TestResultStatus, TEST_RESULT_STATUSES, TucanoApiClient } from '../api/client';
+import AttachmentsPanel from '../features/test-cases/AttachmentsPanel';
+import type { Attachment } from '../api/generated';
+import { TestResultStatus, TEST_RESULT_STATUSES, TucanoApiClient } from '../api/client';
 
 export type DetailItemType = 'case' | 'suite' | 'project' | 'run' | 'milestone';
 
@@ -58,9 +60,8 @@ export default function DetailView({
   const [resultNotes, setResultNotes] = useState('');
   const [isSubmittingResult, setIsSubmittingResult] = useState(false);
 
-  // Attachment upload state
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  // Attachment state
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   useEffect(() => {
     if (!itemId) {
@@ -85,6 +86,7 @@ export default function DetailView({
           data = await api.getMilestone(itemId);
         }
         setItem(data);
+        setAttachments(itemType === 'case' ? data?.attachments ?? [] : []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
@@ -158,32 +160,6 @@ export default function DetailView({
       setError(err instanceof Error ? err.message : 'Failed to record result');
     } finally {
       setIsSubmittingResult(false);
-    }
-  };
-
-  const handleUploadAttachment = async () => {
-    if (!uploadFile || !itemId || itemType !== 'case') return;
-    setIsUploading(true);
-    try {
-      const attachment = await api.uploadAttachment(itemId, uploadFile);
-      const updatedAttachments = [...(item.attachments || []), attachment];
-      setItem({ ...item, attachments: updatedAttachments });
-      setUploadFile(null);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to upload attachment');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleDeleteAttachment = async (filename: string) => {
-    if (!itemId || itemType !== 'case') return;
-    try {
-      await api.deleteAttachment(itemId, filename);
-      const updated = (item.attachments || []).filter((a: Attachment) => a.filename !== filename);
-      setItem({ ...item, attachments: updated });
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete attachment');
     }
   };
 
@@ -549,7 +525,7 @@ export default function DetailView({
               cursor: 'pointer',
             }}
           >
-            Attachments ({item.attachments?.length || 0})
+            Attachments ({attachments.length})
           </button>
         </div>
 
@@ -724,105 +700,14 @@ export default function DetailView({
           </div>
         )}
 
-        {/* Tab 3: Attachments */}
+        {/* Tab 3: Attachments — the evidence panel owns the read, upload and delete. */}
         {activeTab === 'attachments' && (
           <div>
-            {/* Upload form */}
-            <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '14px', marginBottom: '16px', textAlign: 'center' }}>
-              <input
-                type="file"
-                id="detail-file-input"
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                style={{ fontSize: '12px', marginBottom: '8px' }}
-              />
-              {uploadFile && (
-                <div>
-                  <button
-                    type="button"
-                    onClick={handleUploadAttachment}
-                    disabled={isUploading}
-                    style={{
-                      background: '#0f766e',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      padding: '5px 12px',
-                      fontSize: '12.5px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {isUploading ? 'Uploading...' : 'Upload Attachment'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Attachment Chips */}
-            {item.attachments && item.attachments.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {item.attachments.map((att: Attachment) => (
-                  <div
-                    key={att.filename}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '8px 12px',
-                      background: '#ffffff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '6px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>📎</span>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>
-                          {att.originalName}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#64748b' }}>
-                          {Math.round(att.size / 1024)} KB
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <a
-                        href={`/api/test_cases/${encodeURIComponent(itemId)}/attachments/${encodeURIComponent(att.filename)}`}
-                        download
-                        style={{
-                          padding: '4px 8px',
-                          background: '#f1f5f9',
-                          borderRadius: '4px',
-                          fontSize: '11.5px',
-                          textDecoration: 'none',
-                          color: '#334155',
-                          fontWeight: 500,
-                        }}
-                      >
-                        Download
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAttachment(att.filename)}
-                        style={{
-                          padding: '4px 8px',
-                          background: '#fee2e2',
-                          border: 'none',
-                          borderRadius: '4px',
-                          fontSize: '11.5px',
-                          color: '#b91c1c',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {itemType === 'case' ? (
+              <AttachmentsPanel testCaseId={itemId} onAttachmentsChanged={setAttachments} />
             ) : (
               <p style={{ fontSize: '13px', color: '#94a3b8', textAlign: 'center', margin: '20px 0' }}>
-                No attachments uploaded yet.
+                Attachments belong to test cases.
               </p>
             )}
           </div>
