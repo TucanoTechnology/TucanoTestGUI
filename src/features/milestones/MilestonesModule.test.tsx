@@ -283,6 +283,7 @@ describe('MilestonesModule', () => {
     const api = createStubApi([milestone('M-1.json')]);
 
     render(<ShellHarness client={api.client} onStatus={vi.fn()} />);
+    await screen.findByRole('button', { name: 'Edit M-1.json' });
     fireEvent.click(screen.getByRole('button', { name: 'Create milestone' }));
 
     const idField = screen.getByLabelText(/milestone id \(filename\)/i) as HTMLInputElement;
