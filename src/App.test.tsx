@@ -233,6 +233,21 @@ describe('App', () => {
     await screen.findByText(/project PROJ-2.json created successfully/i);
   });
 
+  it('filters projects through the API and shows the module empty state', async () => {
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^projects$/i }));
+    await screen.findByText(/1 project found/i);
+    await screen.findByRole('button', { name: 'Details for PROJ-1.json' });
+
+    fireEvent.change(screen.getByLabelText(/filter projects/i), { target: { value: 'ZZZ' } });
+    fireEvent.submit(screen.getByRole('button', { name: /^filter$/i }).closest('form')!);
+
+    await screen.findByText(/no projects match the current filter/i);
+    expect(await screen.findByText('No projects to show.')).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Details for PROJ-1.json' })).toBeNull();
+  });
+
   it('allows creating a test case with step-by-step actions', async () => {
     render(<App client={mockFullClient()} />);
 

@@ -1169,6 +1169,63 @@ button.badge-menu-option[aria-selected='true'] {
   border-top: 1px solid var(--color-border-light);
 }
 
+.entity-card-meta {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-sm);
+}
+
+.entity-card-description {
+  margin: 0;
+  color: var(--color-text-body);
+  font-size: var(--font-size-base);
+}
+
+/* State blocks shared by the feature modules (see src/features). */
+.module-state {
+  padding: var(--space-4);
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-base);
+  text-align: center;
+}
+
+.module-error {
+  padding: var(--space-4);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-hover);
+  border-radius: var(--radius-control);
+  color: var(--color-danger-hover);
+}
+
+.module-error p {
+  margin: 0;
+}
+
+.module-error-code {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-medium);
+}
+
+.delete-confirm {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-hover);
+  border-radius: var(--radius-control);
+}
+
+.delete-confirm p {
+  margin: 0 0 var(--space-2) 0;
+  color: var(--color-text-body);
+  font-size: var(--font-size-base);
+}
+
+.delete-confirm div {
+  display: flex;
+  gap: var(--space-2);
+}
+
 /* Generic card, used by the summary panels. */
 .card {
   display: flex;
