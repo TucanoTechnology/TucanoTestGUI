@@ -12,6 +12,7 @@ import {
 import ThreePanelLayout from './components/ThreePanelLayout';
 import { TestCaseStatus } from './components/StatusBadge';
 import AppShell, { type Tab } from './components/AppShell';
+import ProjectsModule from './features/projects/ProjectsModule';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -84,7 +85,6 @@ export default function App({ client }: AppProps) {
   const [activeMilestoneProgress, setActiveMilestoneProgress] = useState<MilestoneProgress | null>(null);
 
   // Form modal visibility flags
-  const [showProjectModal, setShowProjectModal] = useState(false);
   const [showSuiteModal, setShowSuiteModal] = useState(false);
   const [showCaseModal, setShowCaseModal] = useState(false);
   const [showRunModal, setShowRunModal] = useState(false);
@@ -92,29 +92,25 @@ export default function App({ client }: AppProps) {
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Edit modal states
-  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [editingSuite, setEditingSuite] = useState<TestSuite | null>(null);
   const [editingCase, setEditingCase] = useState<TestCase | null>(null);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
   // Collapsible planes state for standard view
-  const [planeProjectsCollapsed, setPlaneProjectsCollapsed] = useState(false);
   const [planeSuitesCollapsed, setPlaneSuitesCollapsed] = useState(false);
   const [planeCasesCollapsed, setPlaneCasesCollapsed] = useState(false);
 
   // Hierarchy Selection State
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedSuiteId, setSelectedSuiteId] = useState<string | null>(null);
+
+  // Bumped to ask the Projects module to open its create form
+  const [projectCreateRequest, setProjectCreateRequest] = useState(0);
 
   // Execution workspace state
   const [executingRun, setExecutingRun] = useState<TestRun | null>(null);
   const [executingCaseIndex, setExecutingCaseIndex] = useState(0);
 
   // Form input states
-  const [projectIdInput, setProjectIdInput] = useState('');
-  const [projectNameInput, setProjectNameInput] = useState('');
-  const [projectDescInput, setProjectDescInput] = useState('');
-
   const [suiteIdInput, setSuiteIdInput] = useState('');
   const [suiteNameInput, setSuiteNameInput] = useState('');
   const [suiteDescInput, setSuiteDescInput] = useState('');
@@ -218,6 +214,8 @@ export default function App({ client }: AppProps) {
     setFilter('');
     setExecutingRun(null);
     setShowDetailModal(false);
+    // Leaving the tab ends the outstanding "open the form" request.
+    setProjectCreateRequest(0);
   };
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -226,55 +224,24 @@ export default function App({ client }: AppProps) {
   };
 
   // CRUD Handlers: Project
-  const handleCreateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const rawId = projectIdInput || `PROJ-${Date.now()}`;
-      const id = rawId.endsWith('.json') ? rawId : `${rawId}.json`;
-      const newProject: Project = {
-        projectId: id,
-        name: projectNameInput,
-        description: projectDescInput || undefined,
-        testSuites: [],
-      };
-      await api.createProject(newProject);
-      setShowProjectModal(false);
-      setProjectIdInput('');
-      setProjectNameInput('');
-      setProjectDescInput('');
-      await loadIdentifiers('projects', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Project ${newProject.projectId} created successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create project.');
-    }
-  };
+  // Projects are owned by the Projects module. The shell keeps only the wiring:
+  // the shared live region, the identifier refresh and the detail panel, so the
+  // module never needs to know how the shell announces things.
+  const handleModuleStatus = useCallback((text: string, kind?: 'info' | 'error') => {
+    // The module reports through the shell's single live region.
+    setState(kind === 'error' ? 'error' : 'ready');
+    setMessage(text);
+  }, []);
 
-  const handleUpdateProject = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProject) return;
-    try {
-      await api.updateProject(editingProject.projectId, editingProject);
-      const updatedId = editingProject.projectId;
-      setEditingProject(null);
-      await loadIdentifiers('projects', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Project ${updatedId} updated successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to update project.');
-    }
-  };
+  const handleProjectsChanged = useCallback(async () => {
+    await loadIdentifiers('projects', filter);
+    await fetchAllWorkspaceData();
+  }, [loadIdentifiers, filter, fetchAllWorkspaceData]);
 
-  const handleDeleteProject = async (id: string) => {
-    try {
-      await api.deleteProject(id);
-      if (selectedProjectId === id) setSelectedProjectId(null);
-      await loadIdentifiers('projects', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Project ${id} deleted.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete project.');
-    }
+  const openProjectForm = () => {
+    setActiveTab('projects');
+    setShowDetailModal(false);
+    setProjectCreateRequest((request) => request + 1);
   };
 
   // CRUD Handlers: Suite
@@ -564,14 +531,10 @@ export default function App({ client }: AppProps) {
   };
 
   // Detail Modal view handlers
-  const handleViewProject = async (id: string) => {
-    try {
-      const proj = await api.getProject(id);
-      setActiveProject(proj);
-      setShowDetailModal(true);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch project.');
-    }
+  // The Projects module already holds the entity it renders, so it hands it over.
+  const handleViewProject = (project: Project) => {
+    setActiveProject(project);
+    setShowDetailModal(true);
   };
 
   const handleViewSuite = async (id: string) => {
@@ -626,15 +589,6 @@ export default function App({ client }: AppProps) {
       setEditingMilestone(milestone);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch milestone for edit.');
-    }
-  };
-
-  const handleEditProjectClick = async (id: string) => {
-    try {
-      const proj = await api.getProject(id);
-      setEditingProject(proj);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch project for edit.');
     }
   };
 
@@ -710,7 +664,7 @@ export default function App({ client }: AppProps) {
             {/* Quick Action Buttons */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               {activeTab === 'projects' && (
-                <button type="button" onClick={() => setShowProjectModal(true)}>
+                <button type="button" onClick={openProjectForm}>
                   + Create project
                 </button>
               )}
@@ -794,7 +748,7 @@ export default function App({ client }: AppProps) {
                 onCreateCase={() => setShowCaseModal(true)}
                 onQuickCreate={() => setShowCaseModal(true)}
                 onCreateSuite={() => setShowSuiteModal(true)}
-                onCreateProject={() => setShowProjectModal(true)}
+                onCreateProject={openProjectForm}
                 onCreateTestRun={() => setShowRunModal(true)}
                 onDataRefreshNeeded={fetchAllWorkspaceData}
               />
@@ -806,39 +760,7 @@ export default function App({ client }: AppProps) {
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {/* Hierarchy Planes */}
               <section aria-label="Visual Hierarchy Workspace" className="hierarchy-grid">
-                {/* Projects Plane */}
-                <div className={`plane ${planeProjectsCollapsed ? 'collapsed' : ''}`}>
-                  <div className="plane-header">
-                    <h3 className="plane-title">Projects</h3>
-                    <div className="plane-actions">
-                      <button
-                        type="button"
-                        aria-expanded={!planeProjectsCollapsed}
-                        className="btn-secondary"
-                        onClick={() => setPlaneProjectsCollapsed((c) => !c)}
-                      >
-                        {planeProjectsCollapsed ? 'Expand' : 'Collapse'}
-                      </button>
-                      <button type="button" onClick={() => setShowProjectModal(true)}>
-                        + New
-                      </button>
-                    </div>
-                  </div>
-                  <div className="plane-body">
-                    <ul className="plane-list" aria-label="Projects Hierarchy List">
-                      {((activeTab as string) === 'projects' ? identifiers : []).map((id) => (
-                        <li key={id} className="plane-item" onClick={() => void handleViewProject(id)}>
-                          <div className="plane-item-header">
-                            <span className="plane-item-title">{id}</span>
-                            <button type="button" className="btn-secondary" onClick={() => void handleEditProjectClick(id)}>
-                              Edit
-                            </button>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
+                {/* Projects live in their own module on the Projects tab. */}
 
                 {/* Test Suites Plane */}
                 <div className={`plane ${planeSuitesCollapsed ? 'collapsed' : ''}`}>
@@ -1071,82 +993,22 @@ export default function App({ client }: AppProps) {
             </div>
           )}
 
-          {/* 5. PROJECTS VIEW */}
+          {/* 5. PROJECTS MODULE */}
           {activeTab === 'projects' && (
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-              <div className="view-grid-cards">
-                {identifiers.map((id) => (
-                  <div key={id} className="entity-card">
-                    <div>
-                      <h3 className="entity-card-title">🏢 {id}</h3>
-                    </div>
-                    <div className="entity-card-actions">
-                      <button type="button" className="btn-secondary" onClick={() => void handleViewProject(id)}>
-                        Details
-                      </button>
-                      <button type="button" className="btn-secondary" onClick={() => void handleEditProjectClick(id)}>
-                        Edit
-                      </button>
-                      <button type="button" className="btn-danger" onClick={() => void handleDeleteProject(id)}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ProjectsModule
+                client={api}
+                identifiers={identifiers}
+                createRequest={projectCreateRequest}
+                onStatus={handleModuleStatus}
+                onViewProject={handleViewProject}
+                onChanged={handleProjectsChanged}
+              />
             </div>
           )}
         </AppShell>
 
       {/* MODALS */}
-      {/* Create Project Modal */}
-      {showProjectModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="proj-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="proj-modal-title">Create New Project</h3>
-              <button type="button" className="btn-secondary" onClick={() => setShowProjectModal(false)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleCreateProject}>
-              <div className="form-group">
-                <label htmlFor="proj-id-input">Project ID</label>
-                <input
-                  id="proj-id-input"
-                  type="text"
-                  required
-                  value={projectIdInput}
-                  onChange={(e) => setProjectIdInput(e.target.value)}
-                  placeholder="e.g. PROJ-001"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="proj-name-input">Project Name</label>
-                <input
-                  id="proj-name-input"
-                  type="text"
-                  required
-                  value={projectNameInput}
-                  onChange={(e) => setProjectNameInput(e.target.value)}
-                  placeholder="Project Name"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="proj-desc-input">Description</label>
-                <textarea
-                  id="proj-desc-input"
-                  value={projectDescInput}
-                  onChange={(e) => setProjectDescInput(e.target.value)}
-                  placeholder="Project details..."
-                />
-              </div>
-              <button type="submit">Save Project</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Create Suite Modal */}
       {showSuiteModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="suite-modal-title">
@@ -1559,41 +1421,6 @@ export default function App({ client }: AppProps) {
                 )}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Edit Project Modal */}
-      {editingProject && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-proj-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="edit-proj-modal-title">Edit Project: {editingProject.projectId}</h3>
-              <button type="button" className="btn-secondary" onClick={() => setEditingProject(null)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleUpdateProject}>
-              <div className="form-group">
-                <label htmlFor="edit-proj-name-input">Project Name</label>
-                <input
-                  id="edit-proj-name-input"
-                  type="text"
-                  required
-                  value={editingProject.name}
-                  onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-proj-desc-input">Description</label>
-                <textarea
-                  id="edit-proj-desc-input"
-                  value={editingProject.description || ''}
-                  onChange={(e) => setEditingProject({ ...editingProject, description: e.target.value })}
-                />
-              </div>
-              <button type="submit">Update Project</button>
-            </form>
           </div>
         </div>
       )}
