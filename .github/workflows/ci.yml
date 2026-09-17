@@ -32,7 +32,8 @@ jobs:
       # themselves as soon as the rebuild lands the new source tree.
       - name: Note the absent application source
         if: ${{ hashFiles('src/**') == '' }}
-        run: echo "::warning::src/ is absent (GUI v2 reset, #102) — unit/accessibility tests and the production bundle are skipped until the rebuild lands src/."
+        run: |
+          echo "::warning::src/ is absent (GUI v2 reset, #102) — unit/accessibility tests and the production bundle are skipped until the rebuild lands src/."
       - name: Run unit and accessibility tests
         if: ${{ hashFiles('src/**') != '' }}
         run: npm test
@@ -54,7 +55,8 @@ jobs:
       # with `src/api/generated` (the GUI v2 reset, #102).
       - name: Note the absent generated client
         if: ${{ hashFiles('src/api/generated/**') == '' }}
-        run: echo "::warning::src/api/generated is absent (GUI v2 reset, #102) — contract drift cannot be judged until the client is regenerated."
+        run: |
+          echo "::warning::src/api/generated is absent (GUI v2 reset, #102) — contract drift cannot be judged until the client is regenerated."
       - name: Regenerate the API client from the pinned contract
         if: ${{ hashFiles('src/api/generated/**') != '' }}
         run: npm run generate:client
@@ -75,7 +77,8 @@ jobs:
       # no image to build or scan (the GUI v2 reset, #102).
       - name: Note the absent application source
         if: ${{ hashFiles('src/**') == '' }}
-        run: echo "::warning::src/ is absent (GUI v2 reset, #102) — the image build and its vulnerability scan are skipped until the rebuild lands src/."
+        run: |
+          echo "::warning::src/ is absent (GUI v2 reset, #102) — the image build and its vulnerability scan are skipped until the rebuild lands src/."
       - name: Build application image
         if: ${{ hashFiles('src/**') != '' }}
         run: docker build --pull --build-arg CACHEBUST=${{ github.run_id }}-${{ github.run_attempt }} --file Dockerfile --tag tucano-test-gui .
