@@ -274,23 +274,50 @@ describe('TestSuitesModule', () => {
     );
   });
 
-  it('hands the resolved entity to the shell when details are requested', async () => {
+  it('previews the selected suite in place, beside the list', async () => {
     const api = createStubApi(['SmokeTest.json']);
-    const onViewSuite = vi.fn();
 
     render(
       <TestSuitesModule
         client={api.client}
         identifiers={['SmokeTest.json']}
         onStatus={vi.fn()}
-        onViewSuite={onViewSuite}
+      />,
+    );
+    expect(await screen.findByRole('heading', { name: 'No test suite selected' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Details for SmokeTest.json' }));
+
+    expect(screen.getByRole('region', { name: 'Test suite details preview' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Test suite SmokeTest.json' })).toBeDefined();
+    expect(screen.getByText('Suite ID:').closest('p')?.textContent).toBe('Suite ID: SmokeTest.json');
+    expect(screen.getByText('Name:').closest('p')?.textContent).toBe('Name: Suite SmokeTest.json');
+    expect(screen.getByText('Description:').closest('p')?.textContent).toBe(
+      'Description: SmokeTest.json description',
+    );
+    expect(screen.getByText('Test cases (0)')).toBeDefined();
+    expect(screen.getByText('None linked.')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+    expect(screen.getByRole('heading', { name: 'No test suite selected' })).toBeDefined();
+  });
+
+  it('opens the suite edit form from the preview pane', async () => {
+    const api = createStubApi(['SmokeTest.json']);
+
+    render(
+      <TestSuitesModule
+        client={api.client}
+        identifiers={['SmokeTest.json']}
+        onStatus={vi.fn()}
       />,
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Details for SmokeTest.json' }));
 
-    expect(onViewSuite).toHaveBeenCalledWith(
-      expect.objectContaining({ suiteId: 'SmokeTest.json', name: 'Suite SmokeTest.json' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('dialog', { name: /edit test suite: SmokeTest\.json/i })).toBeDefined();
+    expect(screen.getByLabelText(/suite name/i)).toBeDefined();
   });
 
   it('has no detectable WCAG 2.1 AA violations, including the delete confirmation', async () => {

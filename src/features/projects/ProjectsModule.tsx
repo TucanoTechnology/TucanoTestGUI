@@ -1,5 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiRequestError, Project, TucanoApiClient } from '../../api/client';
+import DetailPreviewPanel, {
+  type PreviewField,
+  type PreviewLinkList,
+  type PreviewState,
+} from '../../components/DetailPreviewPanel';
 
 /**
  * Projects module (issue #70): the entity-module pattern the other modules follow.
@@ -17,7 +22,6 @@ export interface ProjectsModuleProps {
   /** Bumped by a shell affordance to open the create form. */
   createRequest?: number;
   onStatus: (message: string, state?: 'info' | 'error') => void;
-  onViewProject?: (project: Project) => void;
   /** Awaited so the shell finishes refreshing before the module announces. */
   onChanged?: () => void | Promise<void>;
 }
@@ -41,12 +45,12 @@ export default function ProjectsModule({
   identifiers,
   createRequest,
   onStatus,
-  onViewProject,
   onChanged,
 }: ProjectsModuleProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [detailState, setDetailState] = useState<DetailState>('loading');
   const [detailFailure, setDetailFailure] = useState<Failure | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [newProjectId, setNewProjectId] = useState('');
@@ -155,103 +159,177 @@ export default function ProjectsModule({
     }
   };
 
+  // The preview renders the entity the list already holds; no extra request.
+  const preview = previewId
+    ? (projects.find((project) => project.projectId === previewId) ?? null)
+    : null;
+
+  // The list pane already reports the shared fetch failure, so the preview pane
+  // stays empty rather than repeating the same envelope beside it.
+  const previewState: PreviewState = preview
+    ? 'ready'
+    : detailState === 'loading'
+      ? 'loading'
+      : 'empty';
+
+  const previewFields: PreviewField[] = preview
+    ? [
+        { label: 'Project ID', value: preview.projectId },
+        { label: 'Name', value: preview.name || '—' },
+        { label: 'Description', value: preview.description || 'No description provided.' },
+      ]
+    : [];
+
+  const previewLinks: PreviewLinkList[] = preview
+    ? [
+        {
+          heading: 'Linked test suites',
+          entries: preview.testSuites.map((suite) => `${suite.name} (${suite.suiteId})`),
+        },
+      ]
+    : [];
+
+  const editPreviewed = () => {
+    if (!preview) return;
+    setPendingDelete(null);
+    setShowCreate(false);
+    setEditing(preview);
+  };
+
+  // Deletion is confirmed in the list, so the preview steps aside for it.
+  const deletePreviewed = () => {
+    if (!preview) return;
+    setPreviewId(null);
+    setPendingDelete(preview.projectId);
+  };
+
   return (
     <>
-      {detailState === 'loading' && (
-        <p className="module-state">Fetching project details…</p>
-      )}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 340px',
+          height: '100%',
+          width: '100%',
+          overflow: 'hidden',
+        }}
+      >
+        <section className="panel-column is-divided" aria-label="Projects">
+          <div className="tree-scroll">
+            {detailState === 'loading' && (
+              <p className="module-state">Fetching project details…</p>
+            )}
 
-      {detailState === 'error' && detailFailure && (
-        <div className="module-error">
-          <p>Could not load project details: {detailFailure.message}</p>
-          <p className="module-error-code">Error code: {detailFailure.code}</p>
-        </div>
-      )}
-
-      {detailState === 'ready' && identifiers.length === 0 && (
-        <p className="module-state">No projects to show.</p>
-      )}
-
-      {detailState === 'ready' && projects.length > 0 && (
-        <div className="view-grid-cards">
-          {projects.map((project) => (
-            <div key={project.projectId} className="entity-card">
-              <div>
-                <h3 className="entity-card-title">🏢 {project.name || project.projectId}</h3>
-                <p className="entity-card-meta">{project.projectId}</p>
-                {project.description && (
-                  <p className="entity-card-description">{project.description}</p>
-                )}
-                {project.testSuites?.length ? (
-                  <p className="entity-card-meta">{project.testSuites.length} test suites</p>
-                ) : null}
+            {detailState === 'error' && detailFailure && (
+              <div className="module-error">
+                <p>Could not load project details: {detailFailure.message}</p>
+                <p className="module-error-code">Error code: {detailFailure.code}</p>
               </div>
+            )}
 
-              <div>
-                <div className="entity-card-actions">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    aria-label={`Details for ${project.projectId}`}
-                    onClick={() => onViewProject?.(project)}
-                  >
-                    Details
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    aria-label={`Edit ${project.projectId}`}
-                    onClick={() => {
-                      setPendingDelete(null);
-                      setShowCreate(false);
-                      setEditing(project);
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-danger"
-                    aria-label={`Delete ${project.projectId}`}
-                    onClick={() => setPendingDelete(project.projectId)}
-                  >
-                    Delete
-                  </button>
-                </div>
+            {detailState === 'ready' && identifiers.length === 0 && (
+              <p className="module-state">No projects to show.</p>
+            )}
 
-                {pendingDelete === project.projectId && (
-                  <div
-                    className="delete-confirm"
-                    role="group"
-                    aria-label={`Confirm deletion of ${project.projectId}`}
-                  >
-                    <p>
-                      Delete {project.projectId}? This cannot be undone.
-                    </p>
+            {detailState === 'ready' && projects.length > 0 && (
+              <div className="view-grid-cards">
+                {projects.map((project) => (
+                  <div key={project.projectId} className="entity-card">
                     <div>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        ref={cancelDeleteRef}
-                        onClick={() => setPendingDelete(null)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-danger"
-                        onClick={() => void handleDelete(project.projectId)}
-                      >
-                        Confirm delete
-                      </button>
+                      <h3 className="entity-card-title">🏢 {project.name || project.projectId}</h3>
+                      <p className="entity-card-meta">{project.projectId}</p>
+                      {project.description && (
+                        <p className="entity-card-description">{project.description}</p>
+                      )}
+                      {project.testSuites?.length ? (
+                        <p className="entity-card-meta">{project.testSuites.length} test suites</p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <div className="entity-card-actions">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          aria-pressed={previewId === project.projectId}
+                          aria-label={`Details for ${project.projectId}`}
+                          onClick={() => {
+                            setPendingDelete(null);
+                            setPreviewId(project.projectId);
+                          }}
+                        >
+                          Details
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          aria-label={`Edit ${project.projectId}`}
+                          onClick={() => {
+                            setPendingDelete(null);
+                            setShowCreate(false);
+                            setEditing(project);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-danger"
+                          aria-label={`Delete ${project.projectId}`}
+                          onClick={() => setPendingDelete(project.projectId)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+
+                      {pendingDelete === project.projectId && (
+                        <div
+                          className="delete-confirm"
+                          role="group"
+                          aria-label={`Confirm deletion of ${project.projectId}`}
+                        >
+                          <p>
+                            Delete {project.projectId}? This cannot be undone.
+                          </p>
+                          <div>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              ref={cancelDeleteRef}
+                              onClick={() => setPendingDelete(null)}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-danger"
+                              onClick={() => void handleDelete(project.projectId)}
+                            >
+                              Confirm delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
+                ))}
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            )}
+          </div>
+        </section>
+
+        <DetailPreviewPanel
+          label="Project details preview"
+          heading={preview ? `Project ${preview.projectId}` : 'No project selected'}
+          state={previewState}
+          fields={previewFields}
+          linkLists={previewLinks}
+          emptyHint="Select a project and choose Details to preview it here."
+          onClose={() => setPreviewId(null)}
+          onEdit={preview ? editPreviewed : undefined}
+          onDelete={preview ? deletePreviewed : undefined}
+        />
+      </div>
 
       {showCreate && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby={`${fieldId}-create-title`}>

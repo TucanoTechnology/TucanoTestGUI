@@ -362,23 +362,40 @@ describe('TestRunsModule', () => {
     );
   });
 
-  it('hands the resolved run to the shell when details are requested', async () => {
-    const api = createStubApi([run('RUN-1.json', [])]);
-    const onViewRun = vi.fn();
+  it('previews the selected run in the pane the board otherwise occupies', async () => {
+    const api = createStubApi([run('RUN-1.json', [testCase('TC-1.json', 'Verify Login')])]);
 
-    render(
-      <TestRunsModule
-        client={api.client}
-        identifiers={['RUN-1.json']}
-        onStatus={vi.fn()}
-        onViewRun={onViewRun}
-      />,
-    );
+    render(<TestRunsModule client={api.client} identifiers={['RUN-1.json']} onStatus={vi.fn()} />);
+    expect(screen.getByText(/select a run and choose execute/i)).toBeDefined();
+
     fireEvent.click(await screen.findByRole('button', { name: 'Details for RUN-1.json' }));
 
-    expect(onViewRun).toHaveBeenCalledWith(
-      expect.objectContaining({ testRunId: 'RUN-1.json', timestamp: '2026-09-04T00:00:00Z' }),
+    expect(screen.getByRole('region', { name: 'Test run details preview' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Test run RUN-1.json' })).toBeDefined();
+    expect(screen.getByText('Run ID:').closest('p')?.textContent).toBe('Run ID: RUN-1.json');
+    expect(screen.getByText('Timestamp:').closest('p')?.textContent).toBe(
+      'Timestamp: 2026-09-04T00:00:00Z',
     );
+    expect(screen.getByText('Test cases:').closest('p')?.textContent).toBe('Test cases: 1');
+    expect(screen.getByText('Included test cases (1)')).toBeDefined();
+    expect(screen.getByText('Verify Login (TC-1.json)')).toBeDefined();
+
+    // The board steps aside rather than stacking a second pane beside it.
+    expect(screen.queryByText(/select a run and choose execute/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+    expect(screen.getByText(/select a run and choose execute/i)).toBeDefined();
+  });
+
+  it('opens the run edit form from the preview pane', async () => {
+    const api = createStubApi([run('RUN-1.json', [])]);
+
+    render(<TestRunsModule client={api.client} identifiers={['RUN-1.json']} onStatus={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Details for RUN-1.json' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('dialog', { name: /edit test run: RUN-1\.json/i })).toBeDefined();
   });
 
   it('persists each recorded result on the case currently under execution', async () => {
