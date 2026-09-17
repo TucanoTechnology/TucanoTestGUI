@@ -7,12 +7,14 @@ import DetailView from './DetailView';
 
 /**
  * The detail pane hands a test case's evidence to the panel, which reads the
- * case document itself (issue #75). Both go through the network edge, so this
- * stubs `fetch` once and serves the case and suite documents from it.
+ * case document itself (issue #75), and hands the entity's tags to the control
+ * that reads and writes them itself (issue #62). All of them go through the
+ * network edge, so this stubs `fetch` once and serves the documents from it.
  */
 
 const CASE_ID = 'TC-1.json';
 const SUITE_ID = 'regression.json';
+const MILESTONE_ID = 'MS-1';
 
 interface RecordedRequest {
   method: string;
@@ -37,7 +39,10 @@ function attachment(overrides: Partial<Attachment> = {}): Attachment {
   };
 }
 
-function stubApi(attachments: Attachment[] = [attachment()]): RecordedRequest[] {
+function stubApi(
+  attachments: Attachment[] = [attachment()],
+  caseTags?: string[],
+): RecordedRequest[] {
   const requested: RecordedRequest[] = [];
 
   const stub = (async (url: string, init?: RequestInit) => {
@@ -49,11 +54,16 @@ function stubApi(attachments: Attachment[] = [attachment()]): RecordedRequest[] 
         testCaseId: CASE_ID,
         title: 'Checkout works',
         attachments,
+        ...(caseTags === undefined ? {} : { tags: caseTags }),
       });
     }
 
     if (urlStr.startsWith(`/api/test_suites/${SUITE_ID}`)) {
       return jsonResponse({ testSuiteId: SUITE_ID, title: 'Regression', testCases: [] });
+    }
+
+    if (urlStr.startsWith(`/api/milestones/${MILESTONE_ID}`)) {
+      return jsonResponse({ milestoneId: MILESTONE_ID, title: 'Release 1.0', status: 'Open' });
     }
 
     return jsonResponse({ error: { code: 'not_found', message: 'Not Found' } }, 404);
@@ -99,8 +109,9 @@ describe('DetailView attachments tab', () => {
 
     expect(await screen.findByText('screenshot.png')).toBeDefined();
     expect(screen.getByText('run.log')).toBeDefined();
-    // The panel re-reads the case document rather than trusting the pane's copy.
-    expect(caseReads(requested).length).toBe(2);
+    // The pane reads the case for its count, the tags control for its chips and
+    // the panel for its own list — each reads rather than trusting a copy.
+    expect(caseReads(requested).length).toBe(3);
   });
 
   it('shows an empty list when the case carries none', async () => {
@@ -129,6 +140,53 @@ describe('DetailView attachments tab', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Attachments (1)' }));
     await screen.findByText('screenshot.png');
+
+    const results = await axe.run(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  });
+});
+
+describe('DetailView tags', () => {
+  it('shows the tags the API holds for the entity the details tab is showing', async () => {
+    stubApi([attachment()], ['smoke', 'regression']);
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'Tags' })).toBeDefined();
+    expect(await screen.findByText('smoke')).toBeDefined();
+    expect(screen.getAllByRole('listitem').map((chip) => chip.textContent)).toEqual([
+      'smoke',
+      'regression',
+    ]);
+    expect((screen.getByLabelText('Tags (comma-separated)') as HTMLInputElement).value).toBe(
+      'smoke, regression',
+    );
+  });
+
+  it('says so when the entity carries none', async () => {
+    stubApi();
+    renderDetail();
+
+    expect(await screen.findByText('No tags')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Save tags' })).toBeDefined();
+  });
+
+  it('offers no tags for a milestone, whose contract carries none', async () => {
+    stubApi();
+    renderDetail({ itemId: MILESTONE_ID, itemType: 'milestone' });
+
+    // The record loaded — an unoffered control is the point, not a failed read.
+    expect(await screen.findByText('No description provided.')).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Tags' })).toBeNull();
+    expect(screen.queryByLabelText('Tags (comma-separated)')).toBeNull();
+  });
+
+  it('has no detectable WCAG 2.1 AA violations with the tags showing', async () => {
+    stubApi([attachment()], ['smoke', 'regression']);
+    const { container } = renderDetail();
+    await screen.findByText('smoke');
 
     const results = await axe.run(container, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },

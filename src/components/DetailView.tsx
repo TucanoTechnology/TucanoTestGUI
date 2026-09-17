@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DuplicateButton from './DuplicateButton';
+import EntityTags from './EntityTags';
 import StatusBadge from './StatusBadge';
 import AttachmentsPanel from '../features/test-cases/AttachmentsPanel';
 import type { Attachment } from '../api/generated';
@@ -532,6 +533,12 @@ export default function DetailView({
         {/* Tab 1: Details & Steps */}
         {activeTab === 'details' && (
           <div>
+            {/* Tags (issue #62): the control reads and writes them itself.
+                Milestones are the one item type whose contract carries none. */}
+            {itemType !== 'milestone' && (
+              <EntityTags resourceType={itemType} resourceId={itemId} />
+            )}
+
             {/* Description */}
             <div style={{ marginBottom: '18px' }}>
               <div style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
