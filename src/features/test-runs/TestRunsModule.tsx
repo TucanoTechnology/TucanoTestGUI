@@ -1,16 +1,21 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiRequestError, TestCase, TestRun, TestSuite, TucanoApiClient } from '../../api/client';
+import DetailPreviewPanel, {
+  type PreviewField,
+  type PreviewLinkList,
+} from '../../components/DetailPreviewPanel';
 import StatusBadge from '../../components/StatusBadge';
 
 /**
  * Test runs module (issue #73): the execution board.
  *
- * The shell owns the filtered identifier list, the shared live region and the
- * detail panel; the module resolves those identifiers into TestRun entities,
- * renders the loading, empty and error states, executes a run case by case and
- * persists every recorded result through TucanoApiClient. Run membership is
- * taken from the test suites the shell already fetched, so picking a suite is a
- * local selection rather than another round trip.
+ * The shell owns the filtered identifier list and the shared live region; the
+ * module resolves those identifiers into TestRun entities, renders the loading,
+ * empty and error states, previews the selected run in its second pane,
+ * executes a run case by case and persists every recorded result through
+ * TucanoApiClient. Run membership is taken from the test suites the shell
+ * already fetched, so picking a suite is a local selection rather than another
+ * round trip.
  */
 
 /**
@@ -44,7 +49,6 @@ export interface TestRunsModuleProps {
   /** Bumped by a shell affordance to open the create form. */
   createRequest?: number;
   onStatus: (message: string, state?: 'info' | 'error') => void;
-  onViewRun?: (run: TestRun) => void;
   /** Awaited so the shell finishes refreshing before the module announces. */
   onChanged?: () => void | Promise<void>;
 }
@@ -94,12 +98,12 @@ export default function TestRunsModule({
   suites = [],
   createRequest,
   onStatus,
-  onViewRun,
   onChanged,
 }: TestRunsModuleProps) {
   const [runs, setRuns] = useState<TestRun[]>([]);
   const [detailState, setDetailState] = useState<DetailState>('loading');
   const [detailFailure, setDetailFailure] = useState<Failure | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
   const [newRunId, setNewRunId] = useState('');
@@ -228,6 +232,7 @@ export default function TestRunsModule({
     try {
       await client.deleteTestRun(id);
       setPendingDelete(null);
+      if (previewId === id) setPreviewId(null);
       if (executing?.testRunId === id) {
         setExecuting(null);
         setExecutingIndex(0);
@@ -243,6 +248,8 @@ export default function TestRunsModule({
   const handleExecute = async (id: string) => {
     try {
       const run = await client.getTestRun(id);
+      // The execution board takes over the pane the preview was occupying.
+      setPreviewId(null);
       setExecuting(run);
       setExecutingIndex(0);
       onStatus(`Started executing run ${run.testRunId}.`);
@@ -280,6 +287,42 @@ export default function TestRunsModule({
     } finally {
       setSavingResult(false);
     }
+  };
+
+  // The preview renders the entity the list already holds; no extra request.
+  const preview = previewId
+    ? (runs.find((run) => run.testRunId === previewId) ?? null)
+    : null;
+
+  const previewFields: PreviewField[] = preview
+    ? [
+        { label: 'Run ID', value: preview.testRunId },
+        { label: 'Timestamp', value: preview.timestamp },
+        { label: 'Test cases', value: String(preview.testCases?.length ?? 0) },
+      ]
+    : [];
+
+  const previewLinks: PreviewLinkList[] = preview
+    ? [
+        {
+          heading: 'Included test cases',
+          entries: (preview.testCases ?? []).map(
+            (testCase) => `${testCase.title} (${testCase.testCaseId})`,
+          ),
+        },
+      ]
+    : [];
+
+  const editPreviewed = () => {
+    if (!preview) return;
+    openEditForm(preview);
+  };
+
+  // Deletion is confirmed in the list, so the preview steps aside for it.
+  const deletePreviewed = () => {
+    if (!preview) return;
+    setPreviewId(null);
+    setPendingDelete(preview.testRunId);
   };
 
   const executingCases = executing?.testCases ?? [];
@@ -373,8 +416,12 @@ export default function TestRunsModule({
                           <button
                             type="button"
                             className="btn-secondary"
+                            aria-pressed={previewId === run.testRunId}
                             aria-label={`Details for ${run.testRunId}`}
-                            onClick={() => onViewRun?.(run)}
+                            onClick={() => {
+                              setPendingDelete(null);
+                              setPreviewId(run.testRunId);
+                            }}
                           >
                             Details
                           </button>
@@ -432,6 +479,18 @@ export default function TestRunsModule({
         </div>
       </section>
 
+      {preview ? (
+        <DetailPreviewPanel
+          label="Test run details preview"
+          heading={`Test run ${preview.testRunId}`}
+          state="ready"
+          fields={previewFields}
+          linkLists={previewLinks}
+          onClose={() => setPreviewId(null)}
+          onEdit={editPreviewed}
+          onDelete={deletePreviewed}
+        />
+      ) : (
       <section className="panel-column" aria-label="Execution board">
         {!executing && (
           <p className="module-state">
@@ -546,6 +605,7 @@ export default function TestRunsModule({
           </section>
         )}
       </section>
+      )}
 
       {showCreate && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby={`${fieldId}-create-title`}>

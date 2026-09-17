@@ -77,14 +77,6 @@ export default function App({ client }: AppProps) {
   // Selected scope
   const [currentProject, setCurrentProject] = useState<string>('all');
 
-  // Modals and detail states
-  const [activeProject, setActiveProject] = useState<Project | null>(null);
-  const [activeSuite, setActiveSuite] = useState<TestSuite | null>(null);
-  const [activeRun, setActiveRun] = useState<TestRun | null>(null);
-
-  // Form modal visibility flags
-  const [showDetailModal, setShowDetailModal] = useState(false);
-
   // Bumped to ask the Projects module to open its create form
   const [projectCreateRequest, setProjectCreateRequest] = useState(0);
 
@@ -174,7 +166,6 @@ export default function App({ client }: AppProps) {
   const handleTabChange = (newTab: Tab) => {
     setActiveTab(newTab);
     setFilter('');
-    setShowDetailModal(false);
     // Leaving the tab ends the outstanding "open the form" request.
     setProjectCreateRequest(0);
     setSuiteCreateRequest(0);
@@ -190,8 +181,8 @@ export default function App({ client }: AppProps) {
 
   // CRUD Handlers: Project
   // Projects are owned by the Projects module. The shell keeps only the wiring:
-  // the shared live region, the identifier refresh and the detail panel, so the
-  // module never needs to know how the shell announces things.
+  // the shared live region, the identifier refresh and the create request, so
+  // the module never needs to know how the shell announces things.
   const handleModuleStatus = useCallback((text: string, kind?: 'info' | 'error') => {
     // The module reports through the shell's single live region.
     setState(kind === 'error' ? 'error' : 'ready');
@@ -205,13 +196,12 @@ export default function App({ client }: AppProps) {
 
   const openProjectForm = () => {
     setActiveTab('projects');
-    setShowDetailModal(false);
     setProjectCreateRequest((request) => request + 1);
   };
 
   // CRUD Handlers: Suite
   // Test suites are owned by the Test Suites module. The shell keeps only the
-  // wiring: the shared live region, the identifier refresh and the detail panel.
+  // wiring: the shared live region, the identifier refresh and the create request.
   const handleSuitesChanged = useCallback(async () => {
     await loadIdentifiers('suites', filter);
     await fetchAllWorkspaceData();
@@ -219,7 +209,6 @@ export default function App({ client }: AppProps) {
 
   const openSuiteForm = () => {
     setActiveTab('suites');
-    setShowDetailModal(false);
     setSuiteCreateRequest((request) => request + 1);
   };
 
@@ -234,7 +223,6 @@ export default function App({ client }: AppProps) {
 
   const openCaseForm = () => {
     setActiveTab('cases');
-    setShowDetailModal(false);
     setCaseCreateRequest((request) => request + 1);
   };
 
@@ -249,7 +237,6 @@ export default function App({ client }: AppProps) {
 
   const openRunForm = () => {
     setActiveTab('runs');
-    setShowDetailModal(false);
     setRunCreateRequest((request) => request + 1);
   };
 
@@ -264,25 +251,7 @@ export default function App({ client }: AppProps) {
 
   const openMilestoneForm = () => {
     setActiveTab('milestones');
-    setShowDetailModal(false);
     setMilestoneCreateRequest((request) => request + 1);
-  };
-
-  // Detail Modal view handlers
-  // The Projects module already holds the entity it renders, so it hands it over.
-  const handleViewProject = (project: Project) => {
-    setActiveProject(project);
-    setShowDetailModal(true);
-  };
-
-  const handleViewSuite = (suite: TestSuite) => {
-    setActiveSuite(suite);
-    setShowDetailModal(true);
-  };
-
-  const handleViewRun = (run: TestRun) => {
-    setActiveRun(run);
-    setShowDetailModal(true);
   };
 
   // Computed total test cases count across workspace
@@ -427,7 +396,6 @@ export default function App({ client }: AppProps) {
                 suites={suitesList}
                 createRequest={runCreateRequest}
                 onStatus={handleModuleStatus}
-                onViewRun={handleViewRun}
                 onChanged={handleRunsChanged}
               />
             </div>
@@ -448,88 +416,29 @@ export default function App({ client }: AppProps) {
 
           {/* 5. PROJECTS MODULE */}
           {activeTab === 'projects' && (
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+            <div className="three-panel-container">
               <ProjectsModule
                 client={api}
                 identifiers={identifiers}
                 createRequest={projectCreateRequest}
                 onStatus={handleModuleStatus}
-                onViewProject={handleViewProject}
                 onChanged={handleProjectsChanged}
               />
             </div>
           )}
           {/* 6. TEST SUITES MODULE */}
           {activeTab === 'suites' && (
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+            <div className="three-panel-container">
               <TestSuitesModule
                 client={api}
                 identifiers={identifiers}
                 createRequest={suiteCreateRequest}
                 onStatus={handleModuleStatus}
-                onViewSuite={handleViewSuite}
                 onChanged={handleSuitesChanged}
               />
             </div>
           )}
         </AppShell>
-
-      {/* MODALS */}
-      {/* Resource Detail Modal */}
-      {showDetailModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="detail-modal-title">Resource Details</h3>
-              <button type="button" className="btn-secondary" onClick={() => setShowDetailModal(false)}>
-                Close
-              </button>
-            </div>
-
-            {activeTab === 'projects' && activeProject && (
-              <div>
-                <h4>{activeProject.name} ({activeProject.projectId})</h4>
-                <p>{activeProject.description || 'No description provided.'}</p>
-                <h5>Linked Test Suites ({activeProject.testSuites?.length || 0})</h5>
-                <ul>
-                  {(activeProject.testSuites || []).map((s) => (
-                    <li key={s.suiteId}>{s.name} ({s.suiteId})</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {activeTab === 'suites' && activeSuite && (
-              <div>
-                <h4>{activeSuite.name} ({activeSuite.suiteId})</h4>
-                <p>{activeSuite.description || 'No description provided.'}</p>
-                <h5>Test Cases ({activeSuite.testCases?.length || 0})</h5>
-                <ul>
-                  {(activeSuite.testCases || []).map((c) => (
-                    <li key={c.testCaseId}>{c.title} ({c.testCaseId})</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {activeTab === 'runs' && activeRun && (
-              <div>
-                <h4>Test Run: {activeRun.testRunId}</h4>
-                <p><strong>Timestamp:</strong> {activeRun.timestamp}</p>
-                <h5>Included Test Cases ({activeRun.testCases?.length ?? 0})</h5>
-                <ul>
-                  {(activeRun.testCases ?? []).map((c) => (
-                    <li key={c.testCaseId}>
-                      {c.title} ({c.testCaseId}) - <span className="badge">{c.priority || 'Untested'}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
     </>
   );
 }

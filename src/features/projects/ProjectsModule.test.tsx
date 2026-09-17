@@ -254,6 +254,43 @@ describe('ProjectsModule', () => {
     );
   });
 
+  it('previews the selected project in place, beside the list', async () => {
+    const api = createStubApi(['PROJ-1.json']);
+
+    render(<ProjectsModule client={api.client} identifiers={['PROJ-1.json']} onStatus={vi.fn()} />);
+    expect(await screen.findByRole('heading', { name: 'No project selected' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Details for PROJ-1.json' }));
+
+    expect(screen.getByRole('region', { name: 'Project details preview' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Project PROJ-1.json' })).toBeDefined();
+    expect(screen.getByText('Project ID:').closest('p')?.textContent).toBe(
+      'Project ID: PROJ-1.json',
+    );
+    expect(screen.getByText('Name:').closest('p')?.textContent).toBe('Name: Project PROJ-1.json');
+    expect(screen.getByText('Description:').closest('p')?.textContent).toBe(
+      'Description: PROJ-1.json description',
+    );
+    expect(screen.getByText('Linked test suites (0)')).toBeDefined();
+    expect(screen.getByText('None linked.')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
+    expect(screen.getByRole('heading', { name: 'No project selected' })).toBeDefined();
+  });
+
+  it('confirms a deletion started from the preview pane', async () => {
+    const api = createStubApi(['PROJ-1.json']);
+
+    render(<ProjectsModule client={api.client} identifiers={['PROJ-1.json']} onStatus={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Details for PROJ-1.json' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(screen.getByRole('group', { name: 'Confirm deletion of PROJ-1.json' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'No project selected' })).toBeDefined();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.calls.some((call) => call.startsWith('DELETE'))).toBe(false);
+  });
+
   it('has no detectable WCAG 2.1 AA violations, including the delete confirmation', async () => {
     const api = createStubApi(['PROJ-1.json', 'PROJ-2.json']);
 
