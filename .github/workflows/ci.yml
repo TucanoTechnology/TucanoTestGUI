@@ -31,6 +31,26 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+  client-drift:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Regenerate the API client from the pinned contract
+        run: npm run generate:client
+      - name: Fail if the committed client is stale
+        run: |
+          if [ -n "$(git status --porcelain -- src/api/generated)" ]; then
+            git status --short -- src/api/generated
+            echo "::error::src/api/generated is out of date with api/openapi.json. Run 'npm run generate:client' and commit the result."
+            exit 1
+          fi
+
   container:
     runs-on: [self-hosted, Linux, X64]
     steps:

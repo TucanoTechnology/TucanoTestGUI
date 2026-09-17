@@ -56,6 +56,19 @@ npm run build      # production bundle
 
 Point the application at an API with `VITE_API_BASE_URL`. When unset it calls `/api`, which nginx proxies to `TUCANO_API_URL` in the container.
 
+## API client
+
+Calls to the API go through a client generated from a pinned copy of the TucanoTestAPI OpenAPI document, so the GUI cannot drift from the contract silently. Build it with `createApiClient()` in `src/api/configure.ts`; nothing else should construct HTTP calls.
+
+```sh
+npm run generate:client                # regenerate src/api/generated from api/openapi.json
+npm run sync:openapi -- --ref <sha>    # move the pin to another TucanoTestAPI revision
+```
+
+`src/api/generated/` is committed and never edited by hand — the `client-drift` CI job regenerates it and fails when the committed output is stale. `src/api/client.ts` is the older hand-written client; components migrate off it one at a time.
+
+Every action available in the GUI must have an API equivalent, and every API error must be renderable here. When a view needs data the API cannot serve, raise an API issue instead of adding a workaround — the GUI is a display layer and more logic belongs in the API, not less. See [docs/api-client.md](docs/api-client.md).
+
 ## Container
 
 ```sh
