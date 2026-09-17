@@ -12,9 +12,15 @@ export interface TestCaseTableProps {
   cases: TestCase[];
   groups?: TestCaseGroup[];
   selectedCaseId?: string | null;
+  /** Checked rows. Pass this to let the owner drive the selection (bulk actions). */
+  selectedIds?: readonly string[];
   onSelectionChange?: (selectedIds: string[]) => void;
   onStatusChange?: (id: string, status: TestCaseStatus) => void;
   onRowClick?: (testCase: TestCase) => void;
+  onEditCase?: (testCase: TestCase) => void;
+  onDeleteCase?: (testCase: TestCase) => void;
+  /** Rendered directly under the toolbar, above the table. */
+  bulkActions?: React.ReactNode;
   onCreateCase?: () => void;
   onQuickCreate?: () => void;
   onCreateSuite?: () => void;
@@ -28,19 +34,35 @@ export default function TestCaseTable({
   cases,
   groups,
   selectedCaseId,
+  selectedIds,
   onSelectionChange,
   onStatusChange,
   onRowClick,
+  onEditCase,
+  onDeleteCase,
+  bulkActions,
   onCreateCase,
   onQuickCreate,
   onCreateSuite,
   onCreateTestRun,
 }: TestCaseTableProps) {
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [internalSelectedIds, setInternalSelectedIds] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<SortColumn>('id');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const selectedSet = useMemo(
+    () => (selectedIds ? new Set(selectedIds) : internalSelectedIds),
+    [selectedIds, internalSelectedIds]
+  );
+
+  const applySelection = (next: Set<string>) => {
+    if (selectedIds === undefined) {
+      setInternalSelectedIds(next);
+    }
+    onSelectionChange?.(Array.from(next));
+  };
 
   // Filter cases by keyword search
   const filteredCases = useMemo(() => {
@@ -53,6 +75,9 @@ export default function TestCaseTable({
         (c.priority && c.priority.toLowerCase().includes(q))
     );
   }, [cases, searchKeyword]);
+
+  const allSelected =
+    filteredCases.length > 0 && filteredCases.every((c) => selectedSet.has(c.testCaseId));
 
   // Derive groups if provided or construct single/multiple groups
   const renderedGroups: TestCaseGroup[] = useMemo(() => {
@@ -102,26 +127,22 @@ export default function TestCaseTable({
   };
 
   const handleSelectAll = () => {
-    if (selectedIds.size === filteredCases.length && filteredCases.length > 0) {
-      setSelectedIds(new Set());
-      onSelectionChange?.([]);
+    if (allSelected) {
+      applySelection(new Set());
     } else {
-      const newSelected = new Set(filteredCases.map((c) => c.testCaseId));
-      setSelectedIds(newSelected);
-      onSelectionChange?.(Array.from(newSelected));
+      applySelection(new Set(filteredCases.map((c) => c.testCaseId)));
     }
   };
 
   const handleSelectRow = (id: string, e?: React.SyntheticEvent) => {
     if (e) e.stopPropagation();
-    const newSelected = new Set(selectedIds);
+    const newSelected = new Set(selectedSet);
     if (newSelected.has(id)) {
       newSelected.delete(id);
     } else {
       newSelected.add(id);
     }
-    setSelectedIds(newSelected);
-    onSelectionChange?.(Array.from(newSelected));
+    applySelection(newSelected);
   };
 
   return (
@@ -170,6 +191,8 @@ export default function TestCaseTable({
         </div>
       </div>
 
+      {bulkActions}
+
       {/* Table Content */}
       <div className="table-scroll">
         <table className="data-table">
@@ -178,7 +201,7 @@ export default function TestCaseTable({
               <th className="is-narrow">
                 <input
                   type="checkbox"
-                  checked={selectedIds.size === filteredCases.length && filteredCases.length > 0}
+                  checked={allSelected}
                   onChange={handleSelectAll}
                   aria-label="Select all test cases"
                 />
@@ -220,7 +243,7 @@ export default function TestCaseTable({
                   {/* Test Case Rows within group */}
                   {!isCollapsed &&
                     groupCases.map((testCase) => {
-                      const isSelected = selectedIds.has(testCase.testCaseId);
+                      const isSelected = selectedSet.has(testCase.testCaseId);
                       const isActive = selectedCaseId === testCase.testCaseId;
                       const statusVal = (testCase.priority === 'Passed' || testCase.priority === 'Failed' || testCase.priority === 'Blocked' || testCase.priority === 'Retest')
                         ? testCase.priority
@@ -278,17 +301,47 @@ export default function TestCaseTable({
 
                           {/* Row Actions */}
                           <td className="data-table-cell is-actions">
-                            <button
-                              type="button"
-                              className="row-actions-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onRowClick?.(testCase);
-                              }}
-                              aria-label={`Actions for ${testCase.title}`}
-                            >
-                              ···
-                            </button>
+                            <div style={{ display: 'flex', gap: '2px', justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                className="row-actions-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRowClick?.(testCase);
+                                }}
+                                aria-label={`Actions for ${testCase.title}`}
+                              >
+                                ···
+                              </button>
+
+                              {onEditCase && (
+                                <button
+                                  type="button"
+                                  className="row-actions-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEditCase(testCase);
+                                  }}
+                                  aria-label={`Edit ${testCase.testCaseId}`}
+                                >
+                                  ✎
+                                </button>
+                              )}
+
+                              {onDeleteCase && (
+                                <button
+                                  type="button"
+                                  className="row-actions-btn"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDeleteCase(testCase);
+                                  }}
+                                  aria-label={`Delete ${testCase.testCaseId}`}
+                                >
+                                  🗑
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );

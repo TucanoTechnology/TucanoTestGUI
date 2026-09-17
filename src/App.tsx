@@ -9,10 +9,9 @@ import {
   TestSuite,
   TucanoApiClient,
 } from './api/client';
-import ThreePanelLayout from './components/ThreePanelLayout';
-import { TestCaseStatus } from './components/StatusBadge';
 import AppShell, { type Tab } from './components/AppShell';
 import ProjectsModule from './features/projects/ProjectsModule';
+import TestCasesModule from './features/test-cases/TestCasesModule';
 import TestSuitesModule from './features/test-suites/TestSuitesModule';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -80,23 +79,17 @@ export default function App({ client }: AppProps) {
   // Modals and detail states
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [activeSuite, setActiveSuite] = useState<TestSuite | null>(null);
-  const [activeCase, setActiveCase] = useState<TestCase | null>(null);
   const [activeRun, setActiveRun] = useState<TestRun | null>(null);
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [activeMilestoneProgress, setActiveMilestoneProgress] = useState<MilestoneProgress | null>(null);
 
   // Form modal visibility flags
-  const [showCaseModal, setShowCaseModal] = useState(false);
   const [showRunModal, setShowRunModal] = useState(false);
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
 
   // Edit modal states
-  const [editingCase, setEditingCase] = useState<TestCase | null>(null);
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
-
-  // Collapsible planes state for standard view
-  const [planeCasesCollapsed, setPlaneCasesCollapsed] = useState(false);
 
   // Bumped to ask the Projects module to open its create form
   const [projectCreateRequest, setProjectCreateRequest] = useState(0);
@@ -104,19 +97,14 @@ export default function App({ client }: AppProps) {
   // Bumped to ask the Test Suites module to open its create form
   const [suiteCreateRequest, setSuiteCreateRequest] = useState(0);
 
+  // Bumped to ask the Test Cases module to open its create form
+  const [caseCreateRequest, setCaseCreateRequest] = useState(0);
+
   // Execution workspace state
   const [executingRun, setExecutingRun] = useState<TestRun | null>(null);
   const [executingCaseIndex, setExecutingCaseIndex] = useState(0);
 
   // Form input states
-  const [caseIdInput, setCaseIdInput] = useState('');
-  const [caseTitleInput, setCaseTitleInput] = useState('');
-  const [caseDescInput, setCaseDescInput] = useState('');
-  const [caseExpectedInput, setCaseExpectedInput] = useState('');
-  const [casePriorityInput, setCasePriorityInput] = useState('Medium');
-  const [caseExploratoryInput, setCaseExploratoryInput] = useState(false);
-  const [caseStepsInput, setCaseStepsInput] = useState<string[]>(['']);
-
   const [runIdInput, setRunIdInput] = useState('');
 
   const [milestoneIdInput, setMilestoneIdInput] = useState('');
@@ -125,12 +113,6 @@ export default function App({ client }: AppProps) {
   const [milestoneStartDateInput, setMilestoneStartDateInput] = useState('');
   const [milestoneTargetDateInput, setMilestoneTargetDateInput] = useState('');
   const [milestoneStatusInput, setMilestoneStatusInput] = useState('Open');
-
-  // Attachment upload state
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-
-  // View switch: 3-panel workspace is enabled by default for cases & suites
-  const [useThreePanelView, setUseThreePanelView] = useState(true);
 
   const statusRef = useRef<HTMLParagraphElement>(null);
 
@@ -211,6 +193,7 @@ export default function App({ client }: AppProps) {
     // Leaving the tab ends the outstanding "open the form" request.
     setProjectCreateRequest(0);
     setSuiteCreateRequest(0);
+    setCaseCreateRequest(0);
   };
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -254,74 +237,18 @@ export default function App({ client }: AppProps) {
   };
 
   // CRUD Handlers: Case
-  const handleCreateCase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const rawId = caseIdInput || `TC-${Date.now()}`;
-      const id = rawId.endsWith('.json') ? rawId : `${rawId}.json`;
-      const filteredSteps = caseStepsInput.filter((s) => s.trim().length > 0);
-      const newCase: TestCase = {
-        testCaseId: id,
-        title: caseTitleInput,
-        description: caseDescInput || undefined,
-        expectedResult: caseExpectedInput,
-        priority: casePriorityInput,
-        exploratory: caseExploratoryInput,
-        steps: filteredSteps.length > 0 ? filteredSteps : undefined,
-      };
-      await api.createTestCase(newCase);
-      setShowCaseModal(false);
-      setCaseIdInput('');
-      setCaseTitleInput('');
-      setCaseDescInput('');
-      setCaseExpectedInput('');
-      setCasePriorityInput('Medium');
-      setCaseExploratoryInput(false);
-      setCaseStepsInput(['']);
-      await loadIdentifiers('cases', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test case ${newCase.testCaseId} created successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create test case.');
-    }
-  };
+  // Test cases are owned by the Test Cases module: the folder board, the dense
+  // table, the bulk actions and the detail pane all live there. The shell keeps
+  // only the wiring — refresh, the shared live region and the create request.
+  const handleCasesChanged = useCallback(async () => {
+    await loadIdentifiers('cases', filter);
+    await fetchAllWorkspaceData();
+  }, [loadIdentifiers, filter, fetchAllWorkspaceData]);
 
-  const handleUpdateCase = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCase) return;
-    try {
-      await api.updateTestCase(editingCase.testCaseId, editingCase);
-      const updatedId = editingCase.testCaseId;
-      setEditingCase(null);
-      await loadIdentifiers('cases', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test case ${updatedId} updated successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to update test case.');
-    }
-  };
-
-  const handleDeleteCase = async (id: string) => {
-    try {
-      await api.deleteTestCase(id);
-      await loadIdentifiers('cases', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Test case ${id} deleted.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete test case.');
-    }
-  };
-
-  const handleCaseStatusChange = async (caseId: string, newStatus: TestCaseStatus) => {
-    try {
-      const tc = await api.getTestCase(caseId);
-      const updated = { ...tc, priority: newStatus };
-      await api.updateTestCase(caseId, updated);
-      await fetchAllWorkspaceData();
-      setMessage(`Updated ${caseId} status to ${newStatus}.`);
-    } catch (err) {
-      console.error('Failed to change case status:', err);
-    }
+  const openCaseForm = () => {
+    setActiveTab('cases');
+    setShowDetailModal(false);
+    setCaseCreateRequest((request) => request + 1);
   };
 
   // CRUD Handlers: Test Run
@@ -455,38 +382,6 @@ export default function App({ client }: AppProps) {
     }
   };
 
-  // Attachment upload/delete
-  const handleUploadAttachment = async () => {
-    if (!activeCase || !selectedFile) return;
-    try {
-      const attachment = await api.uploadAttachment(activeCase.testCaseId, selectedFile);
-      const updatedAttachments = [...(activeCase.attachments ?? []), attachment];
-      const updatedCase: TestCase = { ...activeCase, attachments: updatedAttachments };
-      await api.updateTestCase(activeCase.testCaseId, updatedCase);
-      setActiveCase(updatedCase);
-      setSelectedFile(null);
-      await fetchAllWorkspaceData();
-      setMessage(`Attachment ${attachment.originalName} uploaded successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to upload attachment.');
-    }
-  };
-
-  const handleDeleteAttachment = async (filename: string) => {
-    if (!activeCase) return;
-    try {
-      await api.deleteAttachment(activeCase.testCaseId, filename);
-      const updatedAttachments = (activeCase.attachments ?? []).filter((a) => a.filename !== filename);
-      const updatedCase: TestCase = { ...activeCase, attachments: updatedAttachments };
-      await api.updateTestCase(activeCase.testCaseId, updatedCase);
-      setActiveCase(updatedCase);
-      await fetchAllWorkspaceData();
-      setMessage(`Attachment deleted.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete attachment.');
-    }
-  };
-
   // Detail Modal view handlers
   // The Projects module already holds the entity it renders, so it hands it over.
   const handleViewProject = (project: Project) => {
@@ -497,16 +392,6 @@ export default function App({ client }: AppProps) {
   const handleViewSuite = (suite: TestSuite) => {
     setActiveSuite(suite);
     setShowDetailModal(true);
-  };
-
-  const handleViewCase = async (id: string) => {
-    try {
-      const c = await api.getTestCase(id);
-      setActiveCase(c);
-      setShowDetailModal(true);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test case.');
-    }
   };
 
   const handleViewRun = async (id: string) => {
@@ -541,15 +426,6 @@ export default function App({ client }: AppProps) {
       setEditingMilestone(milestone);
     } catch (err) {
       setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch milestone for edit.');
-    }
-  };
-
-  const handleEditCaseClick = async (id: string) => {
-    try {
-      const c = await api.getTestCase(id);
-      setEditingCase(c);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch test case for edit.');
     }
   };
 
@@ -592,16 +468,6 @@ export default function App({ client }: AppProps) {
                 {activeTab === 'milestones' && 'Milestones & Releases'}
                 {activeTab === 'projects' && 'Projects'}
               </h2>
-
-              {activeTab === 'cases' && (
-                <button
-                  type="button"
-                  className="view-toggle-btn"
-                  onClick={() => setUseThreePanelView(!useThreePanelView)}
-                >
-                  {useThreePanelView ? '⊞ Standard View' : '◨ Three-Panel View'}
-                </button>
-              )}
             </div>
 
             {/* Quick Action Buttons */}
@@ -621,7 +487,7 @@ export default function App({ client }: AppProps) {
                   <button type="button" className="btn-secondary" onClick={openSuiteForm}>
                     + Create test suite
                   </button>
-                  <button type="button" onClick={() => setShowCaseModal(true)}>
+                  <button type="button" onClick={openCaseForm}>
                     + Create test case
                   </button>
                 </>
@@ -678,82 +544,23 @@ export default function App({ client }: AppProps) {
             {message}
           </p>
 
-          {/* 1. THREE-PANEL VIEW FOR TEST CASES */}
-          {activeTab === 'cases' && useThreePanelView ? (
+          {/* 1. TEST CASES MODULE — folder-hierarchy execution board */}
+          {activeTab === 'cases' && (
             <div className="three-panel-container">
-              <ThreePanelLayout
+              <TestCasesModule
                 client={api}
+                identifiers={identifiers}
                 projects={projectsList}
                 suites={suitesList}
-                allCases={casesList}
-                onProjectSelect={(id) => setCurrentProject(id)}
-                onStatusChange={handleCaseStatusChange}
-                onCreateCase={() => setShowCaseModal(true)}
-                onQuickCreate={() => setShowCaseModal(true)}
+                createRequest={caseCreateRequest}
+                onStatus={handleModuleStatus}
+                onChanged={handleCasesChanged}
                 onCreateSuite={openSuiteForm}
                 onCreateProject={openProjectForm}
                 onCreateTestRun={() => setShowRunModal(true)}
-                onDataRefreshNeeded={fetchAllWorkspaceData}
               />
             </div>
-          ) : null}
-
-          {/* 2. STANDARD PLANES VIEW FOR TOGGLED CASES */}
-          {activeTab === 'cases' && !useThreePanelView ? (
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {/* Hierarchy Planes */}
-              <section aria-label="Visual Hierarchy Workspace" className="hierarchy-grid">
-                {/* Projects live in their own module on the Projects tab. */}
-                {/* Test suites live in their own module on the Test suites tab. */}
-
-                {/* Test Cases Plane */}
-                <div className={`plane ${planeCasesCollapsed ? 'collapsed' : ''}`}>
-                  <div className="plane-header">
-                    <h3 className="plane-title">Test Cases</h3>
-                    <div className="plane-actions">
-                      <button
-                        type="button"
-                        aria-expanded={!planeCasesCollapsed}
-                        className="btn-secondary"
-                        onClick={() => setPlaneCasesCollapsed((c) => !c)}
-                      >
-                        {planeCasesCollapsed ? 'Expand' : 'Collapse'}
-                      </button>
-                      <button type="button" onClick={() => setShowCaseModal(true)}>
-                        + New
-                      </button>
-                    </div>
-                  </div>
-                  <div className="plane-body">
-                    <ul className="plane-list" aria-label="Test Cases Hierarchy List">
-                      {(activeTab === 'cases' ? identifiers : []).map((id) => (
-                        <li key={id} className="plane-item" onClick={() => void handleViewCase(id)}>
-                          <div className="plane-item-header">
-                            <span className="plane-item-title">{id}</span>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <button type="button" className="btn-secondary" onClick={() => void handleEditCaseClick(id)}>
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-danger"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleDeleteCase(id);
-                                }}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </section>
-            </div>
-          ) : null}
+          )}
 
           {/* 3. TEST RUNS VIEW & EXECUTION WORKSPACE */}
           {activeTab === 'runs' && (
@@ -920,125 +727,6 @@ export default function App({ client }: AppProps) {
         </AppShell>
 
       {/* MODALS */}
-      {/* Create Test Case Modal */}
-      {showCaseModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="case-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="case-modal-title">Create New Test Case</h3>
-              <button type="button" className="btn-secondary" onClick={() => setShowCaseModal(false)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleCreateCase}>
-              <div className="form-group">
-                <label htmlFor="case-id-input">Test Case ID (Filename)</label>
-                <input
-                  id="case-id-input"
-                  type="text"
-                  required
-                  value={caseIdInput}
-                  onChange={(e) => setCaseIdInput(e.target.value)}
-                  placeholder="e.g. TC-001.json"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="case-title-input">Title</label>
-                <input
-                  id="case-title-input"
-                  type="text"
-                  required
-                  value={caseTitleInput}
-                  onChange={(e) => setCaseTitleInput(e.target.value)}
-                  placeholder="e.g. Verify User Login"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="case-priority-input">Priority</label>
-                <select
-                  id="case-priority-input"
-                  value={casePriorityInput}
-                  onChange={(e) => setCasePriorityInput(e.target.value)}
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="case-desc-input">Description / Preconditions</label>
-                <textarea
-                  id="case-desc-input"
-                  value={caseDescInput}
-                  onChange={(e) => setCaseDescInput(e.target.value)}
-                  placeholder="Preconditions or detailed description..."
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="case-expected-input">Expected Result</label>
-                <textarea
-                  id="case-expected-input"
-                  required
-                  value={caseExpectedInput}
-                  onChange={(e) => setCaseExpectedInput(e.target.value)}
-                  placeholder="Expected outcome..."
-                />
-              </div>
-              <div className="form-group">
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={caseExploratoryInput}
-                    onChange={(e) => setCaseExploratoryInput(e.target.checked)}
-                  />{' '}
-                  Exploratory Test Case
-                </label>
-              </div>
-              <div className="form-group">
-                <label>Step-by-Step Actions</label>
-                <ul className="steps-list">
-                  {caseStepsInput.map((step, idx) => (
-                    <li key={idx} className="step-item">
-                      <input
-                        id={`step-input-${idx}`}
-                        aria-label={`Step ${idx + 1}`}
-                        type="text"
-                        value={step}
-                        onChange={(e) => {
-                          const newSteps = [...caseStepsInput];
-                          newSteps[idx] = e.target.value;
-                          setCaseStepsInput(newSteps);
-                        }}
-                        placeholder={`Step ${idx + 1}`}
-                      />
-                      {caseStepsInput.length > 1 && (
-                        <button
-                          type="button"
-                          className="btn-danger"
-                          onClick={() => setCaseStepsInput(caseStepsInput.filter((_, i) => i !== idx))}
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={{ marginTop: '0.5rem' }}
-                  onClick={() => setCaseStepsInput([...caseStepsInput, ''])}
-                >
-                  + Add Step
-                </button>
-              </div>
-              <button type="submit">Save Test Case</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Create Run Modal */}
       {showRunModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="run-modal-title">
@@ -1182,70 +870,6 @@ export default function App({ client }: AppProps) {
               </div>
             )}
 
-            {activeTab === 'cases' && activeCase && (
-              <div>
-                <h4>{activeCase.title} ({activeCase.testCaseId})</h4>
-                <p><strong>Priority:</strong> {activeCase.priority || 'Medium'}</p>
-                <p><strong>Expected Result:</strong> {activeCase.expectedResult}</p>
-                {activeCase.description && <p><strong>Description:</strong> {activeCase.description}</p>}
-                {activeCase.steps && activeCase.steps.length > 0 && (
-                  <div>
-                    <strong>Steps:</strong>
-                    <ol>
-                      {activeCase.steps.map((step: any, idx) => (
-                        <li key={idx}>{typeof step === 'string' ? step : step.action}</li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-                <hr style={{ margin: '1rem 0', borderColor: 'var(--color-border)' }} />
-                <h5>Attachments ({activeCase.attachments?.length ?? 0})</h5>
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label htmlFor="file-upload-input">Upload Evidence / Screenshot</label>
-                  <input
-                    id="file-upload-input"
-                    type="file"
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
-                  />
-                  <button
-                    type="button"
-                    disabled={!selectedFile}
-                    onClick={() => void handleUploadAttachment()}
-                    style={{ marginTop: '0.5rem' }}
-                  >
-                    Upload File
-                  </button>
-                </div>
-
-                <ul className="attachment-list">
-                  {(activeCase.attachments ?? []).map((att) => (
-                    <li key={att.filename} className="attachment-item">
-                      <div>
-                        <strong>{att.originalName}</strong> ({Math.round(att.size / 1024)} KB)
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <a
-                          className="btn btn-secondary"
-                          href={api.getAttachmentUrl(activeCase.testCaseId, att.filename)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Download
-                        </a>
-                        <button
-                          type="button"
-                          className="btn-danger"
-                          onClick={() => void handleDeleteAttachment(att.filename)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             {activeTab === 'runs' && activeRun && (
               <div>
                 <h4>Test Run: {activeRun.testRunId}</h4>
@@ -1284,63 +908,6 @@ export default function App({ client }: AppProps) {
                 )}
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Edit Case Modal */}
-      {editingCase && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-case-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="edit-case-modal-title">Edit Test Case: {editingCase.testCaseId}</h3>
-              <button type="button" className="btn-secondary" onClick={() => setEditingCase(null)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleUpdateCase}>
-              <div className="form-group">
-                <label htmlFor="edit-case-title-input">Title</label>
-                <input
-                  id="edit-case-title-input"
-                  type="text"
-                  required
-                  value={editingCase.title}
-                  onChange={(e) => setEditingCase({ ...editingCase, title: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-case-priority-input">Priority</label>
-                <select
-                  id="edit-case-priority-input"
-                  value={editingCase.priority || 'Medium'}
-                  onChange={(e) => setEditingCase({ ...editingCase, priority: e.target.value })}
-                >
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                  <option value="Critical">Critical</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-case-desc-input">Description / Preconditions</label>
-                <textarea
-                  id="edit-case-desc-input"
-                  value={editingCase.description || ''}
-                  onChange={(e) => setEditingCase({ ...editingCase, description: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-case-expected-input">Expected Result</label>
-                <textarea
-                  id="edit-case-expected-input"
-                  required
-                  value={editingCase.expectedResult}
-                  onChange={(e) => setEditingCase({ ...editingCase, expectedResult: e.target.value })}
-                />
-              </div>
-              <button type="submit">Update Test Case</button>
-            </form>
           </div>
         </div>
       )}

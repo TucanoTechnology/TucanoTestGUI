@@ -61,7 +61,7 @@ Complete GUI redesign implementing a three-panel workspace layout following Test
 
 **New Files:**
 - `src/components/DetailView.tsx` - Right panel component
-- `src/components/ThreePanelLayout.tsx` - Main layout wrapper
+- `src/features/test-cases/TestCasesModule.tsx` - Folder-hierarchy execution board that composes the three panels
 
 **Modified Files:**
 - `src/App.tsx` - Integrate three-panel layout

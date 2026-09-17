@@ -319,20 +319,20 @@ describe('App', () => {
     await screen.findByText(/milestone M-2.json created successfully/i);
   });
 
-  it('allows collapsing and expanding hierarchy planes', async () => {
+  it('scopes the execution board through the folder tree the shell filled in', async () => {
     render(<App client={mockFullClient()} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^tests$/i }));
     await screen.findByText(/1 test found/i);
 
-    // The standard planes view is the non-default layout on the Tests tab.
-    fireEvent.click(screen.getByRole('button', { name: /standard view/i }));
+    // The board builds its folders from the projects and suites the shell loaded.
+    const projectFolder = await screen.findByRole('treeitem', { name: /Project 1/ });
+    fireEvent.click(projectFolder);
+    await screen.findByText(/no test cases found/i);
 
-    const collapseBtns = screen.getAllByRole('button', { name: /collapse/i });
-    expect(collapseBtns.length).toBeGreaterThan(0);
-
-    fireEvent.click(collapseBtns[0]!);
-    expect(screen.getAllByRole('button', { name: /expand/i }).length).toBeGreaterThan(0);
+    // Cases that belong to no folder stay reachable through the unfiled node.
+    fireEvent.click(screen.getByRole('treeitem', { name: /test cases in no folder/i }));
+    expect(await screen.findByRole('button', { name: 'Actions for Verify Login' })).toBeDefined();
   });
 
   it('allows editing an existing test suite via edit modal', async () => {
