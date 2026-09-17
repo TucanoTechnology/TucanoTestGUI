@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   ApiRequestError,
   Milestone,
-  MilestoneProgress,
   Project,
   TestCase,
   TestRun,
@@ -10,6 +9,7 @@ import {
   TucanoApiClient,
 } from './api/client';
 import AppShell, { type Tab } from './components/AppShell';
+import MilestonesModule from './features/milestones/MilestonesModule';
 import ProjectsModule from './features/projects/ProjectsModule';
 import TestCasesModule from './features/test-cases/TestCasesModule';
 import TestRunsModule from './features/test-runs/TestRunsModule';
@@ -81,15 +81,9 @@ export default function App({ client }: AppProps) {
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [activeSuite, setActiveSuite] = useState<TestSuite | null>(null);
   const [activeRun, setActiveRun] = useState<TestRun | null>(null);
-  const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
-  const [activeMilestoneProgress, setActiveMilestoneProgress] = useState<MilestoneProgress | null>(null);
 
   // Form modal visibility flags
-  const [showMilestoneModal, setShowMilestoneModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-
-  // Edit modal states
-  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
 
   // Bumped to ask the Projects module to open its create form
   const [projectCreateRequest, setProjectCreateRequest] = useState(0);
@@ -103,12 +97,8 @@ export default function App({ client }: AppProps) {
   // Bumped to ask the Test Runs module to open its create form
   const [runCreateRequest, setRunCreateRequest] = useState(0);
 
-  const [milestoneIdInput, setMilestoneIdInput] = useState('');
-  const [milestoneNameInput, setMilestoneNameInput] = useState('');
-  const [milestoneDescInput, setMilestoneDescInput] = useState('');
-  const [milestoneStartDateInput, setMilestoneStartDateInput] = useState('');
-  const [milestoneTargetDateInput, setMilestoneTargetDateInput] = useState('');
-  const [milestoneStatusInput, setMilestoneStatusInput] = useState('Open');
+  // Bumped to ask the Milestones module to open its create form
+  const [milestoneCreateRequest, setMilestoneCreateRequest] = useState(0);
 
   const statusRef = useRef<HTMLParagraphElement>(null);
 
@@ -190,6 +180,7 @@ export default function App({ client }: AppProps) {
     setSuiteCreateRequest(0);
     setCaseCreateRequest(0);
     setRunCreateRequest(0);
+    setMilestoneCreateRequest(0);
   };
 
   const handleSearchSubmit = (event: React.FormEvent) => {
@@ -263,61 +254,18 @@ export default function App({ client }: AppProps) {
   };
 
   // CRUD Handlers: Milestone
-  const handleCreateMilestone = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const rawId = milestoneIdInput || `M-${Date.now()}`;
-      const id = rawId.endsWith('.json') ? rawId : `${rawId}.json`;
-      const newMilestone: Milestone = {
-        milestoneId: id,
-        name: milestoneNameInput,
-        description: milestoneDescInput || undefined,
-        startDate: milestoneStartDateInput || undefined,
-        targetDate: milestoneTargetDateInput || undefined,
-        status: milestoneStatusInput || 'Open',
-        testSuiteIds: [],
-        testRunIds: [],
-      };
-      await api.createMilestone(newMilestone);
-      setShowMilestoneModal(false);
-      setMilestoneIdInput('');
-      setMilestoneNameInput('');
-      setMilestoneDescInput('');
-      setMilestoneStartDateInput('');
-      setMilestoneTargetDateInput('');
-      setMilestoneStatusInput('Open');
-      await loadIdentifiers('milestones', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Milestone ${newMilestone.milestoneId} created successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to create milestone.');
-    }
-  };
+  // Milestones are owned by the Milestones module: the milestone list and the
+  // release summary live there. The shell keeps only the wiring — refresh, the
+  // shared live region and the create request.
+  const handleMilestonesChanged = useCallback(async () => {
+    await loadIdentifiers('milestones', filter);
+    await fetchAllWorkspaceData();
+  }, [loadIdentifiers, filter, fetchAllWorkspaceData]);
 
-  const handleUpdateMilestone = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingMilestone) return;
-    try {
-      await api.updateMilestone(editingMilestone.milestoneId, editingMilestone);
-      const updatedId = editingMilestone.milestoneId;
-      setEditingMilestone(null);
-      await loadIdentifiers('milestones', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Milestone ${updatedId} updated successfully.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to update milestone.');
-    }
-  };
-
-  const handleDeleteMilestone = async (id: string) => {
-    try {
-      await api.deleteMilestone(id);
-      await loadIdentifiers('milestones', filter);
-      await fetchAllWorkspaceData();
-      setMessage(`Milestone ${id} deleted.`);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Failed to delete milestone.');
-    }
+  const openMilestoneForm = () => {
+    setActiveTab('milestones');
+    setShowDetailModal(false);
+    setMilestoneCreateRequest((request) => request + 1);
   };
 
   // Detail Modal view handlers
@@ -335,31 +283,6 @@ export default function App({ client }: AppProps) {
   const handleViewRun = (run: TestRun) => {
     setActiveRun(run);
     setShowDetailModal(true);
-  };
-
-  const handleViewMilestone = async (id: string) => {
-    try {
-      const milestone = await api.getMilestone(id);
-      setActiveMilestone(milestone);
-      try {
-        const progress = await api.getMilestoneProgress(id);
-        setActiveMilestoneProgress(progress);
-      } catch {
-        setActiveMilestoneProgress(null);
-      }
-      setShowDetailModal(true);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch milestone.');
-    }
-  };
-
-  const handleEditMilestoneClick = async (id: string) => {
-    try {
-      const milestone = await api.getMilestone(id);
-      setEditingMilestone(milestone);
-    } catch (err) {
-      setMessage(err instanceof ApiRequestError ? err.message : 'Could not fetch milestone for edit.');
-    }
   };
 
   // Computed total test cases count across workspace
@@ -431,7 +354,7 @@ export default function App({ client }: AppProps) {
                 </button>
               )}
               {activeTab === 'milestones' && (
-                <button type="button" onClick={() => setShowMilestoneModal(true)}>
+                <button type="button" onClick={openMilestoneForm}>
                   + Create milestone
                 </button>
               )}
@@ -510,29 +433,16 @@ export default function App({ client }: AppProps) {
             </div>
           )}
 
-          {/* 4. MILESTONES VIEW */}
+          {/* 4. MILESTONES MODULE — milestone list and release summary */}
           {activeTab === 'milestones' && (
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
-              <div className="view-grid-cards">
-                {identifiers.map((id) => (
-                  <div key={id} className="entity-card">
-                    <div>
-                      <h3 className="entity-card-title">🎯 {id}</h3>
-                    </div>
-                    <div className="entity-card-actions">
-                      <button type="button" className="btn-secondary" onClick={() => void handleViewMilestone(id)}>
-                        Details
-                      </button>
-                      <button type="button" className="btn-secondary" onClick={() => void handleEditMilestoneClick(id)}>
-                        Edit
-                      </button>
-                      <button type="button" className="btn-danger" onClick={() => void handleDeleteMilestone(id)}>
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            <div className="three-panel-container">
+              <MilestonesModule
+                client={api}
+                identifiers={identifiers}
+                createRequest={milestoneCreateRequest}
+                onStatus={handleModuleStatus}
+                onChanged={handleMilestonesChanged}
+              />
             </div>
           )}
 
@@ -565,84 +475,6 @@ export default function App({ client }: AppProps) {
         </AppShell>
 
       {/* MODALS */}
-      {/* Create Milestone Modal */}
-      {showMilestoneModal && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="milestone-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="milestone-modal-title">Create New Milestone</h3>
-              <button type="button" className="btn-secondary" onClick={() => setShowMilestoneModal(false)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleCreateMilestone}>
-              <div className="form-group">
-                <label htmlFor="milestone-id-input">Milestone ID (Filename)</label>
-                <input
-                  id="milestone-id-input"
-                  type="text"
-                  required
-                  value={milestoneIdInput}
-                  onChange={(e) => setMilestoneIdInput(e.target.value)}
-                  placeholder="e.g. v1.0-RC1.json"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="milestone-name-input">Milestone Name</label>
-                <input
-                  id="milestone-name-input"
-                  type="text"
-                  required
-                  value={milestoneNameInput}
-                  onChange={(e) => setMilestoneNameInput(e.target.value)}
-                  placeholder="e.g. Release v1.0"
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="milestone-start-date-input">Start Date</label>
-                <input
-                  id="milestone-start-date-input"
-                  type="date"
-                  value={milestoneStartDateInput}
-                  onChange={(e) => setMilestoneStartDateInput(e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="milestone-target-date-input">Target Date</label>
-                <input
-                  id="milestone-target-date-input"
-                  type="date"
-                  value={milestoneTargetDateInput}
-                  onChange={(e) => setMilestoneTargetDateInput(e.target.value)}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="milestone-status-input">Status</label>
-                <select
-                  id="milestone-status-input"
-                  value={milestoneStatusInput}
-                  onChange={(e) => setMilestoneStatusInput(e.target.value)}
-                >
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="milestone-desc-input">Description</label>
-                <textarea
-                  id="milestone-desc-input"
-                  value={milestoneDescInput}
-                  onChange={(e) => setMilestoneDescInput(e.target.value)}
-                  placeholder="Release goal and scope..."
-                />
-              </div>
-              <button type="submit">Save Milestone</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Resource Detail Modal */}
       {showDetailModal && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
@@ -695,94 +527,6 @@ export default function App({ client }: AppProps) {
               </div>
             )}
 
-            {activeTab === 'milestones' && activeMilestone && (
-              <div>
-                <h4>{activeMilestone.name} ({activeMilestone.milestoneId})</h4>
-                <p><strong>Status:</strong> {activeMilestone.status || 'Open'}</p>
-                <p><strong>Start Date:</strong> {activeMilestone.startDate || 'N/A'}</p>
-                <p><strong>Target Date:</strong> {activeMilestone.targetDate || 'N/A'}</p>
-                <p>{activeMilestone.description || 'No description provided.'}</p>
-
-                {activeMilestoneProgress && (
-                  <div style={{ margin: '1rem 0', background: 'var(--color-bg)', padding: '1rem', borderRadius: 'var(--radius-control)', border: '1px solid var(--color-border)' }}>
-                    <h5>Aggregated Release Progress</h5>
-                    <p><strong>Pass Rate:</strong> {activeMilestoneProgress.passPercentage.toFixed(1)}%</p>
-                    <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.85rem' }}>
-                      <span className="badge badge-pass">Passed: {activeMilestoneProgress.passed}</span>
-                      <span className="badge badge-fail">Failed: {activeMilestoneProgress.failed}</span>
-                      <span className="badge badge-blocked">Blocked: {activeMilestoneProgress.blocked}</span>
-                      <span className="badge badge-untested">Untested: {activeMilestoneProgress.untested}</span>
-                      <span className="badge badge-retest">Retest: {activeMilestoneProgress.retest}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Edit Milestone Modal */}
-      {editingMilestone && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-milestone-modal-title">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3 id="edit-milestone-modal-title">Edit Milestone: {editingMilestone.milestoneId}</h3>
-              <button type="button" className="btn-secondary" onClick={() => setEditingMilestone(null)}>
-                Cancel
-              </button>
-            </div>
-            <form className="form-grid" onSubmit={handleUpdateMilestone}>
-              <div className="form-group">
-                <label htmlFor="edit-milestone-name-input">Milestone Name</label>
-                <input
-                  id="edit-milestone-name-input"
-                  type="text"
-                  required
-                  value={editingMilestone.name}
-                  onChange={(e) => setEditingMilestone({ ...editingMilestone, name: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-milestone-start-date-input">Start Date</label>
-                <input
-                  id="edit-milestone-start-date-input"
-                  type="date"
-                  value={editingMilestone.startDate || ''}
-                  onChange={(e) => setEditingMilestone({ ...editingMilestone, startDate: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-milestone-target-date-input">Target Date</label>
-                <input
-                  id="edit-milestone-target-date-input"
-                  type="date"
-                  value={editingMilestone.targetDate || ''}
-                  onChange={(e) => setEditingMilestone({ ...editingMilestone, targetDate: e.target.value })}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-milestone-status-input">Status</label>
-                <select
-                  id="edit-milestone-status-input"
-                  value={editingMilestone.status || 'Open'}
-                  onChange={(e) => setEditingMilestone({ ...editingMilestone, status: e.target.value })}
-                >
-                  <option value="Open">Open</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="edit-milestone-desc-input">Description</label>
-                <textarea
-                  id="edit-milestone-desc-input"
-                  value={editingMilestone.description || ''}
-                  onChange={(e) => setEditingMilestone({ ...editingMilestone, description: e.target.value })}
-                />
-              </div>
-              <button type="submit">Update Milestone</button>
-            </form>
           </div>
         </div>
       )}
