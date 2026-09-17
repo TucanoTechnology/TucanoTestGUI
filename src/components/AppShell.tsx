@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import type { Project } from '../api/client';
 
-export type Tab = 'projects' | 'suites' | 'cases' | 'runs' | 'milestones';
+export type Tab = 'projects' | 'suites' | 'cases' | 'runs' | 'milestones' | 'reports';
 
 interface NavDestination {
   tab: Tab;
@@ -16,6 +16,7 @@ const NAV_DESTINATIONS: NavDestination[] = [
   { tab: 'cases', label: 'Tests', icon: '📋' },
   { tab: 'runs', label: 'Test runs', icon: '▶️' },
   { tab: 'milestones', label: 'Milestones', icon: '🎯' },
+  { tab: 'reports', label: 'Reports', icon: '📊' },
 ];
 
 // Placeholders, not data: the contract publishes no release or environment

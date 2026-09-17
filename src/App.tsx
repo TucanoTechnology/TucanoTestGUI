@@ -11,13 +11,21 @@ import {
 import AppShell, { type Tab } from './components/AppShell';
 import MilestonesModule from './features/milestones/MilestonesModule';
 import ProjectsModule from './features/projects/ProjectsModule';
+import ReportsModule from './features/reports/ReportsModule';
 import TestCasesModule from './features/test-cases/TestCasesModule';
 import TestRunsModule from './features/test-runs/TestRunsModule';
 import TestSuitesModule from './features/test-suites/TestSuitesModule';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
-function formatTabName(tab: Tab): string {
+/**
+ * The tabs the shell loads as a list of identifiers. Reports has no such list —
+ * it reads its own endpoints and holds its own live region — so it is left out
+ * of the shell's count and announcement machinery.
+ */
+type IdentifyTab = Exclude<Tab, 'reports'>;
+
+function formatTabName(tab: IdentifyTab): string {
   switch (tab) {
     case 'projects':
       return 'projects';
@@ -32,7 +40,7 @@ function formatTabName(tab: Tab): string {
   }
 }
 
-function formatTabCount(tab: Tab, count: number): string {
+function formatTabCount(tab: IdentifyTab, count: number): string {
   if (count === 0) {
     return `No ${formatTabName(tab)} match the current filter.`;
   }
@@ -129,6 +137,8 @@ export default function App({ client }: AppProps) {
 
   const loadIdentifiers = useCallback(
     async (tab: Tab, currentFilter: string) => {
+      if (tab === 'reports') return;
+
       setState('loading');
       setMessage(`Loading ${formatTabName(tab)}.`);
       try {
@@ -292,6 +302,7 @@ export default function App({ client }: AppProps) {
                 {activeTab === 'runs' && 'Test runs'}
                 {activeTab === 'milestones' && 'Milestones & Releases'}
                 {activeTab === 'projects' && 'Projects'}
+                {activeTab === 'reports' && 'Reports'}
               </h2>
             </div>
 
@@ -330,44 +341,49 @@ export default function App({ client }: AppProps) {
             </div>
           </div>
 
-          {/* Labelled Filter Form */}
-          <form
-            onSubmit={handleSearchSubmit}
-            style={{
-              padding: '8px 18px',
-              borderBottom: '1px solid #f1f5f9',
-              background: '#ffffff',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-          >
-            <label htmlFor={filterId} style={{ margin: 0, fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-              Filter {formatTabName(activeTab)}:
-            </label>
-            <input
-              id={filterId}
-              name="filter"
-              type="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder={`Filter ${formatTabName(activeTab)}...`}
-              style={{ maxWidth: '280px', padding: '5px 8px', fontSize: '12.5px' }}
-            />
-            <button type="submit" className="btn-secondary" style={{ padding: '5px 10px', fontSize: '12px' }}>
-              Filter
-            </button>
-          </form>
+          {/* Labelled Filter Form — Reports answers on its own filters, which the
+              contract does not expose yet, so there is nothing here to filter. */}
+          {activeTab !== 'reports' && (
+            <form
+              onSubmit={handleSearchSubmit}
+              style={{
+                padding: '8px 18px',
+                borderBottom: '1px solid #f1f5f9',
+                background: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <label htmlFor={filterId} style={{ margin: 0, fontSize: '12.5px', whiteSpace: 'nowrap' }}>
+                Filter {formatTabName(activeTab)}:
+              </label>
+              <input
+                id={filterId}
+                name="filter"
+                type="search"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={`Filter ${formatTabName(activeTab)}...`}
+                style={{ maxWidth: '280px', padding: '5px 8px', fontSize: '12.5px' }}
+              />
+              <button type="submit" className="btn-secondary" style={{ padding: '5px 10px', fontSize: '12px' }}>
+                Filter
+              </button>
+            </form>
+          )}
 
-          {/* Screen Reader Live Announcement */}
-          <p
-            aria-live="polite"
-            ref={statusRef}
-            className={`status-bar-announcement ${state === 'error' ? 'error' : ''}`}
-            style={{ margin: 0 }}
-          >
-            {message}
-          </p>
+          {/* Screen Reader Live Announcement — Reports carries its own. */}
+          {activeTab !== 'reports' && (
+            <p
+              aria-live="polite"
+              ref={statusRef}
+              className={`status-bar-announcement ${state === 'error' ? 'error' : ''}`}
+              style={{ margin: 0 }}
+            >
+              {message}
+            </p>
+          )}
 
           {/* 1. TEST CASES MODULE — folder-hierarchy execution board */}
           {activeTab === 'cases' && (
@@ -437,6 +453,12 @@ export default function App({ client }: AppProps) {
                 onStatus={handleModuleStatus}
                 onChanged={handleSuitesChanged}
               />
+            </div>
+          )}
+          {/* 7. REPORTS MODULE — coverage and summary, both answered by the API */}
+          {activeTab === 'reports' && (
+            <div className="three-panel-container">
+              <ReportsModule projectId={currentProject === 'all' ? undefined : currentProject} />
             </div>
           )}
         </AppShell>
