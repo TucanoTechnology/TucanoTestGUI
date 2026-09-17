@@ -3,7 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
 import TestCasesModule from './TestCasesModule';
-import { Project, TucanoApiClient } from '../../api/client';
+import {
+  Project,
+  TEST_RESULT_STATUSES,
+  TestCaseResult,
+  TestResultStatus,
+  TestRun,
+  TucanoApiClient,
+} from '../../api/client';
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -12,21 +19,56 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+/**
+ * True when a single case document was written. Reading a case back is allowed —
+ * issue #65 only forbids storing an outcome there.
+ */
+function wroteCaseDocument(calls: readonly string[]): boolean {
+  return calls.some((call) => /^(POST|PUT|PATCH|DELETE) .*\/api\/test_cases\//.test(call));
+}
+
+interface RecordedResult {
+  testRunId: string;
+  testCaseId: string;
+  status: TestResultStatus;
+}
+
 interface StubApi {
   client: TucanoApiClient;
   calls: string[];
   identifiers: string[];
+  /** Every result the board recorded, in order, through the run's own route. */
+  recorded: RecordedResult[];
+  /** The runs and the results they now hold, as the API would report them. */
+  runs: Map<string, TestRun>;
+  /**
+   * Priority values that arrived looking like a result status. Issue #65: a
+   * status must never be written into the case document, so this stays empty.
+   */
+  statusInPriority: { testCaseId: string; priority: string }[];
 }
 
-/** Routed stub: the identifier list, details, and the three mutations. */
+/** Routed stub: identifiers, case details, the run result route and the mutations. */
 function createStubApi(
   initial: string[],
-  options: { failDetail?: boolean; failMutation?: boolean; titles?: Record<string, string> } = {},
+  options: {
+    failDetail?: boolean;
+    failMutation?: boolean;
+    titles?: Record<string, string>;
+    runs?: readonly TestRun[];
+  } = {},
 ): StubApi {
   const identifiers = [...initial];
   const titles = new Map(initial.map((id) => [id, options.titles?.[id] ?? `Case ${id}`]));
-  const statuses = new Map<string, string>();
   const calls: string[] = [];
+  const recorded: RecordedResult[] = [];
+  const statusInPriority: { testCaseId: string; priority: string }[] = [];
+  const runs = new Map<string, TestRun>(
+    (options.runs ?? []).map((entry): [string, TestRun] => [
+      entry.testRunId,
+      { ...entry, results: [...(entry.results ?? [])] },
+    ]),
+  );
 
   const stubFetch = (async (url: string, init?: RequestInit) => {
     const urlStr = String(url);
@@ -36,6 +78,35 @@ function createStubApi(
     // Reads keep working so the board can render; only writes are refused.
     if (options.failMutation && method !== 'GET') {
       return json({ error: { code: 'read_only', message: 'Storage is read-only' } }, 409);
+    }
+
+    // Results belong to a run, so this route is the only write path for a
+    // status and it never touches a case document (issue #65).
+    const result = /\/test_runs\/([^/]+)\/results$/.exec(urlStr);
+    const resultRunId = result?.[1] ? decodeURIComponent(result[1]) : null;
+    if (resultRunId) {
+      const target = runs.get(resultRunId);
+      if (method !== 'POST' || !target) {
+        return json(
+          { error: { code: 'not_found', message: `Test run ${resultRunId} could not be read` } },
+          404,
+        );
+      }
+      const body = JSON.parse(String(init?.body)) as {
+        testCaseId: string;
+        status: TestResultStatus;
+      };
+      recorded.push({
+        testRunId: resultRunId,
+        testCaseId: body.testCaseId,
+        status: body.status,
+      });
+      // Results append, exactly as the API does, so the next read reflects them.
+      target.results = [
+        ...(target.results ?? []),
+        { testCaseId: body.testCaseId, status: body.status },
+      ];
+      return json({ message: `Recorded ${body.status} for ${body.testCaseId}.` });
     }
 
     const detail = /\/test_cases\/([^/]+)$/.exec(urlStr);
@@ -54,7 +125,8 @@ function createStubApi(
           title: titles.get(detailId),
           expectedResult: `${detailId} expected result`,
           description: `${detailId} description`,
-          priority: statuses.get(detailId) ?? 'Medium',
+          priority: 'Medium',
+          severity: 'Major',
           steps: ['Open the page'],
           attachments: [],
         });
@@ -72,7 +144,10 @@ function createStubApi(
     if (method === 'PUT' && detailId) {
       const body = JSON.parse(String(init?.body)) as { title: string; priority?: string };
       titles.set(detailId, body.title);
-      if (body.priority) statuses.set(detailId, body.priority);
+      // A priority that looks like an outcome is the regression issue #65 describes.
+      if (body.priority && (TEST_RESULT_STATUSES as readonly string[]).includes(body.priority)) {
+        statusInPriority.push({ testCaseId: detailId, priority: body.priority });
+      }
       return json({ id: detailId });
     }
 
@@ -84,7 +159,21 @@ function createStubApi(
     return json([]);
   }) as unknown as typeof fetch;
 
-  return { client: new TucanoApiClient('/api', stubFetch), calls, identifiers };
+  return {
+    client: new TucanoApiClient('/api', stubFetch),
+    calls,
+    identifiers,
+    recorded,
+    runs,
+    statusInPriority,
+  };
+}
+
+const RUN_ID = 'RUN-1.json';
+
+/** A run the shell loaded; its embedded results are the only status source. */
+function run(testRunId: string, results: TestCaseResult[] = []): TestRun {
+  return { testRunId, timestamp: '2026-09-04T00:00:00Z', results };
 }
 
 const LOGIN_CASE_PROJECT: Project = {
@@ -107,7 +196,8 @@ const LOGIN_CASE_PROJECT: Project = {
 
 /**
  * Stands in for the shell: it owns the filtered identifier list, triggers the
- * create form, and re-lists on demand exactly as App does.
+ * create form, re-lists on demand exactly as App does, and passes the runs the
+ * board reads its results from.
  */
 function ShellHarness({
   client,
@@ -115,6 +205,7 @@ function ShellHarness({
   initial = ['TC-1.json'],
   projects = [],
   suites = [],
+  runs,
   onCreateSuite = vi.fn(),
   onCreateProject = vi.fn(),
   onCreateTestRun = vi.fn(),
@@ -124,6 +215,7 @@ function ShellHarness({
   initial?: string[];
   projects?: Project[];
   suites?: never[];
+  runs?: readonly TestRun[];
   onCreateSuite?: () => void;
   onCreateProject?: () => void;
   onCreateTestRun?: () => void;
@@ -141,6 +233,7 @@ function ShellHarness({
         identifiers={identifiers}
         projects={projects}
         suites={suites}
+        runs={runs}
         createRequest={createRequest}
         onStatus={onStatus}
         onChanged={async () => setIdentifiers(await client.listTestCases())}
@@ -335,6 +428,8 @@ describe('TestCasesModule', () => {
     );
     expect(await screen.findByRole('button', { name: 'Actions for Renamed Case' })).toBeDefined();
     expect(api.calls).toContain('PUT /api/test_cases/TC-1.json');
+    // The edit form writes a priority; it must not carry an outcome.
+    expect(api.statusInPriority).toEqual([]);
   });
 
   it('requires an explicit confirmation before deleting a case', async () => {
@@ -367,12 +462,18 @@ describe('TestCasesModule', () => {
     expect(api.calls.some((call) => call.startsWith('DELETE'))).toBe(false);
   });
 
-  it('marks every selected case through the bulk actions and clears the selection', async () => {
-    const api = createStubApi(['TC-1.json', 'TC-2.json']);
+  it('records a bulk outcome against the selected run, never on the cases', async () => {
+    const selectedRun = run(RUN_ID);
+    const api = createStubApi(['TC-1.json', 'TC-2.json'], { runs: [selectedRun] });
     const onStatus = vi.fn();
 
     render(
-      <ShellHarness client={api.client} onStatus={onStatus} initial={['TC-1.json', 'TC-2.json']} />,
+      <ShellHarness
+        client={api.client}
+        onStatus={onStatus}
+        initial={['TC-1.json', 'TC-2.json']}
+        runs={[selectedRun]}
+      />,
     );
     await screen.findByRole('button', { name: 'Actions for Case TC-1.json' });
 
@@ -383,11 +484,103 @@ describe('TestCasesModule', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark passed' }));
 
     await waitFor(() =>
-      expect(onStatus).toHaveBeenCalledWith('Marked 2 test cases as Passed.'),
+      expect(onStatus).toHaveBeenCalledWith(`Recorded Passed for 2 test cases in ${RUN_ID}.`),
     );
-    expect(api.calls).toContain('PUT /api/test_cases/TC-1.json');
-    expect(api.calls).toContain('PUT /api/test_cases/TC-2.json');
+    expect(api.calls).toContain(`POST /api/test_runs/${RUN_ID}/results`);
+    expect(api.recorded).toEqual([
+      { testRunId: RUN_ID, testCaseId: 'TC-1.json', status: 'Passed' },
+      { testRunId: RUN_ID, testCaseId: 'TC-2.json', status: 'Passed' },
+    ]);
+    // A status belongs to the run, so no case document is written (re-reads are
+    // fine) and no status ever lands in a priority field.
+    expect(wroteCaseDocument(api.calls)).toBe(false);
+    expect(api.statusInPriority).toEqual([]);
+    expect(api.runs.get(RUN_ID)?.results?.map((entry) => entry.status)).toEqual([
+      'Passed',
+      'Passed',
+    ]);
     expect(screen.queryByText(/cases selected/)).toBeNull();
+  });
+
+  it('refuses to record without a run and points the reader at the run control', async () => {
+    const api = createStubApi(['TC-1.json', 'TC-2.json']);
+    const onStatus = vi.fn();
+
+    render(
+      <ShellHarness
+        client={api.client}
+        onStatus={onStatus}
+        initial={['TC-1.json', 'TC-2.json']}
+        runs={[]}
+      />,
+    );
+    await screen.findByRole('button', { name: 'Actions for Case TC-1.json' });
+
+    expect(screen.getByText('No test runs yet — create one to record results.')).toBeDefined();
+
+    fireEvent.click(screen.getByLabelText('Select Case TC-1.json'));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark passed' }));
+
+    await waitFor(() =>
+      expect(onStatus).toHaveBeenCalledWith('Select a test run before recording results.', 'error'),
+    );
+    expect(api.calls.some((call) => call.startsWith('POST'))).toBe(false);
+  });
+
+  it('shows the empty state and disables recording when the shell offers no runs', async () => {
+    const api = createStubApi(['TC-1.json'], { titles: { 'TC-1.json': 'Verify Login' } });
+
+    render(
+      <TestCasesModule
+        client={api.client}
+        identifiers={['TC-1.json']}
+        projects={[]}
+        suites={[]}
+        onStatus={vi.fn()}
+      />,
+    );
+    await screen.findByRole('button', { name: 'Actions for Verify Login' });
+
+    // Without a run the board explains the cell instead of inventing a status.
+    expect(screen.queryByLabelText('Results run')).toBeNull();
+    expect(screen.getByText('No run selected')).toBeDefined();
+    expect(
+      (screen.getByLabelText('Record result for Verify Login') as HTMLSelectElement).disabled,
+    ).toBe(true);
+  });
+
+  it('reads the LAST RESULT column from the run and records a row result through it', async () => {
+    const seeded = run(RUN_ID, [{ testCaseId: 'TC-1.json', status: 'Failed' }]);
+    const api = createStubApi(['TC-1.json'], {
+      titles: { 'TC-1.json': 'Verify Login' },
+      runs: [seeded],
+    });
+    const onStatus = vi.fn();
+
+    render(<ShellHarness client={api.client} onStatus={onStatus} runs={[seeded]} />);
+    await screen.findByRole('button', { name: 'Actions for Verify Login' });
+
+    // The status comes from the run's embedded results, not the case document.
+    expect(screen.getByRole('status', { name: 'Status: Failed' })).toBeDefined();
+    expect((screen.getByLabelText('Results run') as HTMLSelectElement).value).toBe(RUN_ID);
+
+    fireEvent.change(screen.getByLabelText('Record result for Verify Login'), {
+      target: { value: 'Passed' },
+    });
+
+    await waitFor(() =>
+      expect(onStatus).toHaveBeenCalledWith(`Recorded Passed for TC-1.json in ${RUN_ID}.`),
+    );
+    expect(api.calls).toContain(`POST /api/test_runs/${RUN_ID}/results`);
+    expect(api.recorded).toEqual([
+      { testRunId: RUN_ID, testCaseId: 'TC-1.json', status: 'Passed' },
+    ]);
+    // The API owns the history, so the new outcome is appended for the run.
+    expect(api.runs.get(RUN_ID)?.results).toEqual([
+      { testCaseId: 'TC-1.json', status: 'Failed' },
+      { testCaseId: 'TC-1.json', status: 'Passed' },
+    ]);
+    expect(api.statusInPriority).toEqual([]);
   });
 
   it('deletes a whole selection only after confirmation', async () => {
@@ -418,11 +611,17 @@ describe('TestCasesModule', () => {
   });
 
   it('opens the detail pane and advances through the folder with Pass & next', async () => {
-    const api = createStubApi(['TC-1.json', 'TC-2.json']);
+    const selectedRun = run(RUN_ID);
+    const api = createStubApi(['TC-1.json', 'TC-2.json'], { runs: [selectedRun] });
     const onStatus = vi.fn();
 
     render(
-      <ShellHarness client={api.client} onStatus={onStatus} initial={['TC-1.json', 'TC-2.json']} />,
+      <ShellHarness
+        client={api.client}
+        onStatus={onStatus}
+        initial={['TC-1.json', 'TC-2.json']}
+        runs={[selectedRun]}
+      />,
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Actions for Case TC-1.json' }));
@@ -430,17 +629,25 @@ describe('TestCasesModule', () => {
     expect(screen.getByText('ID: TC-1.json')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Steps & Description' })).toBeDefined();
 
-    const previous = () => screen.getByRole('button', { name: 'Previous test case' }) as HTMLButtonElement;
+    const previous = () =>
+      screen.getByRole('button', { name: 'Previous test case' }) as HTMLButtonElement;
+    const passAndNext = () =>
+      screen.getByRole('button', { name: /pass & next/i }) as HTMLButtonElement;
     expect(previous().disabled).toBe(true);
+    // With a run selected the outcome can be recorded; without one it is disabled.
+    expect(passAndNext().disabled).toBe(false);
 
-    fireEvent.click(screen.getByRole('button', { name: /pass & next/i }));
+    fireEvent.click(passAndNext());
 
     await waitFor(() =>
-      expect(onStatus).toHaveBeenCalledWith('Updated TC-1.json status to Passed.'),
+      expect(onStatus).toHaveBeenCalledWith(`Recorded Passed for TC-1.json in ${RUN_ID}.`),
     );
     expect(await screen.findByText('ID: TC-2.json')).toBeDefined();
     await waitFor(() => expect(previous().disabled).toBe(false));
-    expect(api.calls).toContain('PUT /api/test_cases/TC-1.json');
+    expect(api.calls).toContain(`POST /api/test_runs/${RUN_ID}/results`);
+    // Pass & next records a result; it does not write the case document.
+    expect(wroteCaseDocument(api.calls)).toBe(false);
+    expect(api.statusInPriority).toEqual([]);
   });
 
   it('reports a refused mutation through the shared status region', async () => {
@@ -457,6 +664,32 @@ describe('TestCasesModule', () => {
         'error',
       ),
     );
+  });
+
+  it('reports a refused result without losing the board', async () => {
+    const selectedRun = run(RUN_ID);
+    const api = createStubApi(['TC-1.json'], {
+      failMutation: true,
+      titles: { 'TC-1.json': 'Verify Login' },
+      runs: [selectedRun],
+    });
+    const onStatus = vi.fn();
+
+    render(<ShellHarness client={api.client} onStatus={onStatus} runs={[selectedRun]} />);
+    await screen.findByRole('button', { name: 'Actions for Verify Login' });
+
+    fireEvent.change(screen.getByLabelText('Record result for Verify Login'), {
+      target: { value: 'Blocked' },
+    });
+
+    await waitFor(() =>
+      expect(onStatus).toHaveBeenCalledWith(
+        'Could not record a result for TC-1.json: Storage is read-only',
+        'error',
+      ),
+    );
+    expect(api.recorded).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Actions for Verify Login' })).toBeDefined();
   });
 
   it('has no detectable WCAG 2.1 AA violations on the board with the detail pane open', async () => {
@@ -522,6 +755,41 @@ describe('TestCasesModule', () => {
     expect(await screen.findByRole('dialog', { name: /create new test case/i })).toBeDefined();
     // Let the detail load settle before auditing, so axe sees a stable tree.
     await screen.findByRole('button', { name: 'Actions for Case TC-1.json' });
+
+    const results = await axe.run(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  });
+
+  it('has no detectable WCAG 2.1 AA violations with the run controls and recorded results', async () => {
+    const selectedRun = run(RUN_ID, [
+      { testCaseId: 'TC-1.json', status: 'Passed' },
+      { testCaseId: 'TC-2.json', status: 'Blocked' },
+    ]);
+    const api = createStubApi(['TC-1.json', 'TC-2.json', 'TC-3.json'], {
+      titles: { 'TC-1.json': 'Verify Login' },
+      runs: [selectedRun],
+    });
+
+    const { container } = render(
+      <TestCasesModule
+        client={api.client}
+        identifiers={['TC-1.json', 'TC-2.json', 'TC-3.json']}
+        projects={[]}
+        suites={[]}
+        runs={[selectedRun]}
+        onStatus={vi.fn()}
+      />,
+    );
+    await screen.findByRole('button', { name: 'Actions for Verify Login' });
+
+    // A recorded result, a run holding none for a case, and the run selector
+    // all on screen at once.
+    expect(screen.getByRole('status', { name: 'Status: Passed' })).toBeDefined();
+    expect(screen.getAllByText('No result yet').length).toBe(1);
+    expect(screen.getByLabelText('Results run')).toBeDefined();
 
     const results = await axe.run(container, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },

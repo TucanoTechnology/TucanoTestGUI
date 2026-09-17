@@ -1533,3 +1533,58 @@ button.menu-item:hover {
   background: none;
   font-weight: 400;
 }
+
+/* Run-scoped results (issue #65): status is read from the selected run, so the
+   toolbar carries the run selector and each row carries the record control. */
+.table-run-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.table-run-select label {
+  margin-bottom: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+}
+
+.table-run-select select {
+  width: auto;
+  min-width: 140px;
+  padding: 4px 8px;
+  font-size: var(--font-size-sm);
+}
+
+.table-run-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+}
+
+.case-severity {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-body);
+  font-weight: var(--weight-medium);
+  font-size: var(--font-size-sm);
+}
+
+.case-result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.case-result-empty {
+  color: var(--color-text-subtle);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+}
+
+.case-result-select {
+  width: auto;
+  padding: 3px 6px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-body);
+}

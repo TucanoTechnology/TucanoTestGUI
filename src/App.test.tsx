@@ -65,6 +65,8 @@ function mockFullClient(): TucanoApiClient {
   const cases = ['TC-1.json'];
   const runs = ['RUN-1.json'];
   const milestones = ['M-1.json'];
+  // Results belong to the run (issue #65), so recording appends to it.
+  const runResults: { testCaseId: string; status: string }[] = [];
 
   const stubFetch = (async (url: string, init?: RequestInit) => {
     const urlStr = String(url);
@@ -152,6 +154,12 @@ function mockFullClient(): TucanoApiClient {
     }
 
     if (urlStr.includes('/test_runs')) {
+      const resultRoute = /\/test_runs\/([^/]+)\/results$/.exec(urlStr);
+      if (resultRoute && method === 'POST') {
+        const body = JSON.parse(init?.body as string);
+        runResults.push({ testCaseId: body.testCaseId, status: body.status });
+        return new Response(JSON.stringify({ message: `Recorded ${body.status}.` }), { status: 200 });
+      }
       if (method === 'GET') {
         if (urlStr.endsWith('/RUN-1.json')) {
           return new Response(JSON.stringify({
@@ -165,6 +173,7 @@ function mockFullClient(): TucanoApiClient {
                 steps: ['Navigate to /login', 'Enter credentials'],
               },
             ],
+            results: [...runResults],
           }));
         }
         return new Response(JSON.stringify(runs));
@@ -327,7 +336,8 @@ describe('App', () => {
     expect(screen.getByText(/navigate to \/login/i)).toBeDefined();
 
     fireEvent.click(screen.getByRole('button', { name: /mark passed/i }));
-    await screen.findByText(/marked verify login as passed/i);
+    // The outcome is recorded against the run, which is what the shell announces.
+    await screen.findByText(/recorded passed for verify login in RUN-1\.json/i);
   });
 
   it('validates WCAG 2.1 AA on test execution workspace', async () => {

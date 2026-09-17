@@ -26,15 +26,50 @@ export interface Attachment {
   uploadedAt?: string;
 }
 
+/**
+ * The result vocabulary, mirroring `TestCaseResult.status` and
+ * `TestResultRequest.status` in api/openapi.json. A status describes one
+ * execution of one case and therefore belongs to a test run, never to the case
+ * document (issue #65).
+ */
+export const TEST_RESULT_STATUSES = ['Passed', 'Failed', 'Blocked', 'Untested', 'Retest'] as const;
+export type TestResultStatus = (typeof TEST_RESULT_STATUSES)[number];
+
+/** Mirrors `TestCase.priority`; independent of both status and severity. */
+export const TEST_CASE_PRIORITIES = ['Low', 'Medium', 'High', 'Critical'] as const;
+export type TestCasePriority = (typeof TEST_CASE_PRIORITIES)[number];
+
+/** Mirrors `TestCase.severity`; independent of both status and priority. */
+export const TEST_CASE_SEVERITIES = ['Trivial', 'Minor', 'Major', 'Critical'] as const;
+export type TestCaseSeverity = (typeof TEST_CASE_SEVERITIES)[number];
+
 export interface TestCase {
   testCaseId: string;
   title: string;
   description?: string;
   steps?: string[];
   expectedResult: string;
-  priority?: string;
+  priority?: TestCasePriority;
+  severity?: TestCaseSeverity;
   exploratory?: boolean;
   attachments?: Attachment[];
+}
+
+/** One case's outcome inside a run; mirrors `TestCaseResult` in the contract. */
+export interface TestCaseResult {
+  testCaseId?: string;
+  status?: TestResultStatus;
+  timestamp?: string;
+  notes?: string;
+  durationMs?: number;
+  attachments?: Attachment[];
+  defectLinks?: string[];
+}
+
+export interface TestResultInput {
+  testCaseId: string;
+  status: TestResultStatus;
+  notes?: string;
 }
 
 export interface TestSuite {
@@ -57,6 +92,8 @@ export interface TestRun {
   projects?: Project[];
   testSuites?: TestSuite[];
   testCases?: TestCase[];
+  /** Run-scoped outcomes; the only place a case status is recorded. */
+  results?: TestCaseResult[];
 }
 
 export interface Milestone {
@@ -285,6 +322,18 @@ export class TucanoApiClient {
     });
   }
 
+  /**
+   * Records one case's outcome against a run (`recordTestRunResult` in the
+   * contract). The API appends or replaces the run's result for that case; the
+   * case document is never touched.
+   */
+  async recordTestRunResult(id: string, result: TestResultInput): Promise<{ message: string }> {
+    return this.request(`/test_runs/${encodeURIComponent(id)}/results`, {
+      method: 'POST',
+      body: JSON.stringify(result),
+    });
+  }
+
   // --- Milestones ---
   async listMilestones(query: ListQuery = {}): Promise<string[]> {
     const identifiers = await this.request<string[]>('/milestones');
@@ -326,4 +375,56 @@ export function applyFilter(identifiers: string[], filter?: string): string[] {
   }
   const needle = filter.toLowerCase();
   return identifiers.filter((identifier) => identifier.toLowerCase().includes(needle));
+}
+
+/**
+ * Milliseconds since the epoch for a run timestamp. The contract documents
+ * ISO-8601, the API has also served Unix seconds as a string; anything else
+ * sorts oldest so a readable run still wins.
+ */
+function runTimestamp(run: TestRun): number {
+  const raw = (run.timestamp ?? '').trim();
+  if (/^\d+$/.test(raw)) {
+    return Number(raw) * 1000;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed;
+}
+
+/**
+ * The run the case table reads statuses from: the most recent one, with the
+ * later entry winning a tie so the newest write is never hidden by a
+ * same-second sibling.
+ */
+export function latestTestRun(runs: readonly TestRun[] | null | undefined): TestRun | null {
+  let latest: TestRun | null = null;
+  for (const run of runs ?? []) {
+    if (latest === null || runTimestamp(run) >= runTimestamp(latest)) {
+      latest = run;
+    }
+  }
+  return latest;
+}
+
+/**
+ * The status a run recorded for one case, or `null` when the run carries no
+ * result for it. Callers render an empty state for `null` rather than
+ * inventing a status (issue #65).
+ */
+export function resultStatus(
+  run: TestRun | null | undefined,
+  testCaseId: string | null | undefined,
+): TestResultStatus | null {
+  if (!run || !testCaseId) {
+    return null;
+  }
+  // A run appends results, so the last entry for the case is the current one.
+  const results = run.results ?? [];
+  for (let index = results.length - 1; index >= 0; index -= 1) {
+    const entry = results[index];
+    if (entry?.testCaseId === testCaseId) {
+      return entry.status ?? null;
+    }
+  }
+  return null;
 }

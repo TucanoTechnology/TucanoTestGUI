@@ -377,6 +377,7 @@ export default function App({ client }: AppProps) {
                 identifiers={identifiers}
                 projects={projectsList}
                 suites={suitesList}
+                runs={runsList}
                 createRequest={caseCreateRequest}
                 onStatus={handleModuleStatus}
                 onChanged={handleCasesChanged}

@@ -1,5 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ApiRequestError, TestCase, TestRun, TestSuite, TucanoApiClient } from '../../api/client';
+import {
+  ApiRequestError,
+  TEST_RESULT_STATUSES,
+  TestResultStatus,
+  TestRun,
+  TestSuite,
+  TucanoApiClient,
+  resultStatus,
+} from '../../api/client';
 import DetailPreviewPanel, {
   type PreviewField,
   type PreviewLinkList,
@@ -12,33 +20,17 @@ import StatusBadge from '../../components/StatusBadge';
  * The shell owns the filtered identifier list and the shared live region; the
  * module resolves those identifiers into TestRun entities, renders the loading,
  * empty and error states, previews the selected run in its second pane,
- * executes a run case by case and persists every recorded result through
+ * executes a run case by case and records every outcome through
  * TucanoApiClient. Run membership is taken from the test suites the shell
  * already fetched, so picking a suite is a local selection rather than another
  * round trip.
- */
-
-/**
- * Run-scoped result mapping.
  *
- * TestRun carries no result field yet, so a recorded result rides on the case's
- * priority exactly as the shell did before this lift. Issue #65 decouples case
- * status from priority; when it lands, these exports are the only place that
- * has to change, and the tests below pin the mapping down.
+ * Results are run-scoped (issue #65): a status belongs to the run that recorded
+ * it, never to the case document. Every status on this screen is read from the
+ * run's own `results` and written back through
+ * `POST /test_runs/{id}/results`, then read back so the API stays the source of
+ * truth.
  */
-export const RESULT_STATUSES = ['Passed', 'Failed', 'Blocked', 'Untested'] as const;
-export type RunResultStatus = (typeof RESULT_STATUSES)[number];
-
-export function resultFromCase(testCase: TestCase): RunResultStatus {
-  const recorded = testCase.priority;
-  return RESULT_STATUSES.includes(recorded as RunResultStatus)
-    ? (recorded as RunResultStatus)
-    : 'Untested';
-}
-
-export function applyResult(testCase: TestCase, status: RunResultStatus): TestCase {
-  return { ...testCase, priority: status };
-}
 
 export interface TestRunsModuleProps {
   client: TucanoApiClient;
@@ -264,26 +256,28 @@ export default function TestRunsModule({
     setExecutingIndex(0);
   };
 
-  const handleSetResult = async (status: RunResultStatus) => {
-    const cases = executing?.testCases ?? [];
-    const currentCase = cases[executingIndex];
+  const handleSetResult = async (status: TestResultStatus) => {
+    const currentCase = executingCases[executingIndex];
     if (!executing || !currentCase || savingResult) return;
-
-    const updatedRun: TestRun = {
-      ...executing,
-      testCases: cases.map((testCase, index) =>
-        index === executingIndex ? applyResult(testCase, status) : testCase,
-      ),
-    };
 
     setSavingResult(true);
     try {
-      await client.updateTestRun(updatedRun.testRunId, updatedRun);
-      setExecuting(updatedRun);
-      onStatus(`Marked ${currentCase.title} as ${status}.`);
+      await client.recordTestRunResult(executing.testRunId, {
+        testCaseId: currentCase.testCaseId,
+        status,
+      });
+      // The API owns the run's results; read them back rather than guessing.
+      const refreshed = await client.getTestRun(executing.testRunId);
+      setExecuting(refreshed);
+      setRuns((current) =>
+        current.map((run) => (run.testRunId === refreshed.testRunId ? refreshed : run)),
+      );
+      // The shell's own run list feeds other boards, so let it catch up first.
+      await onChanged?.();
+      onStatus(`Recorded ${status} for ${currentCase.title} in ${refreshed.testRunId}.`);
     } catch (error) {
       const failure = toFailure(error, 'The API refused the request.');
-      onStatus(`Could not save the result: ${failure.message}`, 'error');
+      onStatus(`Could not record the result: ${failure.message}`, 'error');
     } finally {
       setSavingResult(false);
     }
@@ -327,9 +321,14 @@ export default function TestRunsModule({
 
   const executingCases = executing?.testCases ?? [];
   const currentCase = executingCases[executingIndex];
-  const results = RESULT_STATUSES.map((status) => ({
+  const currentStatus = resultStatus(executing, currentCase?.testCaseId);
+  // A run's tally counts a case with no recorded result as untested, the same
+  // bucket the milestone progress endpoint reports.
+  const tallyStatus = (testCaseId: string): TestResultStatus =>
+    resultStatus(executing, testCaseId) ?? 'Untested';
+  const results = TEST_RESULT_STATUSES.map((status) => ({
     status,
-    count: executingCases.filter((testCase) => resultFromCase(testCase) === status).length,
+    count: executingCases.filter((testCase) => tallyStatus(testCase.testCaseId) === status).length,
   }));
 
   return (
@@ -390,8 +389,12 @@ export default function TestRunsModule({
             >
               {runs.map((run) => {
                 const cases = run.testCases ?? [];
-                const passed = cases.filter((testCase) => resultFromCase(testCase) === 'Passed').length;
-                const failed = cases.filter((testCase) => resultFromCase(testCase) === 'Failed').length;
+                const passed = cases.filter(
+                  (testCase) => resultStatus(run, testCase.testCaseId) === 'Passed',
+                ).length;
+                const failed = cases.filter(
+                  (testCase) => resultStatus(run, testCase.testCaseId) === 'Failed',
+                ).length;
 
                 return (
                   <li key={run.testRunId}>
@@ -494,8 +497,8 @@ export default function TestRunsModule({
       <section className="panel-column" aria-label="Execution board">
         {!executing && (
           <p className="module-state">
-            Select a run and choose Execute to record results. Any case already marked keeps its
-            recorded result.
+            Select a run and choose Execute to record results. Results are stored on the run, so a
+            case keeps the outcome this run recorded for it.
           </p>
         )}
 
@@ -530,7 +533,7 @@ export default function TestRunsModule({
                   {/* Recorded results are announced as the execution moves on. */}
                   <p aria-live="polite" style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#475569' }}>
                     {currentCase
-                      ? `Case ${executingIndex + 1} of ${executingCases.length}: ${currentCase.title} is ${resultFromCase(currentCase)}.`
+                      ? `Case ${executingIndex + 1} of ${executingCases.length}: ${currentCase.title} is ${currentStatus ?? 'Untested'}.`
                       : `Case ${executingIndex + 1} of ${executingCases.length}.`}
                   </p>
 
@@ -540,7 +543,11 @@ export default function TestRunsModule({
                         <h4 style={{ margin: '0 0 8px 0', fontSize: '15px' }}>
                           {currentCase.title} ({currentCase.testCaseId})
                         </h4>
-                        <StatusBadge status={resultFromCase(currentCase)} size="small" />
+                        {currentStatus ? (
+                          <StatusBadge status={currentStatus} size="small" />
+                        ) : (
+                          <span className="case-result-empty">No result yet</span>
+                        )}
                       </div>
                       <p style={{ fontSize: '13px', margin: '4px 0' }}>
                         <strong>Expected Result:</strong> {currentCase.expectedResult}
@@ -563,7 +570,7 @@ export default function TestRunsModule({
                         </div>
                       )}
                       <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
-                        {RESULT_STATUSES.map((status) => (
+                        {TEST_RESULT_STATUSES.map((status) => (
                           <button
                             key={status}
                             type="button"
@@ -572,7 +579,7 @@ export default function TestRunsModule({
                             disabled={savingResult}
                             onClick={() => void handleSetResult(status)}
                           >
-                            {status === 'Untested' ? 'Reset Untested' : `Mark ${status}`}
+                            Mark {status}
                           </button>
                         ))}
                       </div>
