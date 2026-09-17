@@ -358,11 +358,7 @@ export default function DetailView({
             </button>
           )}
 
-          <DuplicateButton
-            resourceId={itemId}
-            resourceType={itemType === 'case' ? 'case' : itemType === 'suite' ? 'suite' : (itemType as any)}
-            onDuplicate={handleDuplicate}
-          />
+          <DuplicateButton resourceId={itemId} resourceType={itemType} onDuplicate={handleDuplicate} />
 
           <button
             type="button"

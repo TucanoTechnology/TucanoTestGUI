@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_API_BASE_URL, createApiClient, resolveApiBaseUrl } from './configure';
+import { DEFAULT_API_BASE_URL, apiErrorEnvelope, createApiClient, resolveApiBaseUrl } from './configure';
+import { ApiError } from './generated';
 
 describe('resolveApiBaseUrl', () => {
   it('falls back to the proxied path when nothing is configured', () => {
@@ -71,5 +72,38 @@ describe('createApiClient', () => {
     expect(client.reports).toBeDefined();
     expect(client.configurations).toBeDefined();
     expect(client.auth).toBeDefined();
+  });
+});
+
+describe('apiErrorEnvelope', () => {
+  const failedCall = (body: unknown, status = 409) =>
+    new ApiError(
+      { method: 'POST', url: '/test_cases/{id}/duplicate' },
+      { url: '/api/test_cases/TC-1/duplicate', ok: false, status, statusText: 'Conflict', body },
+      'Conflict',
+    );
+
+  it('reads the code and message the API publishes', () => {
+    expect(
+      apiErrorEnvelope(failedCall({ error: { code: 'conflict', message: 'Already exists.' } })),
+    ).toEqual({ code: 'conflict', message: 'Already exists.' });
+  });
+
+  it('returns null for a body that carries no envelope', () => {
+    expect(apiErrorEnvelope(failedCall('length limit exceeded', 413))).toBeNull();
+    expect(apiErrorEnvelope(failedCall(undefined, 502))).toBeNull();
+    expect(apiErrorEnvelope(failedCall(null))).toBeNull();
+  });
+
+  it('returns null when the envelope is incomplete or the wrong shape', () => {
+    expect(apiErrorEnvelope(failedCall({ error: { code: 'conflict' } }))).toBeNull();
+    expect(apiErrorEnvelope(failedCall({ error: 'conflict' }))).toBeNull();
+    expect(apiErrorEnvelope(failedCall({ message: 'Already exists.' }))).toBeNull();
+  });
+
+  it('returns null for anything that is not a failed API call', () => {
+    expect(apiErrorEnvelope(new Error('offline'))).toBeNull();
+    expect(apiErrorEnvelope(undefined)).toBeNull();
+    expect(apiErrorEnvelope({ body: { error: { code: 'conflict', message: 'Already exists.' } } })).toBeNull();
   });
 });
