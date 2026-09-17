@@ -72,6 +72,37 @@ export interface TestResultInput {
   notes?: string;
 }
 
+/** Mirrors `DefectLink.trackerType`; the only four trackers the API knows. */
+export const DEFECT_TRACKER_TYPES = ['jira', 'github', 'gitlab', 'custom'] as const;
+export type DefectTrackerType = (typeof DEFECT_TRACKER_TYPES)[number];
+
+/**
+ * A defect a run result points at; mirrors `DefectLink` in the contract.
+ * `linkId` is the link's own identity, which is why unlinking takes it rather
+ * than the defect's position in the list.
+ */
+export interface DefectLink {
+  linkId: string;
+  defectId: string;
+  defectUrl: string;
+  trackerType: DefectTrackerType;
+  title?: string;
+  status?: string;
+  linkedAt: string;
+}
+
+/**
+ * The client-supplied half of a defect link; mirrors `DefectLinkRequest`. The
+ * API derives `linkId` and `linkedAt` and rejects a body that carries either,
+ * so neither appears here.
+ */
+export interface DefectLinkInput {
+  defectId: string;
+  defectUrl: string;
+  trackerType: DefectTrackerType;
+  title?: string;
+}
+
 export interface TestSuite {
   suiteId: string;
   name: string;
@@ -332,6 +363,46 @@ export class TucanoApiClient {
       method: 'POST',
       body: JSON.stringify(result),
     });
+  }
+
+  /**
+   * Lists the defects linked to one run result (`listResultDefects`). An empty
+   * list means the result exists and carries no link; an unknown run or a run
+   * with no result for that case answers 404 instead.
+   */
+  async listResultDefects(id: string, caseId: string): Promise<DefectLink[]> {
+    const body = await this.request<{ defects?: DefectLink[] }>(
+      `/test_runs/${encodeURIComponent(id)}/results/${encodeURIComponent(caseId)}/defects`,
+    );
+    return body.defects ?? [];
+  }
+
+  /**
+   * Links a defect to one run result (`linkResultDefect`). The API owns the
+   * link identity and the timestamp, and answers 409 rather than linking the
+   * same `defectId` twice.
+   */
+  async linkResultDefect(
+    id: string,
+    caseId: string,
+    link: DefectLinkInput,
+  ): Promise<{ id: string; message: string }> {
+    return this.request(`/test_runs/${encodeURIComponent(id)}/results/${encodeURIComponent(caseId)}/defects`, {
+      method: 'POST',
+      body: JSON.stringify(link),
+    });
+  }
+
+  /** Removes one defect link by the identifier the link route returned. */
+  async unlinkResultDefect(
+    id: string,
+    caseId: string,
+    linkId: string,
+  ): Promise<{ message: string }> {
+    return this.request(
+      `/test_runs/${encodeURIComponent(id)}/results/${encodeURIComponent(caseId)}/defects/${encodeURIComponent(linkId)}`,
+      { method: 'DELETE' },
+    );
   }
 
   // --- Milestones ---

@@ -4,6 +4,8 @@ import axe from 'axe-core';
 import { describe, expect, it, vi } from 'vitest';
 import TestRunsModule from './TestRunsModule';
 import {
+  DefectLink,
+  DefectLinkInput,
   TestCasePriority,
   TestCaseResult,
   TestCase,
@@ -55,6 +57,12 @@ interface RecordedResult {
   status: TestResultStatus;
 }
 
+/** A defect write as the API receives it: scoped to a result, minus the identity. */
+interface LinkedDefect extends DefectLinkInput {
+  runId: string;
+  caseId: string;
+}
+
 interface StubApi {
   client: TucanoApiClient;
   calls: string[];
@@ -62,19 +70,38 @@ interface StubApi {
   created: TestRun[];
   updated: TestRun[];
   recorded: RecordedResult[];
+  defectLinks: Map<string, DefectLink[]>;
+  linkedDefects: LinkedDefect[];
+  unlinkedDefects: string[];
 }
 
-/** Routed stub: the run list, run details, the result route and the mutations. */
+/** Defect links belong to one result of one run, which is how the stub keys them. */
+function defectKey(runId: string, caseId: string): string {
+  return `${runId}::${caseId}`;
+}
+
+/** Routed stub: the run list, run details, the result and defect routes, and the mutations. */
 function createStubApi(
   initial: TestRun[],
-  options: { failDetail?: boolean; failRetry?: boolean; failMutation?: boolean } = {},
+  options: {
+    failDetail?: boolean;
+    failRetry?: boolean;
+    failMutation?: boolean;
+    defects?: DefectLink[];
+  } = {},
 ): StubApi {
   const runs = new Map(initial.map((entity) => [entity.testRunId, entity]));
   const calls: string[] = [];
   const created: TestRun[] = [];
   const updated: TestRun[] = [];
   const recorded: RecordedResult[] = [];
+  const defectLinks = new Map<string, DefectLink[]>();
+  const linkedDefects: LinkedDefect[] = [];
+  const unlinkedDefects: string[] = [];
   let detailReads = 0;
+  // Seeded links belong to RUN-1.json/TC-1.json, the pair these tests exercise.
+  if (options.defects) defectLinks.set(defectKey('RUN-1.json', 'TC-1.json'), options.defects);
+  let defectSequence = options.defects?.length ?? 0;
 
   const stubFetch = (async (url: string, init?: RequestInit) => {
     const urlStr = String(url);
@@ -108,6 +135,51 @@ function createStubApi(
         { testCaseId: body.testCaseId, status: body.status },
       ];
       return json({ message: `Recorded ${body.status} for ${body.testCaseId}.` });
+    }
+
+    // A defect link hangs off one result, so its own path is matched before the
+    // greedy detail route, exactly as the API scopes it.
+    const defectMatch = /\/test_runs\/([^/]+)\/results\/([^/]+)\/defects(?:\/([^/]+))?$/.exec(
+      urlStr,
+    );
+    const defectRunId = defectMatch?.[1] ? decodeURIComponent(defectMatch[1]) : null;
+    const defectCaseId = defectMatch?.[2] ? decodeURIComponent(defectMatch[2]) : null;
+    const defectLinkId = defectMatch?.[3] ? decodeURIComponent(defectMatch[3]) : null;
+
+    if (defectRunId && defectCaseId) {
+      const key = defectKey(defectRunId, defectCaseId);
+      const held = defectLinks.get(key) ?? [];
+
+      if (method === 'GET' && !defectLinkId) {
+        return json({ defects: held });
+      }
+
+      if (method === 'POST' && !defectLinkId) {
+        const body = JSON.parse(String(init?.body)) as DefectLinkInput;
+        linkedDefects.push({ runId: defectRunId, caseId: defectCaseId, ...body });
+        defectSequence += 1;
+        const linked: DefectLink = {
+          linkId: `LINK-${defectSequence}`,
+          linkedAt: '1757030400',
+          ...body,
+        };
+        defectLinks.set(key, [...held, linked]);
+        return json({ id: linked.linkId, message: 'Defect linked.' }, 201);
+      }
+
+      if (method === 'DELETE' && defectLinkId) {
+        if (!held.some((link) => link.linkId === defectLinkId)) {
+          return json({ error: { code: 'not_found', message: 'That link does not exist' } }, 404);
+        }
+        defectLinks.set(
+          key,
+          held.filter((link) => link.linkId !== defectLinkId),
+        );
+        unlinkedDefects.push(defectLinkId);
+        return json({ message: 'Defect unlinked.' });
+      }
+
+      return json({ error: { code: 'invalid_request', message: 'Unsupported defect call' } }, 400);
     }
 
     const detail = /\/test_runs\/(.+)$/.exec(urlStr);
@@ -150,7 +222,17 @@ function createStubApi(
     return json([]);
   }) as unknown as typeof fetch;
 
-  return { client: new TucanoApiClient('/api', stubFetch), calls, runs, created, updated, recorded };
+  return {
+    client: new TucanoApiClient('/api', stubFetch),
+    calls,
+    runs,
+    created,
+    updated,
+    recorded,
+    defectLinks,
+    linkedDefects,
+    unlinkedDefects,
+  };
 }
 
 /**
@@ -642,6 +724,106 @@ describe('TestRunsModule', () => {
     expect(screen.queryByText(/execution workspace/i)).toBeNull();
   });
 
+  it('offers defect links only for a failed or blocked result', async () => {
+    const api = createStubApi([
+      run(
+        'RUN-1.json',
+        [testCase('TC-1.json', 'Verify Login'), testCase('TC-2.json', 'Submit Order')],
+        {
+          results: [
+            { testCaseId: 'TC-1.json', status: 'Failed' },
+            { testCaseId: 'TC-2.json', status: 'Passed' },
+          ],
+        },
+      ),
+    ]);
+
+    render(<ShellHarness client={api.client} onStatus={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Execute RUN-1.json' }));
+
+    expect(await screen.findByText('Case 1 of 2: Verify Login is Failed.')).toBeDefined();
+    expect(await screen.findByText('No defects linked to this result.')).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Linked defects (0)' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /next case/i }));
+
+    // A pass raises no defect, so the panel steps aside with the status.
+    expect(await screen.findByText('Case 2 of 2: Submit Order is Passed.')).toBeDefined();
+    expect(screen.queryByRole('heading', { name: /linked defects/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Link defect' })).toBeNull();
+  });
+
+  it('links a defect to the failed result the board is showing', async () => {
+    const api = createStubApi([
+      run('RUN-1.json', [testCase('TC-1.json', 'Verify Login')], {
+        results: [{ testCaseId: 'TC-1.json', status: 'Failed' }],
+      }),
+    ]);
+    const onStatus = vi.fn();
+
+    render(<ShellHarness client={api.client} onStatus={onStatus} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Execute RUN-1.json' }));
+    await screen.findByText('Case 1 of 1: Verify Login is Failed.');
+    await screen.findByText('No defects linked to this result.');
+
+    fireEvent.change(screen.getByLabelText('Defect ID'), { target: { value: 'PROJ-42' } });
+    fireEvent.change(screen.getByLabelText('Defect URL'), {
+      target: { value: 'https://acme.atlassian.net/browse/PROJ-42' },
+    });
+    fireEvent.submit(screen.getByRole('button', { name: 'Link defect' }).closest('form')!);
+
+    await waitFor(() =>
+      expect(api.linkedDefects).toEqual([
+        {
+          runId: 'RUN-1.json',
+          caseId: 'TC-1.json',
+          defectId: 'PROJ-42',
+          defectUrl: 'https://acme.atlassian.net/browse/PROJ-42',
+          trackerType: 'jira',
+        },
+      ]),
+    );
+    // The link is shown because the API holds it, not because the form said so.
+    expect(await screen.findByText('Linked defects (1)')).toBeDefined();
+    expect(await screen.findByRole('link', { name: 'PROJ-42' })).toBeDefined();
+    expect(onStatus).toHaveBeenCalledWith('Linked defect PROJ-42 to TC-1.json in RUN-1.json.');
+  });
+
+  it('unlinks a defect from a blocked result and re-reads the API list', async () => {
+    const api = createStubApi(
+      [
+        run('RUN-1.json', [testCase('TC-1.json', 'Verify Login')], {
+          results: [{ testCaseId: 'TC-1.json', status: 'Blocked' }],
+        }),
+      ],
+      {
+        defects: [
+          {
+            linkId: 'LINK-1',
+            defectId: 'PROJ-42',
+            defectUrl: 'https://acme.atlassian.net/browse/PROJ-42',
+            trackerType: 'jira',
+            title: 'Login rejects a valid user',
+            linkedAt: '1757030400',
+          },
+        ],
+      },
+    );
+    const onStatus = vi.fn();
+
+    render(<ShellHarness client={api.client} onStatus={onStatus} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Execute RUN-1.json' }));
+    expect(await screen.findByText('Case 1 of 1: Verify Login is Blocked.')).toBeDefined();
+    await screen.findByRole('link', { name: 'Login rejects a valid user' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink defect PROJ-42' }));
+
+    await waitFor(() => expect(api.unlinkedDefects).toEqual(['LINK-1']));
+    expect(await screen.findByText('No defects linked to this result.')).toBeDefined();
+    expect(screen.queryByRole('link', { name: 'Login rejects a valid user' })).toBeNull();
+    expect(onStatus).toHaveBeenCalledWith('Unlinked defect PROJ-42 from TC-1.json in RUN-1.json.');
+  });
+
   it('has no detectable WCAG 2.1 AA violations, including the delete confirmation', async () => {
     const api = createStubApi([
       run('RUN-1.json', [testCase('TC-1.json', 'Verify Login')], {
@@ -720,6 +902,40 @@ describe('TestRunsModule', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Execute RUN-1.json' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Mark Passed' }));
     expect(await screen.findByText('Case 1 of 1: Verify Login is Passed.')).toBeDefined();
+
+    const results = await axe.run(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  });
+
+  it('has no detectable WCAG 2.1 AA violations with the defect links open', async () => {
+    const api = createStubApi(
+      [
+        run('RUN-1.json', [testCase('TC-1.json', 'Verify Login')], {
+          results: [{ testCaseId: 'TC-1.json', status: 'Failed' }],
+        }),
+      ],
+      {
+        defects: [
+          {
+            linkId: 'LINK-1',
+            defectId: 'PROJ-42',
+            defectUrl: 'https://acme.atlassian.net/browse/PROJ-42',
+            trackerType: 'jira',
+            title: 'Login rejects a valid user',
+            linkedAt: '1757030400',
+          },
+        ],
+      },
+    );
+
+    const { container } = render(
+      <TestRunsModule client={api.client} identifiers={['RUN-1.json']} onStatus={vi.fn()} />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Execute RUN-1.json' }));
+    await screen.findByRole('link', { name: 'Login rejects a valid user' });
 
     const results = await axe.run(container, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
