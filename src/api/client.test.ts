@@ -158,6 +158,91 @@ describe('TucanoApiClient', () => {
   });
 });
 
+describe('result defects', () => {
+  const link = {
+    linkId: 'LINK-1',
+    defectId: 'PROJ-42',
+    defectUrl: 'https://acme.atlassian.net/browse/PROJ-42',
+    trackerType: 'jira' as const,
+    title: 'Login rejects a valid user',
+    linkedAt: '1757030400',
+  };
+
+  it('lists the defects linked to one run result', async () => {
+    const { fetchImpl, requests } = recordingFetch({ defects: [link] });
+    const client = new TucanoApiClient('/api', fetchImpl);
+
+    await expect(client.listResultDefects('RUN-1.json', 'TC-1.json')).resolves.toEqual([link]);
+    expect(requests).toEqual([
+      {
+        url: '/api/test_runs/RUN-1.json/results/TC-1.json/defects',
+        method: 'GET',
+        body: undefined,
+      },
+    ]);
+  });
+
+  it('reads an empty list rather than failing when no defect is linked', async () => {
+    const client = new TucanoApiClient('/api', stubFetch(200, { defects: [] }));
+    await expect(client.listResultDefects('RUN-1.json', 'TC-1.json')).resolves.toEqual([]);
+  });
+
+  it('links a defect through the result route, leaving the identity to the API', async () => {
+    const { fetchImpl, requests } = recordingFetch({ id: 'LINK-1', message: 'Defect linked.' }, 201);
+    const client = new TucanoApiClient('/api', fetchImpl);
+
+    await expect(
+      client.linkResultDefect('RUN-1.json', 'TC-1.json', {
+        defectId: 'PROJ-42',
+        defectUrl: 'https://acme.atlassian.net/browse/PROJ-42',
+        trackerType: 'jira',
+        title: 'Login rejects a valid user',
+      }),
+    ).resolves.toEqual({ id: 'LINK-1', message: 'Defect linked.' });
+
+    // `linkId` and `linkedAt` are the API's to derive; sending either is a 400.
+    expect(requests).toEqual([
+      {
+        url: '/api/test_runs/RUN-1.json/results/TC-1.json/defects',
+        method: 'POST',
+        body: {
+          defectId: 'PROJ-42',
+          defectUrl: 'https://acme.atlassian.net/browse/PROJ-42',
+          trackerType: 'jira',
+          title: 'Login rejects a valid user',
+        },
+      },
+    ]);
+  });
+
+  it('unlinks a defect by its own link identifier', async () => {
+    const { fetchImpl, requests } = recordingFetch({ message: 'Defect unlinked.' });
+    const client = new TucanoApiClient('/api', fetchImpl);
+
+    await expect(client.unlinkResultDefect('RUN-1.json', 'TC-1.json', 'LINK-1')).resolves.toEqual({
+      message: 'Defect unlinked.',
+    });
+    expect(requests).toEqual([
+      {
+        url: '/api/test_runs/RUN-1.json/results/TC-1.json/defects/LINK-1',
+        method: 'DELETE',
+        body: undefined,
+      },
+    ]);
+  });
+
+  it('escapes every identifier it puts on the defect route', async () => {
+    const { fetchImpl, requests } = recordingFetch({ defects: [] });
+    const client = new TucanoApiClient('/api', fetchImpl);
+
+    await client.unlinkResultDefect('RUN 1.json', 'TC 1.json', 'LINK/1');
+
+    expect(requests[0]?.url).toBe(
+      '/api/test_runs/RUN%201.json/results/TC%201.json/defects/LINK%2F1',
+    );
+  });
+});
+
 describe('resultStatus', () => {
   const run: TestRun = {
     testRunId: 'RUN-1.json',

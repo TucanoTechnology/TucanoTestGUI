@@ -13,6 +13,7 @@ import DetailPreviewPanel, {
   type PreviewLinkList,
 } from '../../components/DetailPreviewPanel';
 import StatusBadge from '../../components/StatusBadge';
+import ResultDefects from './ResultDefects';
 
 /**
  * Test runs module (issue #73): the execution board.
@@ -30,6 +31,10 @@ import StatusBadge from '../../components/StatusBadge';
  * run's own `results` and written back through
  * `POST /test_runs/{id}/results`, then read back so the API stays the source of
  * truth.
+ *
+ * A failed or blocked result is the one that raises a defect, so those two
+ * statuses hand the case to ResultDefects, which links, lists and unlinks the
+ * defects through the API's own defect routes (issue #60).
  */
 
 export interface TestRunsModuleProps {
@@ -583,6 +588,17 @@ export default function TestRunsModule({
                           </button>
                         ))}
                       </div>
+                      {/* A failure is what raises a defect, so only a failed or
+                          blocked result offers the defect links (issue #60). */}
+                      {(currentStatus === 'Failed' || currentStatus === 'Blocked') && (
+                        <ResultDefects
+                          key={currentCase.testCaseId}
+                          client={client}
+                          runId={executing.testRunId}
+                          caseId={currentCase.testCaseId}
+                          onStatus={onStatus}
+                        />
+                      )}
                     </div>
                   )}
 
