@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import axe from 'axe-core';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { TucanoApiClient } from './api/client';
 
@@ -194,6 +194,48 @@ function mockFullClient(): TucanoApiClient {
   return new TucanoApiClient('/api', stubFetch);
 }
 
+/**
+ * The Reports view answers through the generated client, which calls the global
+ * `fetch` (issue #56). Stubbing the network edge leaves the shell's own legacy
+ * client on its injected stub and lets a test read the requests that were made.
+ */
+function stubReports(): { requested: string[] } {
+  const requested: string[] = [];
+  const just = (body: unknown) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  const stub = (async (url: string) => {
+    const urlStr = String(url);
+    requested.push(urlStr);
+    if (urlStr.includes('/reports/coverage')) {
+      return just({
+        totalCases: 20,
+        suites: [{ suiteId: 'SmokeTest.json', name: 'Smoke Test', caseCount: 4 }],
+      });
+    }
+    if (urlStr.includes('/reports/summary')) {
+      return just({
+        total: 20,
+        passed: 16,
+        failed: 2,
+        blocked: 1,
+        untested: 1,
+        passPercentage: 80,
+        totalDurationMs: 192000,
+      });
+    }
+    return just([]);
+  }) as unknown as typeof fetch;
+  vi.stubGlobal('fetch', stub);
+  return { requested };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('App', () => {
   it('has no detectable WCAG 2.1 AA violations', async () => {
     const { container } = render(<App client={clientReturning(['regression.json'])} />);
@@ -244,6 +286,7 @@ describe('App', () => {
     const projects = screen.getByRole('button', { name: /^projects$/i });
     const suites = screen.getByRole('button', { name: /^test suites$/i });
     const milestones = screen.getByRole('button', { name: /^milestones$/i });
+    const reports = screen.getByRole('button', { name: /^reports$/i });
 
     projects.focus();
     expect(document.activeElement).toBe(projects);
@@ -255,7 +298,60 @@ describe('App', () => {
     expect(document.activeElement).toBe(projects);
 
     fireEvent.keyDown(projects, { key: 'End' });
+    expect(document.activeElement).toBe(reports);
+
+    fireEvent.keyDown(reports, { key: 'ArrowUp' });
     expect(document.activeElement).toBe(milestones);
+  });
+
+  it('opens the Reports tab and shows the coverage and summary the API answered', async () => {
+    const { requested } = stubReports();
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^reports$/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Coverage' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Summary' })).toBeDefined();
+    expect(await screen.findByRole('cell', { name: 'Smoke Test' })).toBeDefined();
+    expect(screen.getByText('Total cases: 20')).toBeDefined();
+    expect(screen.getAllByText('All projects').length).toBe(2);
+    expect(requested).toContain('/api/reports/coverage');
+    expect(requested).toContain('/api/reports/summary');
+
+    // Reports carry their own live region and their own filters, so the shell's
+    // filter control is not shown on this tab.
+    expect(screen.queryByLabelText(/^filter/i)).toBeNull();
+  });
+
+  it('re-asks for the reports when the shell selects a project', async () => {
+    const { requested } = stubReports();
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^reports$/i }));
+    await screen.findByText('Total cases: 20');
+
+    fireEvent.change(screen.getByLabelText(/current project/i), {
+      target: { value: 'PROJ-1.json' },
+    });
+
+    await waitFor(() => {
+      expect(requested).toContain('/api/reports/coverage?projectId=PROJ-1.json');
+      expect(requested).toContain('/api/reports/summary?projectId=PROJ-1.json');
+    });
+  });
+
+  it('passes WCAG 2.1 AA accessibility checks on the reports view', async () => {
+    stubReports();
+    const { container } = render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^reports$/i }));
+    await screen.findByRole('cell', { name: 'Smoke Test' });
+
+    const results = await axe.run(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] },
+    });
+
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
   });
 
   it('opens and closes creation modal when button is clicked', async () => {
