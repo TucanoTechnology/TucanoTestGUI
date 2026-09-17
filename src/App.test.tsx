@@ -320,8 +320,13 @@ describe('App', () => {
   });
 
   it('allows collapsing and expanding hierarchy planes', async () => {
-    render(<App client={clientReturning(['SmokeTest.json'])} />);
-    await screen.findByText(/1 test suite found/i);
+    render(<App client={mockFullClient()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^tests$/i }));
+    await screen.findByText(/1 test found/i);
+
+    // The standard planes view is the non-default layout on the Tests tab.
+    fireEvent.click(screen.getByRole('button', { name: /standard view/i }));
 
     const collapseBtns = screen.getAllByRole('button', { name: /collapse/i });
     expect(collapseBtns.length).toBeGreaterThan(0);
@@ -334,8 +339,7 @@ describe('App', () => {
     render(<App client={mockFullClient()} />);
     await screen.findByText(/1 test suite found/i);
 
-    const editBtns = screen.getAllByRole('button', { name: /^edit$/i });
-    fireEvent.click(editBtns[0]!);
+    fireEvent.click(screen.getByRole('button', { name: /edit SmokeTest\.json/i }));
 
     const dialog = await screen.findByRole('dialog', { name: /edit test suite/i });
     expect(dialog).toBeDefined();
