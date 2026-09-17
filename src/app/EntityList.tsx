@@ -11,7 +11,8 @@ interface EntityItem {
 
 export function EntityList({ entityType }: { entityType: EntityType }) {
   const { client } = useAuth();
-  const { selectedProjectId, selection, setSelection } = useProjectContext();
+  const { selectedProjectId, selection, setSelection, projectsVersion } =
+    useProjectContext();
   const [items, setItems] = useState<EntityItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -139,7 +140,7 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
     return () => {
       cancelled = true;
     };
-  }, [client, entityType, selectedProjectId]);
+  }, [client, entityType, selectedProjectId, projectsVersion]);
 
   if (entityType !== "project" && !selectedProjectId) {
     return (

@@ -21,7 +21,8 @@ const NAV_TABS: { type: EntityType; label: string }[] = [
 
 function AppShellContent() {
   const { username, logout } = useAuth();
-  const { selectedProjectId, selection, setSelection } = useProjectContext();
+  const { selectedProjectId, selection, setSelection, announcement } =
+    useProjectContext();
   const [activeTab, setActiveTab] = useState<EntityType>("project");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -148,6 +149,12 @@ function AppShellContent() {
         {selection
           ? `Selected ${selection.type}: ${selection.id}`
           : "No entity selected"}
+      </div>
+
+      <div className="sr-only" aria-live="polite" role="status">
+        {announcement && (
+          <span key={announcement.id}>{announcement.message}</span>
+        )}
       </div>
     </div>
   );

@@ -1,23 +1,37 @@
 import { useEffect, useState } from "react";
 import type { Project } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
+import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
+import { Dialog } from "../../app/Dialog.js";
+import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import { ProjectForm, type ProjectFormValues } from "./ProjectForm.js";
 
 export function ProjectExplorer() {
   const { client } = useAuth();
-  const { selectedProjectId, setSelectedProjectId, selection, setSelection } =
-    useProjectContext();
+  const {
+    selectedProjectId,
+    setSelectedProjectId,
+    selection,
+    setSelection,
+    projectsVersion,
+    refreshProjects,
+    announce,
+  } = useProjectContext();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
     new Set(),
   );
+  const [creating, setCreating] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    setError(null);
     apiFetch(() => client.projects.listProjects({}))
       .then(async (ids) => {
         const docs = await Promise.all(
@@ -32,17 +46,14 @@ export function ProjectExplorer() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          const message =
-            (err as { body?: { error?: { message?: string } } })?.body?.error
-              ?.message ?? "Failed to load projects";
-          setError(message);
+          setError(readApiError(err, "Failed to load projects"));
           setLoading(false);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [client]);
+  }, [client, projectsVersion]);
 
   const toggleExpand = (id: string) => {
     setExpandedProjects((prev) => {
@@ -69,154 +80,198 @@ export function ProjectExplorer() {
     setSelection({ type: "case", id: caseId, projectId });
   };
 
-  if (loading) {
-    return (
-      <div className="loading" role="status">
-        <div className="loading__spinner" />
-        <span className="sr-only">Loading projects…</span>
-      </div>
-    );
-  }
+  const openCreate = () => {
+    setCreateError(null);
+    setCreating(true);
+  };
 
-  if (error) {
-    return (
-      <div className="error-display" role="alert">
-        {error}
-      </div>
-    );
-  }
+  const closeCreate = () => {
+    setCreating(false);
+    setCreateError(null);
+  };
 
-  if (projects.length === 0) {
-    return (
-      <div className="empty-state">
-        <div className="empty-state__message">No projects found</div>
-      </div>
-    );
-  }
+  const createProject = async (values: ProjectFormValues) => {
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const created = await apiFetch(() =>
+        client.projects.createProject({
+          requestBody: {
+            name: values.name,
+            description: values.description,
+            tags: values.tags,
+          },
+        }),
+      );
+      closeCreate();
+      refreshProjects();
+      announce(created.message);
+      selectProject(created.id);
+    } catch (err: unknown) {
+      setCreateError(readApiError(err, "Failed to create project"));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
 
   return (
-    <nav aria-label="Project explorer">
-      <ul className="tree" role="tree">
-        {projects.map((project) => {
-          const isExpanded = expandedProjects.has(project.projectId);
-          const isActive =
-            selectedProjectId === project.projectId &&
-            selection?.type === "project";
+    <nav className="explorer" aria-label="Project explorer">
+      <div className="explorer__toolbar">
+        <button type="button" className="btn btn-primary" onClick={openCreate}>
+          New Project
+        </button>
+      </div>
 
-          return (
-            <li
-              key={project.projectId}
-              role="treeitem"
-              aria-expanded={isExpanded}
-            >
-              <button
-                className={`tree-node ${isActive ? "tree-node--active" : ""}`}
-                onClick={() => {
-                  toggleExpand(project.projectId);
-                  selectProject(project.projectId);
-                }}
-                aria-current={isActive ? "true" : undefined}
+      {creating && (
+        <Dialog title="New project" onClose={closeCreate}>
+          <ProjectForm
+            submitLabel="Create project"
+            busy={createBusy}
+            error={createError}
+            onSubmit={createProject}
+            onCancel={closeCreate}
+          />
+        </Dialog>
+      )}
+
+      {loading ? (
+        <div className="loading" role="status">
+          <div className="loading__spinner" />
+          <span className="sr-only">Loading projects…</span>
+        </div>
+      ) : error ? (
+        <div className="explorer__notice">
+          <ApiErrorNotice error={error} />
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="empty-state">
+          <div className="empty-state__message">No projects found</div>
+        </div>
+      ) : (
+        <ul className="tree" role="tree">
+          {projects.map((project) => {
+            const isExpanded = expandedProjects.has(project.projectId);
+            const isActive =
+              selectedProjectId === project.projectId &&
+              selection?.type === "project";
+
+            return (
+              <li
+                key={project.projectId}
+                role="treeitem"
+                aria-expanded={isExpanded}
               >
-                <span className="tree-node__icon" aria-hidden="true">
-                  {isExpanded ? "▾" : "▸"}
-                </span>
-                <span className="tree-node__label">{project.name}</span>
-                {project.testSuites && (
-                  <span className="tree-node__count">
-                    {project.testSuites.length}
+                <button
+                  className={`tree-node ${isActive ? "tree-node--active" : ""}`}
+                  onClick={() => {
+                    toggleExpand(project.projectId);
+                    selectProject(project.projectId);
+                  }}
+                  aria-current={isActive ? "true" : undefined}
+                >
+                  <span className="tree-node__icon" aria-hidden="true">
+                    {isExpanded ? "▾" : "▸"}
                   </span>
-                )}
-              </button>
+                  <span className="tree-node__label">{project.name}</span>
+                  {project.testSuites && (
+                    <span className="tree-node__count">
+                      {project.testSuites.length}
+                    </span>
+                  )}
+                </button>
 
-              {isExpanded && project.testSuites && (
-                <ul role="group">
-                  {project.testSuites.map((suite) => {
-                    const isSuiteActive = selection?.id === suite.suiteId;
-                    const suiteExpanded = expandedProjects.has(suite.suiteId);
+                {isExpanded && project.testSuites && (
+                  <ul role="group">
+                    {project.testSuites.map((suite) => {
+                      const isSuiteActive = selection?.id === suite.suiteId;
+                      const suiteExpanded = expandedProjects.has(suite.suiteId);
 
-                    return (
-                      <li
-                        key={suite.suiteId}
-                        role="treeitem"
-                        aria-expanded={
-                          suite.testCases ? suiteExpanded : undefined
-                        }
-                      >
-                        <button
-                          className={`tree-node tree-node--child ${isSuiteActive ? "tree-node--active" : ""}`}
-                          onClick={() => {
-                            if (
-                              suite.testCases &&
-                              suite.testCases.length > 0
-                            ) {
-                              toggleExpand(suite.suiteId);
-                            }
-                            selectSuite(suite.suiteId, project.projectId);
-                          }}
-                          aria-current={isSuiteActive ? "true" : undefined}
+                      return (
+                        <li
+                          key={suite.suiteId}
+                          role="treeitem"
+                          aria-expanded={
+                            suite.testCases ? suiteExpanded : undefined
+                          }
                         >
-                          <span
-                            className="tree-node__icon"
-                            aria-hidden="true"
+                          <button
+                            className={`tree-node tree-node--child ${isSuiteActive ? "tree-node--active" : ""}`}
+                            onClick={() => {
+                              if (
+                                suite.testCases &&
+                                suite.testCases.length > 0
+                              ) {
+                                toggleExpand(suite.suiteId);
+                              }
+                              selectSuite(suite.suiteId, project.projectId);
+                            }}
+                            aria-current={isSuiteActive ? "true" : undefined}
                           >
-                            {suite.testCases && suite.testCases.length > 0
-                              ? suiteExpanded
-                                ? "▾"
-                                : "▸"
-                              : "📁"}
-                          </span>
-                          <span className="tree-node__label">{suite.name}</span>
-                          {suite.testCases && (
-                            <span className="tree-node__count">
-                              {suite.testCases.length}
+                            <span
+                              className="tree-node__icon"
+                              aria-hidden="true"
+                            >
+                              {suite.testCases && suite.testCases.length > 0
+                                ? suiteExpanded
+                                  ? "▾"
+                                  : "▸"
+                                : "📁"}
                             </span>
-                          )}
-                        </button>
+                            <span className="tree-node__label">
+                              {suite.name}
+                            </span>
+                            {suite.testCases && (
+                              <span className="tree-node__count">
+                                {suite.testCases.length}
+                              </span>
+                            )}
+                          </button>
 
-                        {suiteExpanded && suite.testCases && (
-                          <ul role="group">
-                            {suite.testCases.map((tc) => {
-                              const isCaseActive =
-                                selection?.id === tc.testCaseId;
+                          {suiteExpanded && suite.testCases && (
+                            <ul role="group">
+                              {suite.testCases.map((tc) => {
+                                const isCaseActive =
+                                  selection?.id === tc.testCaseId;
 
-                              return (
-                                <li key={tc.testCaseId} role="treeitem">
-                                  <button
-                                    className={`tree-node tree-node--grandchild ${isCaseActive ? "tree-node--active" : ""}`}
-                                    onClick={() =>
-                                      selectCase(
-                                        tc.testCaseId,
-                                        project.projectId,
-                                      )
-                                    }
-                                    aria-current={
-                                      isCaseActive ? "true" : undefined
-                                    }
-                                  >
-                                    <span
-                                      className="tree-node__icon"
-                                      aria-hidden="true"
+                                return (
+                                  <li key={tc.testCaseId} role="treeitem">
+                                    <button
+                                      className={`tree-node tree-node--grandchild ${isCaseActive ? "tree-node--active" : ""}`}
+                                      onClick={() =>
+                                        selectCase(
+                                          tc.testCaseId,
+                                          project.projectId,
+                                        )
+                                      }
+                                      aria-current={
+                                        isCaseActive ? "true" : undefined
+                                      }
                                     >
-                                      📄
-                                    </span>
-                                    <span className="tree-node__label">
-                                      {tc.title}
-                                    </span>
-                                  </button>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+                                      <span
+                                        className="tree-node__icon"
+                                        aria-hidden="true"
+                                      >
+                                        📄
+                                      </span>
+                                      <span className="tree-node__label">
+                                        {tc.title}
+                                      </span>
+                                    </button>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </nav>
   );
 }
