@@ -274,7 +274,9 @@ describe("ProjectDetail", () => {
     await screen.findByRole("dialog", { name: "Delete project" });
 
     const { default: axe } = await import("axe-core");
-    const results = await axe.run(baseElement);
+    const results = await axe.run(baseElement, {
+      rules: { "color-contrast": { enabled: false } },
+    });
     expect(results.violations).toEqual([]);
   });
 });

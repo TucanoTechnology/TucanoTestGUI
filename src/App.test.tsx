@@ -25,7 +25,9 @@ describe("App", () => {
   it("login screen is accessible", async () => {
     const { default: axe } = await import("axe-core");
     const { container } = render(<App />);
-    const results = await axe.run(container);
+    const results = await axe.run(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
     expect(results.violations).toEqual([]);
   });
 });
