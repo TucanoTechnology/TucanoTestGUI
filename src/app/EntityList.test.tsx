@@ -66,6 +66,18 @@ function renderRuns() {
   );
 }
 
+function renderMilestones() {
+  sessionStorage.setItem("selectedProjectId", PAYMENTS.projectId);
+  return render(
+    <AuthProvider>
+      <ProjectProvider>
+        <EntityList entityType="milestone" />
+        <SelectionProbe />
+      </ProjectProvider>
+    </AuthProvider>,
+  );
+}
+
 afterEach(() => {
   resetTestApi();
 });
@@ -427,6 +439,166 @@ describe("EntityList", () => {
     fireEvent.click(screen.getByRole("button", { name: "New run" }));
 
     const dialog = await screen.findByRole("dialog", { name: "New run" });
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("forbidden");
+    expect(alert).toHaveTextContent("no grant on this project");
+  });
+
+  it("lists milestones under the key the project holds them by", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/milestones" && method === "GET") {
+        return jsonResponse(200, ["probe-e.json"]);
+      }
+      if (url === "/api/milestones/probe-e.json" && method === "GET") {
+        // The document carries an identifier that differs from the key the
+        // project lists it under, and the key is what addresses it.
+        return jsonResponse(200, {
+          milestoneId: "probe-e",
+          name: "Probe E",
+          status: "in_progress",
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderMilestones();
+
+    const list = await screen.findByRole("list", { name: "milestone list" });
+    expect(within(list).getAllByRole("button")).toHaveLength(1);
+    expect(
+      within(list).getByRole("button", { name: /Probe E/ }),
+    ).toBeInTheDocument();
+    expect(within(list).getByText("in_progress")).toBeInTheDocument();
+
+    fireEvent.click(within(list).getByRole("button", { name: /Probe E/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "milestone:probe-e.json",
+      );
+    });
+    expect(requests.filter((request) => request.url.startsWith("/api/milestones"))).toHaveLength(1);
+  });
+
+  it("creates a milestone that links the selected suites and runs", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/milestones" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments" && method === "GET") {
+        return jsonResponse(200, PAYMENTS);
+      }
+      if (url === "/api/projects/payments/test_runs" && method === "GET") {
+        return jsonResponse(200, ["nightly.json"]);
+      }
+      if (url === "/api/test_runs/nightly.json" && method === "GET") {
+        return jsonResponse(200, { name: "Nightly run" });
+      }
+      if (url === "/api/projects/payments/milestones" && method === "POST") {
+        return jsonResponse(201, {
+          message: "Milestone created",
+          id: "v1.0.json",
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderMilestones();
+    await screen.findByText("No milestones found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New milestone" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "New milestone" });
+    const form = within(dialog).getByRole("form", {
+      name: "Create milestone form",
+    });
+    fireEvent.change(within(form).getByLabelText("Name"), {
+      target: { value: "Checkout GA" },
+    });
+    fireEvent.click(within(form).getByRole("checkbox", { name: /^Smoke/ }));
+    fireEvent.click(
+      within(form).getByRole("checkbox", { name: /Nightly run/ }),
+    );
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "milestone:v1.0.json",
+      );
+    });
+
+    const posts = requests.filter((request) => request.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.url).toBe("/api/projects/payments/milestones");
+    expect(posts[0]?.body).toEqual({
+      name: "Checkout GA",
+      testSuiteIds: ["smoke"],
+      testRunIds: ["nightly.json"],
+    });
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "Milestone created",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the milestone dialog open and shows the envelope when creation is rejected", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/milestones" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments" && method === "GET") {
+        return jsonResponse(200, PAYMENTS);
+      }
+      if (url === "/api/projects/payments/test_runs" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments/milestones" && method === "POST") {
+        return errorEnvelope(
+          400,
+          "invalid_request",
+          "Field `testSuites` is invalid",
+        );
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderMilestones();
+    await screen.findByText("No milestones found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New milestone" }));
+    const dialog = await screen.findByRole("dialog", { name: "New milestone" });
+    const form = within(dialog).getByRole("form", {
+      name: "Create milestone form",
+    });
+    fireEvent.change(within(form).getByLabelText("Name"), {
+      target: { value: "Checkout GA" },
+    });
+    fireEvent.submit(form);
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("invalid_request");
+    expect(alert).toHaveTextContent("Field `testSuites` is invalid");
+    expect(
+      screen.getByRole("dialog", { name: "New milestone" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the envelope when the milestone options cannot be read", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/milestones" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments" && method === "GET") {
+        return errorEnvelope(403, "forbidden", "no grant on this project");
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderMilestones();
+    await screen.findByText("No milestones found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New milestone" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "New milestone" });
     const alert = await within(dialog).findByRole("alert");
     expect(alert).toHaveTextContent("forbidden");
     expect(alert).toHaveTextContent("no grant on this project");

@@ -6,6 +6,15 @@ import { useAuth } from "./AuthProvider.js";
 import { Dialog } from "./Dialog.js";
 import { useProjectContext, type EntityType } from "./ProjectContext.js";
 import { CaseForm, type CaseFormValues } from "../features/cases/CaseForm.js";
+import {
+  MilestoneForm,
+  type MilestoneFormValues,
+} from "../features/milestones/MilestoneForm.js";
+import {
+  buildMilestoneCreateRequest,
+  buildMilestoneSelectionOptions,
+  type MilestoneSelectionOptions,
+} from "../features/milestones/milestoneSelection.js";
 import { RunForm, type RunFormValues } from "../features/runs/RunForm.js";
 import {
   buildRunCreateRequest,
@@ -38,6 +47,8 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
   const [runOptions, setRunOptions] = useState<RunSelectionOptions | null>(
     null,
   );
+  const [milestoneOptions, setMilestoneOptions] =
+    useState<MilestoneSelectionOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsError, setOptionsError] = useState<ApiErrorInfo | null>(null);
 
@@ -49,10 +60,20 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
   // are selected from that project.
   const canCreateRun = entityType === "run" && selectedProjectId !== null;
 
+  // A milestone is created inside the project it covers, and it links that
+  // project's suites and runs.
+  const canCreateMilestone =
+    entityType === "milestone" && selectedProjectId !== null;
+
   const openCreate = () => {
     setCreateError(null);
     if (canCreateRun) {
       setRunOptions(null);
+      setOptionsLoading(true);
+      setOptionsError(null);
+    }
+    if (canCreateMilestone) {
+      setMilestoneOptions(null);
       setOptionsLoading(true);
       setOptionsError(null);
     }
@@ -127,6 +148,33 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
     }
   };
 
+  const createMilestone = async (values: MilestoneFormValues) => {
+    if (!selectedProjectId) return;
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const created = await apiFetch(() =>
+        client.projects.addProjectMilestone({
+          id: selectedProjectId,
+          requestBody: buildMilestoneCreateRequest(values),
+        }),
+      );
+      closeCreate();
+      refreshProjects();
+      announce(created.message);
+      // The create response names the key the project now lists it under.
+      setSelection({
+        type: "milestone",
+        id: created.id,
+        projectId: selectedProjectId,
+      });
+    } catch (err: unknown) {
+      setCreateError(readApiError(err, "Failed to create milestone"));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
   // The cases and suites a run can cover are only read once the form is asked
   // for, so a plain list of runs costs one request.
   useEffect(() => {
@@ -166,6 +214,49 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
       cancelled = true;
     };
   }, [client, creating, canCreateRun, selectedProjectId]);
+
+  // The suites and runs a milestone can link are only read once the form is
+  // asked for, so a plain list of milestones costs one request.
+  useEffect(() => {
+    if (!creating || !canCreateMilestone || !selectedProjectId) return;
+    let cancelled = false;
+
+    const loadOptions = async () => {
+      const project = await apiFetch(() =>
+        client.projects.getProject({ id: selectedProjectId }),
+      );
+      const runIds = await apiFetch(() =>
+        client.projects.listProjectTestRuns({ id: selectedProjectId }),
+      );
+      const runs = await Promise.all(
+        runIds.map(async (id) => {
+          const run = await apiFetch(() =>
+            client.testRuns.getTestRun({ id }),
+          );
+          // The listing key is what a milestone links: a run document need not
+          // carry a `testRunId`, and a rename never moves the key.
+          return { id, name: run.name ?? id };
+        }),
+      );
+      return buildMilestoneSelectionOptions(project, runs);
+    };
+
+    loadOptions()
+      .then((options) => {
+        if (cancelled) return;
+        setMilestoneOptions(options);
+        setOptionsLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setOptionsError(readApiError(err, "Failed to load milestone options"));
+        setOptionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, creating, canCreateMilestone, selectedProjectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -243,7 +334,11 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
               const m = await apiFetch(() =>
                 client.milestones.getMilestone({ id }),
               );
-              return { id: m.milestoneId, name: m.name, meta: m.status };
+              // The listing key is what addresses the milestone: a milestone
+              // created with an explicit identifier carries a document
+              // `milestoneId` that differs from its key, and a rename never
+              // moves the key.
+              return { id, name: m.name, meta: m.status };
             }),
           );
         }
@@ -325,6 +420,42 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
             New run
           </button>
         </div>
+      )}
+
+      {canCreateMilestone && (
+        <div className="entity-list__toolbar">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={openCreate}
+          >
+            New milestone
+          </button>
+        </div>
+      )}
+
+      {creating && canCreateMilestone && (
+        <Dialog title="New milestone" onClose={closeCreate}>
+          {optionsLoading ? (
+            <div className="loading" role="status">
+              <div className="loading__spinner" />
+              <span className="sr-only">Loading milestone options…</span>
+            </div>
+          ) : optionsError ? (
+            <ApiErrorNotice error={optionsError} />
+          ) : milestoneOptions ? (
+            <MilestoneForm
+              submitLabel="Create milestone"
+              idField
+              suiteOptions={milestoneOptions.suites}
+              runOptions={milestoneOptions.runs}
+              busy={createBusy}
+              error={createError}
+              onSubmit={createMilestone}
+              onCancel={closeCreate}
+            />
+          ) : null}
+        </Dialog>
       )}
 
       {creating && canCreateRun && (
