@@ -190,7 +190,11 @@ textarea {
   color: var(--color-text-secondary);
 }
 
-.topbar__menu-toggle {
+/* The toggle is part of the narrow-viewport shell only. The `.topbar` context
+   is load-bearing: `.btn` reaches `display: inline-flex` further down this file
+   at the same 0-1-0 specificity, and a bare `.topbar__menu-toggle` loses to it
+   wherever the two disagree. */
+.topbar .topbar__menu-toggle {
   display: none;
 }
 
@@ -284,8 +288,10 @@ textarea {
 
   /* The grid above hides the explorer on narrow viewports; the top-bar
      toggle reveals it as an overlay so the hierarchy stays reachable without
-     a pointer. */
-  .topbar__menu-toggle {
+     a pointer. This rule matches the `.topbar__menu-toggle` rule that hides it
+     above the breakpoint and, being later in the file, wins while the viewport
+     matches. */
+  .topbar .topbar__menu-toggle {
     display: block;
   }
 
