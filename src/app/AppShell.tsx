@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider.js";
 import { ProjectProvider, useProjectContext } from "./ProjectContext.js";
 import { ProjectExplorer } from "../features/projects/ProjectExplorer.js";
@@ -35,14 +35,24 @@ function AppShellContent() {
   const [activeModule, setActiveModule] = useState<ModuleId>("cases");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // The tree node the centre case list is scoped to: `null` is "All test
+  // cases", `DIRECT_SUITE_ID` is the cases the project holds itself, and any
+  // other value is a suite id. The tree's active node and the list's filter
+  // both read it, so the two cannot disagree about what is selected.
+  const [suiteScope, setSuiteScope] = useState<string | null>(null);
+
   const activeItem =
     NAV_ITEMS.find((item) => item.id === activeModule) ?? NAV_ITEMS[0];
 
-  const selectedSuiteId = selection?.type === "suite" ? selection.id : null;
+  // A node picked in one project's tree does not describe the next project.
+  useEffect(() => {
+    setSuiteScope(null);
+  }, [selectedProjectId]);
 
   // The two pinned tree nodes are filters the centre list applies, not
   // entities the detail pane can open, so neither carries a selection.
   const selectSuite = (suiteId: string | null) => {
+    setSuiteScope(suiteId);
     if (suiteId === null || suiteId === DIRECT_SUITE_ID) {
       setSelection(null);
       return;
@@ -157,7 +167,7 @@ function AppShellContent() {
           {selectedProjectId ? (
             <SuiteTree
               projectId={selectedProjectId}
-              selectedSuiteId={selectedSuiteId}
+              selectedSuiteId={suiteScope}
               onSelectSuite={selectSuite}
             />
           ) : (
@@ -167,7 +177,10 @@ function AppShellContent() {
 
         <main className="pane-center" aria-label={activeItem.label}>
           {activeItem.entityType ? (
-            <EntityList entityType={activeItem.entityType} />
+            <EntityList
+              entityType={activeItem.entityType}
+              caseScope={suiteScope}
+            />
           ) : (
             <ReportsView />
           )}

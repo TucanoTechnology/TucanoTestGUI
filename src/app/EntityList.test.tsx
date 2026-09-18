@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { errorEnvelope, jsonResponse, mockApi, resetTestApi } from "../test-utils.js";
+import { DIRECT_SUITE_ID } from "../features/suites/SuiteTree.js";
 import { AuthProvider } from "./AuthProvider.js";
 import { EntityList } from "./EntityList.js";
 import { ProjectProvider, useProjectContext } from "./ProjectContext.js";
@@ -30,6 +31,27 @@ const PAYMENTS = {
   ],
 };
 
+/** The seeded `checkout.json` the suite tree scopes the case list against. */
+const CHECKOUT_CASES = {
+  projectId: "checkout",
+  name: "Checkout",
+  description: "Payment flow",
+  testSuites: [
+    {
+      suiteId: "smoke.checkout.json",
+      name: "smoke.checkout",
+      testCases: [
+        { testCaseId: "TC-CART-1", title: "Add an item to the cart" },
+        { testCaseId: "TC-LOGIN-1", title: "Sign in with a valid account" },
+        { testCaseId: "TC-LOGIN-2", title: "Sign in with a locked account" },
+      ],
+    },
+  ],
+  testCases: [
+    { testCaseId: "TC-PROJECT-1", title: "Reach the checkout page" },
+  ],
+};
+
 function SelectionProbe() {
   const { selection, announcement } = useProjectContext();
   return (
@@ -48,6 +70,19 @@ function renderCases() {
     <AuthProvider>
       <ProjectProvider>
         <EntityList entityType="case" />
+        <SelectionProbe />
+      </ProjectProvider>
+    </AuthProvider>,
+  );
+}
+
+/** The case list as the suite tree scopes it, against the seeded project. */
+function renderScopedCases(caseScope: string | null) {
+  sessionStorage.setItem("selectedProjectId", CHECKOUT_CASES.projectId);
+  return render(
+    <AuthProvider>
+      <ProjectProvider>
+        <EntityList entityType="case" caseScope={caseScope} />
         <SelectionProbe />
       </ProjectProvider>
     </AuthProvider>,
@@ -801,5 +836,51 @@ describe("EntityList", () => {
     expect(
       screen.queryByRole("button", { name: "New configuration" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("lists the cases of the suite tree node it is scoped to", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, CHECKOUT_CASES);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    const casesUnder = async (caseScope: string | null) => {
+      const view = renderScopedCases(caseScope);
+      await screen.findByRole("list", { name: "case list" });
+      const titles = within(screen.getByRole("list", { name: "case list" }))
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+      view.unmount();
+      return titles;
+    };
+
+    // "All test cases" is the whole project, in the order the union has always
+    // had: the cases the project holds itself, then the ones its suites carry.
+    expect(await casesUnder(null)).toEqual([
+      "Reach the checkout page",
+      "Add an item to the cart",
+      "Sign in with a valid account",
+      "Sign in with a locked account",
+    ]);
+
+    // "Directly in project" drops everything a suite holds.
+    expect(await casesUnder(DIRECT_SUITE_ID)).toEqual([
+      "Reach the checkout page",
+    ]);
+
+    // A suite is the cases it carries, and only those.
+    expect(await casesUnder("smoke.checkout.json")).toEqual([
+      "Add an item to the cart",
+      "Sign in with a valid account",
+      "Sign in with a locked account",
+    ]);
+
+    // A node with no cases behind it reads as empty rather than falling back to
+    // the project, and no scope re-reads the project document.
+    renderScopedCases("empty.json");
+    expect(await screen.findByText("No cases found")).toBeInTheDocument();
+    expect(requests).toHaveLength(4);
   });
 });

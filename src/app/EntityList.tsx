@@ -26,14 +26,27 @@ import {
   buildRunSelectionOptions,
   type RunSelectionOptions,
 } from "../features/runs/runSelection.js";
+import { DIRECT_SUITE_ID } from "../features/suites/SuiteTree.js";
 
 interface EntityItem {
   id: string;
   name: string;
   meta?: string;
+  /** The suite a case lives in; absent when the project holds it itself. */
+  suiteId?: string;
 }
 
-export function EntityList({ entityType }: { entityType: EntityType }) {
+interface EntityListProps {
+  entityType: EntityType;
+  /**
+   * The suite tree node the case list is scoped to: `null` is "All test cases",
+   * `DIRECT_SUITE_ID` is the cases the project holds itself, and any other
+   * value is a suite id.
+   */
+  caseScope?: string | null;
+}
+
+export function EntityList({ entityType, caseScope = null }: EntityListProps) {
   const { client } = useAuth();
   const {
     selectedProjectId,
@@ -332,18 +345,26 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
           // A bare identifier that several parents hold is a 409 on
           // `GET /test_cases/{id}`, and the seeded dataset holds such a case, so
           // the list comes from the project document instead: the cases its
-          // suites carry plus the ones it holds itself.
+          // suites carry plus the ones it holds itself. Which parent a case
+          // came from is kept so the suite tree can narrow the list here.
           const project = await apiFetch(() =>
             client.projects.getProject({ id: selectedProjectId }),
           );
           return [
-            ...(project.testCases ?? []),
-            ...(project.testSuites ?? []).flatMap((s) => s.testCases ?? []),
-          ].map((c) => ({
-            id: c.testCaseId,
-            name: c.title,
-            meta: c.priority,
-          }));
+            ...(project.testCases ?? []).map((c) => ({
+              id: c.testCaseId,
+              name: c.title,
+              meta: c.priority,
+            })),
+            ...(project.testSuites ?? []).flatMap((s) =>
+              (s.testCases ?? []).map((c) => ({
+                id: c.testCaseId,
+                name: c.title,
+                meta: c.priority,
+                suiteId: s.suiteId,
+              })),
+            ),
+          ];
         }
         case "run": {
           if (!selectedProjectId) return [];
@@ -426,6 +447,18 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
       cancelled = true;
     };
   }, [client, entityType, selectedProjectId, projectsVersion]);
+
+  // Narrowing to one suite costs nothing: the project read that builds the list
+  // already carries every suite, so the filter is applied to what is in hand
+  // and no request is added.
+  const visibleItems =
+    entityType === "case" && caseScope !== null
+      ? items.filter((item) =>
+          caseScope === DIRECT_SUITE_ID
+            ? item.suiteId === undefined
+            : item.suiteId === caseScope,
+        )
+      : items;
 
   if (entityType !== "project" && !selectedProjectId) {
     return (
@@ -566,13 +599,13 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
         </div>
       ) : error ? (
         <ApiErrorNotice error={error} />
-      ) : items.length === 0 ? (
+      ) : visibleItems.length === 0 ? (
         <div className="empty-state">
           <p className="empty-state__message">No {entityType}s found</p>
         </div>
       ) : (
         <ul className="entity-list" aria-label={`${entityType} list`}>
-          {items.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = selection?.id === item.id;
             return (
               <li key={item.id}>

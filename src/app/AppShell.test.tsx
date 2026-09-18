@@ -26,6 +26,25 @@ const ACCOUNT = {
   roles: {},
 };
 
+/** The seeded project behind the suite tree: one direct case, three in a suite. */
+const CHECKOUT_TREE = {
+  ...CHECKOUT,
+  testCases: [
+    { testCaseId: "TC-PROJECT-1", title: "Reach the checkout page" },
+  ],
+  testSuites: [
+    {
+      suiteId: "smoke.checkout.json",
+      name: "smoke.checkout",
+      testCases: [
+        { testCaseId: "TC-CART-1", title: "Add an item to the cart" },
+        { testCaseId: "TC-LOGIN-1", title: "Sign in with a valid account" },
+        { testCaseId: "TC-LOGIN-2", title: "Sign in with a locked account" },
+      ],
+    },
+  ],
+};
+
 function renderShell() {
   return render(
     <AuthProvider>
@@ -243,6 +262,80 @@ describe("AppShell", () => {
     expect(
       await screen.findByRole("heading", { level: 2, name: "Login" }),
     ).toBeInTheDocument();
+  });
+
+  it("narrows the centre case list to the suite tree node that is selected", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, [CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, CHECKOUT_TREE);
+      }
+      if (url === "/api/test_suites/smoke.checkout.json" && method === "GET") {
+        return jsonResponse(200, {
+          suiteId: "smoke.checkout.json",
+          name: "smoke.checkout",
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderShell();
+    await screen.findByRole("option", { name: "Checkout" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Active project" }), {
+      target: { value: CHECKOUT.projectId },
+    });
+
+    const tree = await screen.findByRole("complementary", {
+      name: "Suite tree",
+    });
+    const caseList = () =>
+      within(screen.getByRole("main", { name: "Test Cases" })).getByRole(
+        "list",
+        { name: "case list" },
+      );
+    const listedCases = () => within(caseList()).getAllByRole("button");
+
+    // The tree opens on "All test cases", so the list opens on the project.
+    await screen.findByRole("list", { name: "case list" });
+    expect(listedCases()).toHaveLength(4);
+
+    // The scope is applied to the project document already in hand, so moving
+    // between nodes must not read it again.
+    const projectReads = requests.filter(
+      (request) =>
+        request.url === "/api/projects/checkout" && request.method === "GET",
+    ).length;
+
+    // "Directly in project" leaves out what the suites hold.
+    fireEvent.click(
+      within(tree).getByRole("button", { name: /Directly in project/ }),
+    );
+    expect(listedCases()).toHaveLength(1);
+    expect(caseList()).toHaveTextContent("Reach the checkout page");
+    expect(caseList()).not.toHaveTextContent("Add an item to the cart");
+
+    // A suite is the cases it carries, and the detail panel agrees with it.
+    fireEvent.click(
+      within(tree).getByRole("button", { name: /smoke\.checkout/ }),
+    );
+    expect(listedCases()).toHaveLength(3);
+    expect(caseList()).not.toHaveTextContent("Reach the checkout page");
+    expect(caseList()).toHaveTextContent("Add an item to the cart");
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "smoke.checkout" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(tree).getByRole("button", { name: /All test cases/ }));
+    expect(listedCases()).toHaveLength(4);
+
+    expect(
+      requests.filter(
+        (request) =>
+          request.url === "/api/projects/checkout" && request.method === "GET",
+      ).length,
+    ).toBe(projectReads);
   });
 
   it("shows the signed-in account and signs out from the top bar", async () => {
