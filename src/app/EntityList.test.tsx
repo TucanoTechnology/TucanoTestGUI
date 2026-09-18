@@ -54,6 +54,18 @@ function renderCases() {
   );
 }
 
+function renderRuns() {
+  sessionStorage.setItem("selectedProjectId", PAYMENTS.projectId);
+  return render(
+    <AuthProvider>
+      <ProjectProvider>
+        <EntityList entityType="run" />
+        <SelectionProbe />
+      </ProjectProvider>
+    </AuthProvider>,
+  );
+}
+
 afterEach(() => {
   resetTestApi();
 });
@@ -226,6 +238,198 @@ describe("EntityList", () => {
     expect(alert).toHaveTextContent("conflict");
     expect(alert).toHaveTextContent("test case TC-LOGIN-1 already exists");
     expect(screen.getByRole("dialog", { name: "New case" })).toBeInTheDocument();
+  });
+
+  it("lists runs under the key the project holds them by", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/test_runs" && method === "GET") {
+        return jsonResponse(200, ["nightly.json", "imported.json"]);
+      }
+      if (url === "/api/test_runs/nightly.json" && method === "GET") {
+        return jsonResponse(200, {
+          name: "Nightly run",
+          timestamp: "1750000000",
+        });
+      }
+      if (url === "/api/test_runs/imported.json" && method === "GET") {
+        return jsonResponse(200, { timestamp: "1750000001" });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderRuns();
+
+    const list = await screen.findByRole("list", { name: "run list" });
+    expect(within(list).getAllByRole("button")).toHaveLength(2);
+    // A run document need not carry a `testRunId`, so the listing key names it.
+    expect(
+      within(list).getByRole("button", { name: /Nightly run/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(list).getByRole("button", { name: /imported\.json/ }),
+    ).toBeInTheDocument();
+    expect(within(list).getByText("1750000001")).toBeInTheDocument();
+
+    fireEvent.click(within(list).getByRole("button", { name: /Nightly run/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "run:nightly.json",
+      );
+    });
+    expect(
+      requests.filter((request) => request.url.startsWith("/api/test_runs")),
+    ).toHaveLength(2);
+  });
+
+  it("creates a run that copies the selected suites, cases and configuration", async () => {
+    const createdIds: string[] = [];
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/test_runs" && method === "GET") {
+        return jsonResponse(200, createdIds);
+      }
+      if (url === "/api/projects/payments" && method === "GET") {
+        return jsonResponse(200, PAYMENTS);
+      }
+      if (url === "/api/projects/payments/configurations" && method === "GET") {
+        return jsonResponse(200, ["chrome-linux"]);
+      }
+      if (url === "/api/configurations/chrome-linux" && method === "GET") {
+        return jsonResponse(200, {
+          configId: "chrome-linux",
+          name: "Chrome on Linux",
+          browser: "chrome",
+          os: "linux",
+        });
+      }
+      if (url === "/api/projects/payments/test_runs" && method === "POST") {
+        createdIds.push("nightly.json");
+        return jsonResponse(201, {
+          message: "Test run created",
+          id: "nightly.json",
+        });
+      }
+      if (url === "/api/test_runs/nightly.json" && method === "GET") {
+        return jsonResponse(200, {
+          name: "Nightly",
+          timestamp: "1750000000",
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderRuns();
+    await screen.findByText("No runs found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New run" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "New run" });
+    const form = within(dialog).getByRole("form", { name: "Create run form" });
+    fireEvent.change(within(form).getByLabelText("Name"), {
+      target: { value: "Nightly" },
+    });
+    fireEvent.change(within(form).getByLabelText("Configuration"), {
+      target: { value: "chrome-linux" },
+    });
+    fireEvent.click(within(form).getByRole("checkbox", { name: /^Smoke/ }));
+    fireEvent.click(
+      within(form).getByRole("checkbox", { name: /Guest checkout/ }),
+    );
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "run:nightly.json",
+      );
+    });
+
+    const posts = requests.filter((request) => request.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.url).toBe("/api/projects/payments/test_runs");
+    expect(posts[0]?.body).toEqual({
+      name: "Nightly",
+      projects: [{ projectId: "payments", name: "Payments", testSuites: [] }],
+      testSuites: [
+        {
+          suiteId: "smoke",
+          name: "Smoke",
+          testCases: [
+            {
+              testCaseId: "TC-LOGIN-1",
+              title: "Login succeeds with valid credentials",
+            },
+          ],
+        },
+      ],
+      testCases: [
+        {
+          testCaseId: "TC-PROJECT-1",
+          title: "Guest checkout creates an order",
+        },
+      ],
+      // The API copies the cases but never pins their revisions itself.
+      caseVersions: { "TC-LOGIN-1": 1, "TC-PROJECT-1": 1 },
+      configurations: [{ configId: "chrome-linux", name: "Chrome on Linux" }],
+    });
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "Test run created",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the run dialog open and shows the envelope when creation is rejected", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/test_runs" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments" && method === "GET") {
+        return jsonResponse(200, PAYMENTS);
+      }
+      if (url === "/api/projects/payments/configurations" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments/test_runs" && method === "POST") {
+        return errorEnvelope(400, "invalid_request", "Field `projects` is invalid");
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderRuns();
+    await screen.findByText("No runs found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New run" }));
+    const dialog = await screen.findByRole("dialog", { name: "New run" });
+    const form = within(dialog).getByRole("form", { name: "Create run form" });
+    fireEvent.change(within(form).getByLabelText("Name"), {
+      target: { value: "Nightly" },
+    });
+    fireEvent.submit(form);
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("invalid_request");
+    expect(alert).toHaveTextContent("Field `projects` is invalid");
+    expect(screen.getByRole("dialog", { name: "New run" })).toBeInTheDocument();
+  });
+
+  it("shows the envelope when the run options cannot be read", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/test_runs" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments" && method === "GET") {
+        return errorEnvelope(403, "forbidden", "no grant on this project");
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderRuns();
+    await screen.findByText("No runs found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New run" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "New run" });
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("forbidden");
+    expect(alert).toHaveTextContent("no grant on this project");
   });
 
   it("offers no create control outside a case list", async () => {

@@ -6,6 +6,12 @@ import { useAuth } from "./AuthProvider.js";
 import { Dialog } from "./Dialog.js";
 import { useProjectContext, type EntityType } from "./ProjectContext.js";
 import { CaseForm, type CaseFormValues } from "../features/cases/CaseForm.js";
+import { RunForm, type RunFormValues } from "../features/runs/RunForm.js";
+import {
+  buildRunCreateRequest,
+  buildRunSelectionOptions,
+  type RunSelectionOptions,
+} from "../features/runs/runSelection.js";
 
 interface EntityItem {
   id: string;
@@ -29,13 +35,27 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
   const [creating, setCreating] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<ApiErrorInfo | null>(null);
+  const [runOptions, setRunOptions] = useState<RunSelectionOptions | null>(
+    null,
+  );
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [optionsError, setOptionsError] = useState<ApiErrorInfo | null>(null);
 
   // A case is created inside the project the list is showing; suites are made
   // and filled where a suite is shown.
   const canCreateCase = entityType === "case" && selectedProjectId !== null;
 
+  // A run is created inside the project it covers, and both cases and suites
+  // are selected from that project.
+  const canCreateRun = entityType === "run" && selectedProjectId !== null;
+
   const openCreate = () => {
     setCreateError(null);
+    if (canCreateRun) {
+      setRunOptions(null);
+      setOptionsLoading(true);
+      setOptionsError(null);
+    }
     setCreating(true);
   };
 
@@ -80,6 +100,72 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
       setCreateBusy(false);
     }
   };
+
+  const createRun = async (values: RunFormValues) => {
+    if (!selectedProjectId || !runOptions) return;
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const created = await apiFetch(() =>
+        client.projects.addProjectTestRun({
+          id: selectedProjectId,
+          requestBody: buildRunCreateRequest(values, runOptions),
+        }),
+      );
+      closeCreate();
+      refreshProjects();
+      announce(created.message);
+      setSelection({
+        type: "run",
+        id: created.id,
+        projectId: selectedProjectId,
+      });
+    } catch (err: unknown) {
+      setCreateError(readApiError(err, "Failed to create test run"));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  // The cases and suites a run can cover are only read once the form is asked
+  // for, so a plain list of runs costs one request.
+  useEffect(() => {
+    if (!creating || !canCreateRun || !selectedProjectId) return;
+    let cancelled = false;
+
+    const loadOptions = async () => {
+      const project = await apiFetch(() =>
+        client.projects.getProject({ id: selectedProjectId }),
+      );
+      const configIds = await apiFetch(() =>
+        client.projects.listProjectConfigurations({ id: selectedProjectId }),
+      );
+      const configurations = await Promise.all(
+        configIds.map((configId) =>
+          apiFetch(() =>
+            client.configurations.getConfiguration({ id: configId }),
+          ),
+        ),
+      );
+      return buildRunSelectionOptions(project, configurations);
+    };
+
+    loadOptions()
+      .then((options) => {
+        if (cancelled) return;
+        setRunOptions(options);
+        setOptionsLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setOptionsError(readApiError(err, "Failed to load run options"));
+        setOptionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, creating, canCreateRun, selectedProjectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,11 +227,9 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
               const r = await apiFetch(() =>
                 client.testRuns.getTestRun({ id }),
               );
-              return {
-                id: r.testRunId,
-                name: r.name ?? r.testRunId,
-                meta: r.timestamp,
-              };
+              // The listing key is what addresses the run: a run document need
+              // not carry a `testRunId`, and a rename never moves the key.
+              return { id, name: r.name ?? id, meta: r.timestamp };
             }),
           );
         }
@@ -231,7 +315,43 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
         </div>
       )}
 
-      {creating && (
+      {canCreateRun && (
+        <div className="entity-list__toolbar">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={openCreate}
+          >
+            New run
+          </button>
+        </div>
+      )}
+
+      {creating && canCreateRun && (
+        <Dialog title="New run" onClose={closeCreate}>
+          {optionsLoading ? (
+            <div className="loading" role="status">
+              <div className="loading__spinner" />
+              <span className="sr-only">Loading run options…</span>
+            </div>
+          ) : optionsError ? (
+            <ApiErrorNotice error={optionsError} />
+          ) : runOptions ? (
+            <RunForm
+              submitLabel="Create run"
+              suiteOptions={runOptions.suites}
+              caseOptions={runOptions.cases}
+              configurationOptions={runOptions.configurations}
+              busy={createBusy}
+              error={createError}
+              onSubmit={createRun}
+              onCancel={closeCreate}
+            />
+          ) : null}
+        </Dialog>
+      )}
+
+      {creating && canCreateCase && (
         <Dialog title="New case" onClose={closeCreate}>
           <CaseForm
             submitLabel="Create case"
