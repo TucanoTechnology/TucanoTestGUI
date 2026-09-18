@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import type { ApiErrorInfo } from "../api/errors.js";
 import { ApiErrorNotice } from "./ApiErrorNotice.js";
+import { isJsonKeyName, toJsonKey } from "./keys.js";
 import { parseTags } from "./tags.js";
 
 export interface EntityFormValues {
@@ -15,6 +16,12 @@ interface EntityFormProps {
   initialValues?: Partial<EntityFormValues>;
   busy?: boolean;
   error?: ApiErrorInfo | null;
+  /**
+   * What the API calls the resource this form creates, when it derives that
+   * resource's key from the name (`<name>.json`). Set on a create form only: an
+   * edit form sends a name to a route that already holds the key.
+   */
+  derivedIdLabel?: string;
   onSubmit: (values: EntityFormValues) => void;
   onCancel: () => void;
 }
@@ -32,6 +39,7 @@ export function EntityForm({
   initialValues,
   busy = false,
   error = null,
+  derivedIdLabel,
   onSubmit,
   onCancel,
 }: EntityFormProps) {
@@ -42,10 +50,25 @@ export function EntityForm({
   );
   const [tags, setTags] = useState(initialValues?.tags?.join(", ") ?? "");
 
+  const trimmedName = name.trim();
+  const nameHint =
+    derivedIdLabel === undefined
+      ? null
+      : `The new ${derivedIdLabel}'s ID is this name with .json appended, such as “checkout.json” for “checkout”. An ID is a single path component ending in .json, so it cannot contain “/”.`;
+  // The API derives the key from the name, so a name carrying the path
+  // separator would come back as an `invalid_id` the user cannot act on. Only
+  // the one thing the contract states is checked here; every other refusal
+  // still reads from the API's own envelope.
+  const nameError =
+    nameHint === null || trimmedName === "" || isJsonKeyName(trimmedName)
+      ? null
+      : `This name would derive the ID “${toJsonKey(trimmedName)}”, which is not a single path component. An ID cannot contain “/”.`;
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName) return;
+    // The submit button is disabled while the name cannot work, but a form can
+    // be submitted without it.
+    if (!trimmedName || nameError !== null) return;
     onSubmit({
       name: trimmedName,
       description: description.trim(),
@@ -70,7 +93,29 @@ export function EntityForm({
           onChange={(event) => setName(event.target.value)}
           required
           aria-required="true"
+          aria-invalid={nameError === null ? undefined : true}
+          aria-describedby={
+            nameHint === null
+              ? undefined
+              : nameError === null
+                ? `${fieldId}-name-hint`
+                : `${fieldId}-name-error`
+          }
         />
+        {nameHint !== null &&
+          (nameError === null ? (
+            <p className="form-field__hint" id={`${fieldId}-name-hint`}>
+              {nameHint}
+            </p>
+          ) : (
+            <p
+              className="form-field__hint"
+              id={`${fieldId}-name-error`}
+              role="alert"
+            >
+              {nameError}
+            </p>
+          ))}
       </div>
 
       <div className="form-field">
@@ -106,7 +151,11 @@ export function EntityForm({
         >
           Cancel
         </button>
-        <button type="submit" className="btn btn-primary" disabled={busy}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={busy || nameError !== null}
+        >
           {busy ? `${submitLabel}…` : submitLabel}
         </button>
       </div>
