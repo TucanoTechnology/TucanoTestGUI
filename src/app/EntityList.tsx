@@ -7,6 +7,11 @@ import { Dialog } from "./Dialog.js";
 import { useProjectContext, type EntityType } from "./ProjectContext.js";
 import { CaseForm, type CaseFormValues } from "../features/cases/CaseForm.js";
 import {
+  ConfigurationForm,
+  type ConfigurationFormValues,
+} from "../features/configurations/ConfigurationForm.js";
+import { buildConfigurationCreateRequest } from "../features/configurations/configurationRequests.js";
+import {
   MilestoneForm,
   type MilestoneFormValues,
 } from "../features/milestones/MilestoneForm.js";
@@ -64,6 +69,10 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
   // project's suites and runs.
   const canCreateMilestone =
     entityType === "milestone" && selectedProjectId !== null;
+
+  // A configuration belongs to the project it is created in.
+  const canCreateConfiguration =
+    entityType === "configuration" && selectedProjectId !== null;
 
   const openCreate = () => {
     setCreateError(null);
@@ -170,6 +179,34 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
       });
     } catch (err: unknown) {
       setCreateError(readApiError(err, "Failed to create milestone"));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
+  const createConfiguration = async (values: ConfigurationFormValues) => {
+    if (!selectedProjectId) return;
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const created = await apiFetch(() =>
+        client.projects.addProjectConfiguration({
+          id: selectedProjectId,
+          requestBody: buildConfigurationCreateRequest(values),
+        }),
+      );
+      closeCreate();
+      refreshProjects();
+      announce(created.message);
+      // A create response may carry a `configId` of its own, but the key the
+      // project lists the configuration under is the one that addresses it.
+      setSelection({
+        type: "configuration",
+        id: created.id,
+        projectId: selectedProjectId,
+      });
+    } catch (err: unknown) {
+      setCreateError(readApiError(err, "Failed to create configuration"));
     } finally {
       setCreateBusy(false);
     }
@@ -354,8 +391,12 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
               const c = await apiFetch(() =>
                 client.configurations.getConfiguration({ id }),
               );
+              // The listing key is what addresses the configuration: a
+              // configuration created with an explicit `configId` carries a
+              // document id that differs from its key, and a rename never
+              // moves the key.
               return {
-                id: c.configId,
+                id,
                 name: c.name,
                 meta: [c.browser, c.os].filter(Boolean).join(", "),
               };
@@ -434,6 +475,18 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
         </div>
       )}
 
+      {canCreateConfiguration && (
+        <div className="entity-list__toolbar">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={openCreate}
+          >
+            New configuration
+          </button>
+        </div>
+      )}
+
       {creating && canCreateMilestone && (
         <Dialog title="New milestone" onClose={closeCreate}>
           {optionsLoading ? (
@@ -489,6 +542,18 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
             busy={createBusy}
             error={createError}
             onSubmit={createCase}
+            onCancel={closeCreate}
+          />
+        </Dialog>
+      )}
+
+      {creating && canCreateConfiguration && (
+        <Dialog title="New configuration" onClose={closeCreate}>
+          <ConfigurationForm
+            submitLabel="Create configuration"
+            busy={createBusy}
+            error={createError}
+            onSubmit={createConfiguration}
             onCancel={closeCreate}
           />
         </Dialog>
