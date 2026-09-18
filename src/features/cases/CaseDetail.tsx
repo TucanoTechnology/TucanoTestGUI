@@ -1,9 +1,20 @@
-import { useEffect, useState } from "react";
-import type { Project, TestCase } from "../../api/generated/index.js";
+import { useEffect, useId, useState, type FormEvent } from "react";
+import type {
+  Project,
+  TestCase,
+  TestCaseUpdateRequest,
+  TestStep,
+} from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { useProjectContext } from "../../app/ProjectContext.js";
+import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import { CaseForm, type CaseFormValues } from "./CaseForm.js";
+import { StepsEditor } from "./StepsEditor.js";
+
+type Mode = "view" | "edit" | "duplicate" | "delete";
 
 /**
  * A case identifier is unique inside its parent, not deployment-wide, so
@@ -31,6 +42,47 @@ function findCaseInProject(
   return undefined;
 }
 
+/**
+ * Only the fields the form changed travel: the API replaces every field a
+ * request carries, so a value resent unchanged would still spend a revision
+ * snapshot on the case. An unchanged priority or severity is left out rather
+ * than sent empty, which the field's domain has no room for.
+ */
+function buildUpdateRequest(
+  testCase: TestCase,
+  values: CaseFormValues,
+): TestCaseUpdateRequest {
+  const requestBody: TestCaseUpdateRequest = {};
+  const currentTags = testCase.tags ?? [];
+
+  if (values.title !== testCase.title) {
+    requestBody.title = values.title;
+  }
+  if (values.description !== (testCase.description ?? "")) {
+    requestBody.description = values.description;
+  }
+  if (values.preconditions !== (testCase.preconditions ?? "")) {
+    requestBody.preconditions = values.preconditions;
+  }
+  if (values.expectedResult !== (testCase.expectedResult ?? "")) {
+    requestBody.expectedResult = values.expectedResult;
+  }
+  if (values.priority && values.priority !== testCase.priority) {
+    requestBody.priority = values.priority;
+  }
+  if (values.severity && values.severity !== testCase.severity) {
+    requestBody.severity = values.severity;
+  }
+  if (
+    values.tags.length !== currentTags.length ||
+    values.tags.some((tag, index) => tag !== currentTags[index])
+  ) {
+    requestBody.tags = values.tags;
+  }
+
+  return requestBody;
+}
+
 export function CaseDetail({
   caseId,
   projectId,
@@ -39,13 +91,29 @@ export function CaseDetail({
   projectId?: string;
 }) {
   const { client } = useAuth();
-  const [testCase, setTestCase] = useState<TestCase | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { setSelection, refreshProjects, announce } = useProjectContext();
+  const fieldId = useId();
+  const [snapshot, setSnapshot] = useState<{
+    key: string;
+    testCase: TestCase | null;
+  } | null>(null);
   const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [mode, setMode] = useState<Mode>("view");
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<ApiErrorInfo | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [newId, setNewId] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+
+  // The loaded case belongs to the target it was read for: a selection change
+  // shows the spinner rather than the previous case, while a re-fetch after a
+  // mutation leaves the case on screen until the fresh one lands.
+  const target = `${projectId ?? ""}\u0000${caseId}`;
+  const testCase = snapshot?.key === target ? snapshot.testCase : null;
+  const loading = snapshot?.key !== target;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
 
     const request = projectId
@@ -57,26 +125,128 @@ export function CaseDetail({
     request
       .then((data) => {
         if (cancelled) return;
-        if (data) {
-          setTestCase(data);
-        } else {
+        setSnapshot({ key: target, testCase: data ?? null });
+        if (!data) {
           setError({
             code: null,
             message: `Test case ${caseId} is not part of project ${projectId}`,
           });
         }
-        setLoading(false);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        setSnapshot({ key: target, testCase: null });
         setError(readApiError(err, "Failed to load test case"));
-        setLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [client, caseId, projectId]);
+  }, [client, caseId, projectId, target, reloadToken]);
+
+  const startAction = (next: Mode) => {
+    setActionError(null);
+    setMode(next);
+  };
+
+  const cancelAction = () => {
+    setActionError(null);
+    setMode("view");
+  };
+
+  const updateCase = async (values: CaseFormValues) => {
+    if (!testCase) return;
+    const requestBody = buildUpdateRequest(testCase, values);
+    if (Object.keys(requestBody).length === 0) {
+      setMode("view");
+      return;
+    }
+
+    setBusy(true);
+    setActionError(null);
+    try {
+      const updated = await apiFetch(() =>
+        client.testCases.updateTestCase({ id: caseId, requestBody }),
+      );
+      setMode("view");
+      setReloadToken((token) => token + 1);
+      refreshProjects();
+      announce(updated.message);
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to update test case"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * An update replaces the stored steps wholesale, so the editor hands over the
+   * complete array and the case is read back to show what the API now holds.
+   */
+  const saveSteps = async (steps: TestStep[]): Promise<boolean> => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const updated = await apiFetch(() =>
+        client.testCases.updateTestCase({ id: caseId, requestBody: { steps } }),
+      );
+      setReloadToken((token) => token + 1);
+      announce(updated.message);
+      return true;
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to save steps"));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const duplicateCase = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setActionError(null);
+    try {
+      const trimmedId = newId.trim();
+      const trimmedTitle = newTitle.trim();
+      const duplicated = await apiFetch(() =>
+        client.testCases.duplicateTestCase({
+          id: caseId,
+          requestBody: {
+            ...(trimmedId ? { newId: trimmedId } : {}),
+            ...(trimmedTitle ? { newTitle: trimmedTitle } : {}),
+          },
+        }),
+      );
+      setMode("view");
+      setNewId("");
+      setNewTitle("");
+      refreshProjects();
+      announce(duplicated.message);
+      setSelection({ type: "case", id: duplicated.id, projectId });
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to duplicate test case"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteCase = async () => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const deleted = await apiFetch(() =>
+        client.testCases.deleteTestCase({ id: caseId }),
+      );
+      setMode("view");
+      refreshProjects();
+      setSelection(null);
+      announce(deleted.message);
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to delete test case"));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -102,106 +272,228 @@ export function CaseDetail({
         </p>
       </div>
 
-      {testCase.description && (
-        <div className="detail-field">
-          <div className="detail-field__label">Description</div>
-          <div className="detail-field__value">{testCase.description}</div>
-        </div>
-      )}
+      <div className="detail-actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => startAction("edit")}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => startAction("duplicate")}
+        >
+          Duplicate
+        </button>
+        <button
+          type="button"
+          className="btn btn-danger"
+          onClick={() => startAction("delete")}
+        >
+          Delete
+        </button>
+      </div>
 
-      {testCase.preconditions && (
-        <div className="detail-field">
-          <div className="detail-field__label">Preconditions</div>
-          <div className="detail-field__value">{testCase.preconditions}</div>
-        </div>
-      )}
+      {mode === "edit" ? (
+        <CaseForm
+          submitLabel="Save changes"
+          caseId={testCase.testCaseId}
+          initialValues={{
+            title: testCase.title,
+            expectedResult: testCase.expectedResult ?? "",
+            description: testCase.description ?? "",
+            preconditions: testCase.preconditions ?? "",
+            priority: testCase.priority ?? "",
+            severity: testCase.severity ?? "",
+            tags: testCase.tags ?? [],
+          }}
+          busy={busy}
+          error={actionError}
+          onSubmit={updateCase}
+          onCancel={cancelAction}
+        />
+      ) : (
+        <>
+          {testCase.description && (
+            <div className="detail-field">
+              <div className="detail-field__label">Description</div>
+              <div className="detail-field__value">{testCase.description}</div>
+            </div>
+          )}
 
-      {testCase.priority && (
-        <div className="detail-field">
-          <div className="detail-field__label">Priority</div>
-          <span
-            className={`badge ${
-              testCase.priority === "High" || testCase.priority === "Critical"
-                ? "badge-fail"
-                : testCase.priority === "Medium"
-                  ? "badge-priority-medium"
-                  : "badge-priority-low"
-            }`}
-          >
-            {testCase.priority}
-          </span>
-        </div>
-      )}
+          {testCase.preconditions && (
+            <div className="detail-field">
+              <div className="detail-field__label">Preconditions</div>
+              <div className="detail-field__value">
+                {testCase.preconditions}
+              </div>
+            </div>
+          )}
 
-      {testCase.severity && (
-        <div className="detail-field">
-          <div className="detail-field__label">Severity</div>
-          <div className="detail-field__value">{testCase.severity}</div>
-        </div>
-      )}
-
-      {testCase.tags && testCase.tags.length > 0 && (
-        <div className="detail-field">
-          <div className="detail-field__label">Tags</div>
-          <div className="tag-list">
-            {testCase.tags.map((tag) => (
-              <span key={tag} className="tag">
-                {tag}
+          {testCase.priority && (
+            <div className="detail-field">
+              <div className="detail-field__label">Priority</div>
+              <span
+                className={`badge ${
+                  testCase.priority === "High" ||
+                  testCase.priority === "Critical"
+                    ? "badge-fail"
+                    : testCase.priority === "Medium"
+                      ? "badge-priority-medium"
+                      : "badge-priority-low"
+                }`}
+              >
+                {testCase.priority}
               </span>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
+
+          {testCase.severity && (
+            <div className="detail-field">
+              <div className="detail-field__label">Severity</div>
+              <div className="detail-field__value">{testCase.severity}</div>
+            </div>
+          )}
+
+          {testCase.tags && testCase.tags.length > 0 && (
+            <div className="detail-field">
+              <div className="detail-field__label">Tags</div>
+              <div className="tag-list">
+                {testCase.tags.map((tag) => (
+                  <span key={tag} className="tag">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <StepsEditor
+            steps={testCase.steps ?? []}
+            busy={busy}
+            error={actionError}
+            onSave={saveSteps}
+            onDismissError={() => setActionError(null)}
+          />
+
+          {testCase.expectedResult && (
+            <div className="detail-field">
+              <div className="detail-field__label">Expected Result</div>
+              <div className="detail-field__value">
+                {testCase.expectedResult}
+              </div>
+            </div>
+          )}
+
+          {testCase.attachments && testCase.attachments.length > 0 && (
+            <div className="detail-field">
+              <div className="detail-field__label">
+                Attachments ({testCase.attachments.length})
+              </div>
+              <ul className="entity-list">
+                {testCase.attachments.map((attachment) => (
+                  <li key={attachment.filename} className="entity-list__item">
+                    <span className="entity-list__name">
+                      {attachment.originalName}
+                    </span>
+                    <span className="entity-list__meta">
+                      {attachment.size} bytes
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
       )}
 
-      {testCase.steps && testCase.steps.length > 0 && (
-        <div className="detail-field">
-          <div className="detail-field__label">
-            Steps ({testCase.steps.length})
-          </div>
-          <ol className="steps-list">
-            {testCase.steps.map((step, i) => {
-              const stepObj =
-                typeof step === "string" ? { action: step } : step;
-              return (
-                <li key={i} className="steps-list__item">
-                  <div className="steps-list__action">{stepObj.action}</div>
-                  {stepObj.expectedResult && (
-                    <div className="steps-list__expected">
-                      → {stepObj.expectedResult}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+      {mode === "duplicate" && (
+        <Dialog title="Duplicate case" onClose={cancelAction}>
+          <form
+            className="case-form"
+            onSubmit={duplicateCase}
+            aria-label="Duplicate case form"
+          >
+            {actionError && <ApiErrorNotice error={actionError} />}
+
+            <div className="form-field">
+              <label htmlFor={`${fieldId}-new-id`}>New ID (optional)</label>
+              <input
+                id={`${fieldId}-new-id`}
+                type="text"
+                value={newId}
+                onChange={(event) => setNewId(event.target.value)}
+                aria-describedby={`${fieldId}-new-id-hint`}
+              />
+              <p className="form-field__hint" id={`${fieldId}-new-id-hint`}>
+                Leave blank to derive the copy&apos;s ID from the source.
+              </p>
+            </div>
+
+            <div className="form-field">
+              <label htmlFor={`${fieldId}-new-title`}>
+                New title (optional)
+              </label>
+              <input
+                id={`${fieldId}-new-title`}
+                type="text"
+                value={newTitle}
+                onChange={(event) => setNewTitle(event.target.value)}
+                aria-describedby={`${fieldId}-new-title-hint`}
+              />
+              <p className="form-field__hint" id={`${fieldId}-new-title-hint`}>
+                Leave blank to keep the source title.
+              </p>
+            </div>
+
+            <div className="dialog__actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={cancelAction}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? "Duplicating…" : "Duplicate case"}
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
 
-      {testCase.expectedResult && (
-        <div className="detail-field">
-          <div className="detail-field__label">Expected Result</div>
-          <div className="detail-field__value">{testCase.expectedResult}</div>
-        </div>
-      )}
+      {mode === "delete" && (
+        <Dialog title="Delete case" onClose={cancelAction}>
+          <p className="dialog__body">
+            Delete “{testCase.title}” ({testCase.testCaseId})? Every test suite
+            that holds it loses it, and the case is gone from the project. This
+            cannot be undone.
+          </p>
 
-      {testCase.attachments && testCase.attachments.length > 0 && (
-        <div className="detail-field">
-          <div className="detail-field__label">
-            Attachments ({testCase.attachments.length})
+          {actionError && <ApiErrorNotice error={actionError} />}
+
+          <div className="dialog__actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={cancelAction}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => void deleteCase()}
+              disabled={busy}
+            >
+              {busy ? "Deleting…" : "Delete case"}
+            </button>
           </div>
-          <ul className="entity-list">
-            {testCase.attachments.map((attachment) => (
-              <li key={attachment.filename} className="entity-list__item">
-                <span className="entity-list__name">
-                  {attachment.originalName}
-                </span>
-                <span className="entity-list__meta">
-                  {attachment.size} bytes
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
+        </Dialog>
       )}
     </div>
   );
