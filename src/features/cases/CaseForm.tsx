@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import type { TestCase } from "../../api/generated/index.js";
 import type { ApiErrorInfo } from "../../api/errors.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import { parseTags } from "../../app/tags.js";
 
 export type CasePriority = NonNullable<TestCase["priority"]>;
 export type CaseSeverity = NonNullable<TestCase["severity"]>;
@@ -46,10 +47,6 @@ interface CaseFormProps {
   error?: ApiErrorInfo | null;
   onSubmit: (values: CaseFormValues) => void;
   onCancel: () => void;
-}
-
-function parseTags(value: string): string[] {
-  return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
 export function CaseForm({

@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import type { ApiErrorInfo } from "../api/errors.js";
 import { ApiErrorNotice } from "./ApiErrorNotice.js";
+import { parseTags } from "./tags.js";
 
 export interface EntityFormValues {
   name: string;
@@ -16,10 +17,6 @@ interface EntityFormProps {
   error?: ApiErrorInfo | null;
   onSubmit: (values: EntityFormValues) => void;
   onCancel: () => void;
-}
-
-function parseTags(value: string): string[] {
-  return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
 /**
