@@ -6,7 +6,7 @@ import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
-import { ProjectForm, type ProjectFormValues } from "./ProjectForm.js";
+import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 
 export function ProjectExplorer() {
   const { client } = useAuth();
@@ -90,7 +90,7 @@ export function ProjectExplorer() {
     setCreateError(null);
   };
 
-  const createProject = async (values: ProjectFormValues) => {
+  const createProject = async (values: EntityFormValues) => {
     setCreateBusy(true);
     setCreateError(null);
     try {
@@ -124,7 +124,7 @@ export function ProjectExplorer() {
 
       {creating && (
         <Dialog title="New project" onClose={closeCreate}>
-          <ProjectForm
+          <EntityForm
             submitLabel="Create project"
             busy={createBusy}
             error={createError}

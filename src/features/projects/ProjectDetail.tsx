@@ -6,13 +6,13 @@ import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
-import { ProjectForm, type ProjectFormValues } from "./ProjectForm.js";
+import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 
 type Mode = "view" | "edit" | "duplicate" | "delete";
 
 function buildUpdateRequest(
   project: Project,
-  values: ProjectFormValues,
+  values: EntityFormValues,
 ): ProjectUpdateRequest {
   const requestBody: ProjectUpdateRequest = {};
   const currentTags = project.tags ?? [];
@@ -80,7 +80,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     setMode("view");
   };
 
-  const updateProject = async (values: ProjectFormValues) => {
+  const updateProject = async (values: EntityFormValues) => {
     if (!project) return;
     const requestBody = buildUpdateRequest(project, values);
     if (Object.keys(requestBody).length === 0) {
@@ -203,7 +203,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       </div>
 
       {mode === "edit" ? (
-        <ProjectForm
+        <EntityForm
           submitLabel="Save changes"
           initialValues={{
             name: project.name,
@@ -306,7 +306,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       {mode === "duplicate" && (
         <Dialog title="Duplicate project" onClose={cancelAction}>
           <form
-            className="project-form"
+            className="entity-form"
             onSubmit={duplicateProject}
             aria-label="Duplicate project form"
           >
