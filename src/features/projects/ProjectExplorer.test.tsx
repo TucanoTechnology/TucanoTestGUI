@@ -17,6 +17,30 @@ const CHECKOUT = {
   tags: ["web", "smoke"],
 };
 
+/** The seeded shape: a suite carrying its cases plus a directly owned case. */
+const SEEDED_CHECKOUT = {
+  ...CHECKOUT,
+  testSuites: [
+    {
+      suiteId: "smoke",
+      name: "Smoke",
+      description: "Fast checks",
+      testCases: [
+        {
+          testCaseId: "TC-CART-1",
+          title: "Cart survives a refresh",
+        },
+      ],
+    },
+  ],
+  testCases: [
+    {
+      testCaseId: "TC-PROJECT-1",
+      title: "Guest checkout creates an order",
+    },
+  ],
+};
+
 function ContextProbe() {
   const { announcement, selection } = useProjectContext();
   return (
@@ -133,6 +157,50 @@ describe("ProjectExplorer", () => {
     expect(
       screen.getByRole("dialog", { name: "New project" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders suites, their cases and the cases the project owns directly", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, [SEEDED_CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, SEEDED_CHECKOUT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderExplorer();
+
+    const tree = await screen.findByRole("tree");
+    // The project counts both children: its suite and its directly owned case.
+    // The count span abuts the label, so the accessible name carries no space.
+    fireEvent.click(
+      within(tree).getByRole("button", { name: /^Checkout\s*2$/ }),
+    );
+
+    const directCase = within(tree).getByRole("button", {
+      name: "Guest checkout creates an order",
+    });
+    fireEvent.click(directCase);
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "case:TC-PROJECT-1",
+      );
+    });
+
+    // A suite keeps nesting its own cases under itself.
+    fireEvent.click(
+      within(tree).getByRole("button", { name: /^Smoke\s*1$/ }),
+    );
+    fireEvent.click(
+      within(tree).getByRole("button", { name: "Cart survives a refresh" }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "case:TC-CART-1",
+      );
+    });
   });
 
   it("has no accessibility violations with the create form open", async () => {

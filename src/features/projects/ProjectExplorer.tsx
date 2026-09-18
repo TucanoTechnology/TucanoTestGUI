@@ -154,6 +154,11 @@ export function ProjectExplorer() {
             const isActive =
               selectedProjectId === project.projectId &&
               selection?.type === "project";
+            // Reads embed the suites with their cases and add `testCases` for the
+            // cases the project holds directly, so both are children here.
+            const suites = project.testSuites ?? [];
+            const directCases = project.testCases ?? [];
+            const childCount = suites.length + directCases.length;
 
             return (
               <li
@@ -173,16 +178,14 @@ export function ProjectExplorer() {
                     {isExpanded ? "▾" : "▸"}
                   </span>
                   <span className="tree-node__label">{project.name}</span>
-                  {project.testSuites && (
-                    <span className="tree-node__count">
-                      {project.testSuites.length}
-                    </span>
+                  {childCount > 0 && (
+                    <span className="tree-node__count">{childCount}</span>
                   )}
                 </button>
 
-                {isExpanded && project.testSuites && (
+                {isExpanded && childCount > 0 && (
                   <ul role="group">
-                    {project.testSuites.map((suite) => {
+                    {suites.map((suite) => {
                       const isSuiteActive = selection?.id === suite.suiteId;
                       const suiteExpanded = expandedProjects.has(suite.suiteId);
 
@@ -262,6 +265,26 @@ export function ProjectExplorer() {
                               })}
                             </ul>
                           )}
+                        </li>
+                      );
+                    })}
+                    {directCases.map((tc) => {
+                      const isCaseActive = selection?.id === tc.testCaseId;
+
+                      return (
+                        <li key={tc.testCaseId} role="treeitem">
+                          <button
+                            className={`tree-node tree-node--grandchild ${isCaseActive ? "tree-node--active" : ""}`}
+                            onClick={() =>
+                              selectCase(tc.testCaseId, project.projectId)
+                            }
+                            aria-current={isCaseActive ? "true" : undefined}
+                          >
+                            <span className="tree-node__icon" aria-hidden="true">
+                              📄
+                            </span>
+                            <span className="tree-node__label">{tc.title}</span>
+                          </button>
                         </li>
                       );
                     })}
