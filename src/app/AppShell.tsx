@@ -77,7 +77,7 @@ function AppShellContent() {
       case "case":
         return <CaseDetail caseId={selection.id} projectId={selection.projectId} />;
       case "run":
-        return <RunDetail runId={selection.id} />;
+        return <RunDetail runId={selection.id} projectId={selection.projectId} />;
       case "milestone":
         return (
           <MilestoneDetail
