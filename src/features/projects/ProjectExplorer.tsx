@@ -10,7 +10,7 @@ import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 import { parseTags } from "../../app/tags.js";
 
 export function ProjectExplorer() {
-  const { client } = useAuth();
+  const { client, systemAdmin } = useAuth();
   const fieldId = useId();
   const {
     selectedProjectId,
@@ -138,9 +138,19 @@ export function ProjectExplorer() {
   return (
     <nav className="explorer" aria-label="Project explorer">
       <div className="explorer__toolbar">
-        <button type="button" className="btn btn-primary" onClick={openCreate}>
-          New Project
-        </button>
+        {systemAdmin ? (
+          <button type="button" className="btn btn-primary" onClick={openCreate}>
+            New Project
+          </button>
+        ) : (
+          // `POST /projects` is the one create answered `forbidden` to everyone
+          // but a system administrator, so the control is not offered to an
+          // account whose authority cannot use it. The API's refusal is still
+          // rendered if one arrives.
+          <p className="explorer__notice">
+            Only a system administrator can create a project.
+          </p>
+        )}
       </div>
 
       <form

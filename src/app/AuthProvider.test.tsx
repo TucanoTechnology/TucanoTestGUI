@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { AuthProvider, useAuth } from "./AuthProvider.js";
-import { apiFetch } from "../api/client.js";
+import { apiFetch, setRefreshToken } from "../api/client.js";
 import {
   bearerToken,
   errorEnvelope,
@@ -19,7 +19,8 @@ const SESSION = {
 };
 
 function Probe() {
-  const { isAuthenticated, username, login, logout } = useAuth();
+  const { isAuthenticated, username, systemAdmin, roles, login, logout } =
+    useAuth();
   const [projects, setProjects] = useState("none");
 
   const load = () => {
@@ -33,6 +34,18 @@ function Probe() {
     <div>
       <span data-testid="state">
         {isAuthenticated ? `signed-in:${username}` : "signed-out"}
+      </span>
+      <span data-testid="authority">
+        {isAuthenticated
+          ? systemAdmin
+            ? "system-admin"
+            : "not-system-admin"
+          : "none"}
+      </span>
+      <span data-testid="roles">
+        {Object.entries(roles)
+          .map(([projectId, role]) => `${projectId}=${role}`)
+          .join(",")}
       </span>
       <span data-testid="projects">{projects}</span>
       <button
@@ -115,6 +128,66 @@ describe("AuthProvider", () => {
     expect(localStorage.getItem("refreshToken")).toBe("refresh-1");
   });
 
+  it("keeps the authority and project roles the account is signed in with", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/auth/login" && method === "POST") {
+        return jsonResponse(200, SESSION);
+      }
+      if (url === "/api/auth/me" && method === "GET") {
+        return jsonResponse(200, {
+          id: "u2",
+          username: "viewer",
+          systemAdmin: false,
+          roles: { "checkout.json": "owner" },
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderProbe();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    // The authority arrives with the account, not after it: a control is never
+    // rendered for an account whose name is already known.
+    await waitFor(() => {
+      expect(screen.getByTestId("authority")).toHaveTextContent(
+        "not-system-admin",
+      );
+    });
+    expect(screen.getByTestId("state")).toHaveTextContent("signed-in:viewer");
+    expect(screen.getByTestId("roles")).toHaveTextContent("checkout.json=owner");
+  });
+
+  it("keeps the authority a stored session is restored with", async () => {
+    setRefreshToken("refresh-1");
+    mockApi(({ url, method }) => {
+      if (url === "/api/auth/refresh" && method === "POST") {
+        return jsonResponse(200, SESSION);
+      }
+      if (url === "/api/auth/me" && method === "GET") {
+        return jsonResponse(200, {
+          id: "u1",
+          username: "admin",
+          systemAdmin: true,
+          roles: {},
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderProbe();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("authority")).toHaveTextContent(
+        "system-admin",
+      );
+    });
+    expect(screen.getByTestId("state")).toHaveTextContent("signed-in:admin");
+    // The administrator reaches every project holding no role in any of them,
+    // so the authority is what carries its controls.
+    expect(screen.getByTestId("roles")).toBeEmptyDOMElement();
+  });
+
   it("returns to the login screen when the refresh is refused", async () => {
     mockApi(({ url, method }) => {
       if (url === "/api/auth/login" && method === "POST") {
@@ -164,6 +237,9 @@ describe("AuthProvider", () => {
     await waitFor(() => {
       expect(screen.getByTestId("state")).toHaveTextContent("signed-out");
     });
+    // The authority does not outlive the session it was reported for.
+    expect(screen.getByTestId("authority")).toHaveTextContent("none");
+    expect(screen.getByTestId("roles")).toBeEmptyDOMElement();
 
     const logout = requests.find((request) => request.url === "/api/auth/logout");
     expect(logout!.body).toEqual({ refreshToken: "refresh-1" });
