@@ -10,6 +10,7 @@ import { CaseDetail } from "../features/cases/CaseDetail.js";
 import { RunDetail } from "../features/runs/RunDetail.js";
 import { MilestoneDetail } from "../features/milestones/MilestoneDetail.js";
 import { ConfigurationDetail } from "../features/configurations/ConfigurationDetail.js";
+import { ReportsView } from "../features/reports/ReportsView.js";
 import { EntityList } from "./EntityList.js";
 
 const NAV_ITEMS = [
@@ -168,14 +169,7 @@ function AppShellContent() {
           {activeItem.entityType ? (
             <EntityList entityType={activeItem.entityType} />
           ) : (
-            <div className="empty-state">
-              <div className="empty-state__icon" aria-hidden="true">
-                📊
-              </div>
-              <p className="empty-state__message">
-                Reports are not available yet
-              </p>
-            </div>
+            <ReportsView />
           )}
         </main>
 
