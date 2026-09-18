@@ -10,6 +10,7 @@ import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import { toJsonKey } from "../../app/keys.js";
 import { RunForm, type RunFormValues } from "./RunForm.js";
 import { buildRunUpdateRequest } from "./runSelection.js";
 import { ResultForm, type DefectLinkValues } from "./ResultForm.js";
@@ -160,7 +161,7 @@ export function RunDetail({
       const duplicated = await apiFetch(() =>
         client.testRuns.duplicateTestRun({
           id: runId,
-          requestBody: trimmed.length > 0 ? { newId: trimmed } : {},
+          requestBody: trimmed.length > 0 ? { newId: toJsonKey(trimmed) } : {},
         }),
       );
       setNewId("");
@@ -535,6 +536,9 @@ export function RunDetail({
               <p className="form-field__hint" id={`${fieldId}-new-id-hint`}>
                 The copy keeps this run&apos;s name and drops its recorded
                 results. Leave blank to derive the copy&apos;s ID from this one.
+                A new ID is one name ending in .json, such as
+                nightly-copy.json; the suffix is added for you if you leave it
+                off.
               </p>
             </div>
             <div className="dialog__actions">

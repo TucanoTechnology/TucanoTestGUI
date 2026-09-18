@@ -188,12 +188,95 @@ describe("ProjectDetail", () => {
     expect(posts).toHaveLength(1);
     expect(posts[0]?.url).toBe("/api/projects/checkout/duplicate");
     expect(posts[0]?.body).toEqual({
-      newId: "copy",
+      newId: "copy.json",
       newName: "Checkout copy",
     });
     expect(screen.getByTestId("announcement")).toHaveTextContent(
       "Project duplicated",
     );
+  });
+
+  it("states the .json rule and adds a missing suffix to a typed id", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, CHECKOUT);
+      }
+      if (url === "/api/projects/checkout/duplicate" && method === "POST") {
+        return jsonResponse(201, {
+          message: "Project duplicated",
+          id: "audit-sweep-copy.json",
+        });
+      }
+      if (url === "/api/projects/audit-sweep-copy.json" && method === "GET") {
+        return jsonResponse(200, { ...CHECKOUT, projectId: "audit-sweep-copy.json" });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await openDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Duplicate project",
+    });
+    const idField = within(dialog).getByLabelText("New ID (optional)");
+    // The rule the API enforces is stated, so the field does not read as
+    // "type any name".
+    expect(idField).toHaveAccessibleDescription(/ending in \.json/);
+
+    // A bare name is completed before it is sent, so it cannot be refused with
+    // an opaque `Invalid request`.
+    fireEvent.change(idField, { target: { value: "audit-sweep-copy" } });
+    fireEvent.submit(
+      within(dialog).getByRole("form", { name: "Duplicate project form" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        requests.filter((request) => request.method === "POST"),
+      ).toHaveLength(1);
+    });
+    const [post] = requests.filter((request) => request.method === "POST");
+    expect(post?.body).toEqual({ newId: "audit-sweep-copy.json" });
+  });
+
+  it("leaves an id that already ends in .json alone", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, CHECKOUT);
+      }
+      if (url === "/api/projects/checkout/duplicate" && method === "POST") {
+        return jsonResponse(201, {
+          message: "Project duplicated",
+          id: "copy.json",
+        });
+      }
+      if (url === "/api/projects/copy.json" && method === "GET") {
+        return jsonResponse(200, { ...CHECKOUT, projectId: "copy.json" });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await openDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Duplicate project",
+    });
+    fireEvent.change(within(dialog).getByLabelText("New ID (optional)"), {
+      target: { value: "  copy.json  " },
+    });
+    fireEvent.submit(
+      within(dialog).getByRole("form", { name: "Duplicate project form" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        requests.filter((request) => request.method === "POST"),
+      ).toHaveLength(1);
+    });
+    const [post] = requests.filter((request) => request.method === "POST");
+    expect(post?.body).toEqual({ newId: "copy.json" });
   });
 
   it("omits both optional duplicate fields when they are left blank", async () => {

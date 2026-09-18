@@ -554,10 +554,55 @@ describe("RunDetail", () => {
         "run:nightly-copy.json",
       );
     });
-    expect(store.posts).toEqual([{ newId: "nightly-copy" }]);
+    expect(store.posts).toEqual([{ newId: "nightly-copy.json" }]);
     expect(screen.getByTestId("announcement")).toHaveTextContent(
       "Test run duplicated",
     );
+  });
+
+  it("states the .json rule and adds a missing suffix to a typed run id", async () => {
+    const store = emptyStore();
+    await openDetail(store);
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Duplicate test run",
+    });
+    const idField = within(dialog).getByLabelText("New run ID");
+    // The rule the API enforces is stated, so the field does not read as
+    // "type any name".
+    expect(idField).toHaveAccessibleDescription(/ending in \.json/);
+
+    // A bare name is completed before it is sent, so it cannot be refused with
+    // an opaque `Invalid request`.
+    fireEvent.change(idField, { target: { value: "audit-run-sweep-copy" } });
+    fireEvent.submit(
+      within(dialog).getByRole("form", { name: "Duplicate test run form" }),
+    );
+
+    await waitFor(() => {
+      expect(store.posts).toEqual([{ newId: "audit-run-sweep-copy.json" }]);
+    });
+  });
+
+  it("leaves a run id that already ends in .json alone", async () => {
+    const store = emptyStore();
+    await openDetail(store);
+
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Duplicate test run",
+    });
+    fireEvent.change(within(dialog).getByLabelText("New run ID"), {
+      target: { value: " weekly-checkout.json " },
+    });
+    fireEvent.submit(
+      within(dialog).getByRole("form", { name: "Duplicate test run form" }),
+    );
+
+    await waitFor(() => {
+      expect(store.posts).toEqual([{ newId: "weekly-checkout.json" }]);
+    });
   });
 
   it("deletes the run and clears the selection", async () => {
