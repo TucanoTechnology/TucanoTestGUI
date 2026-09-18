@@ -25,6 +25,7 @@
   --color-danger-light: #fee2e2;
   --color-info: #0891b2;
   --color-info-light: #cffafe;
+  --color-backdrop: rgba(15, 23, 42, 0.45);
 
   /* Spacing — 4px base */
   --space-1: 4px;
@@ -162,11 +163,15 @@ textarea {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   height: var(--topbar-height);
+  box-shadow: var(--shadow-sm);
+  z-index: 1;
 }
 
 .topbar__brand {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
+  color: var(--color-primary);
+  letter-spacing: -0.01em;
 }
 
 .topbar__project-switcher {
@@ -256,12 +261,14 @@ textarea {
   /* A grid item defaults to min-width: auto, which lets wide content push the
      centre track past its share and take the right pane's width with it. */
   min-width: 0;
+  padding: var(--space-4);
 }
 
 .pane-right {
   border-left: 1px solid var(--color-border);
   overflow-y: auto;
   background: var(--color-surface);
+  padding: var(--space-5);
 }
 
 @media (max-width: 1024px) {
@@ -484,4 +491,908 @@ textarea {
   padding: var(--space-2) var(--space-3);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Feedback: loading, empty state, error display
+--------------------------------------------------------------------------- */
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.loading__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
+  animation: spin 700ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-12) var(--space-4);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.empty-state__icon {
+  font-size: var(--font-size-2xl);
+  opacity: 0.6;
+}
+
+.empty-state__message {
+  font-size: var(--font-size-sm);
+}
+
+.error-display {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-light);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-3);
+}
+
+.error-display__code {
+  font-weight: var(--font-weight-semibold);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: var(--font-size-xs);
+}
+
+/* ---------------------------------------------------------------------------
+   Badges and tags
+--------------------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-tight);
+  background: var(--color-surface-active);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.badge-passed {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.badge-failed,
+.badge-fail {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.badge-blocked {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
+}
+
+.badge-retest {
+  background: var(--color-info-light);
+  color: var(--color-info);
+}
+
+.badge-untested {
+  background: var(--color-surface-active);
+  color: var(--color-text-secondary);
+}
+
+.badge-priority-medium {
+  background: var(--color-warning-light);
+  color: var(--color-warning);
+}
+
+.badge-priority-low {
+  background: var(--color-info-light);
+  color: var(--color-info);
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  border: 1px solid transparent;
+}
+
+/* ---------------------------------------------------------------------------
+   Detail panel
+   The right pane's read view for a project, suite, case, run, milestone or
+   configuration, and the centre pane's reports surface.
+--------------------------------------------------------------------------- */
+
+.detail-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.detail-panel__header {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.detail-panel__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+}
+
+.detail-panel__subtitle {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.detail-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.detail-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.detail-field__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.detail-field__value {
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  white-space: pre-wrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Forms
+   Shared by the case/run/milestone/configuration create-and-edit forms, the
+   login screen and the steps editor's inline step form.
+--------------------------------------------------------------------------- */
+
+.case-form,
+.run-form,
+.configuration-form,
+.milestone-form,
+.step-form,
+.entity-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.form-field label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.form-field input,
+.form-field select,
+.form-field textarea {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.form-field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.form-field__hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Bare, unwrapped form controls (the suite-tree search box excluded, which
+   styles itself) get the same box as a `.form-field` control. */
+input:not(.suite-tree__search-input),
+select,
+textarea {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* ---------------------------------------------------------------------------
+   Dialog
+   A portalled modal: backdrop, panel and its title/body/action rows.
+--------------------------------------------------------------------------- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-backdrop);
+  z-index: 100;
+  padding: var(--space-4);
+}
+
+.dialog {
+  width: min(560px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dialog__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-light);
+}
+
+/* ---------------------------------------------------------------------------
+   Entity list
+   The centre pane's list of cases, runs, milestones or configurations.
+--------------------------------------------------------------------------- */
+
+.entity-list__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-3);
+}
+
+.entity-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.entity-list__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  text-align: left;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.entity-list__item:hover {
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.entity-list__item--active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+.entity-list__name {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.entity-list__meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* A nested `.entity-list` inside a detail field (linked projects, suites or
+   cases) is plain content, not the clickable centre-pane list, so its rows
+   drop the card treatment. */
+.detail-field .entity-list {
+  gap: 0;
+}
+
+.detail-field .entity-list__item {
+  padding: var(--space-1) 0;
+  border: none;
+  background: none;
+  border-radius: 0;
+}
+
+.detail-field .entity-list__item:hover {
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Data table
+   The results table on a test run's detail panel.
+--------------------------------------------------------------------------- */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data-table th {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+}
+
+.data-table tbody tr:hover {
+  background: var(--color-surface-hover);
+}
+
+.data-table__id {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Login screen
+--------------------------------------------------------------------------- */
+
+.login-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--color-bg);
+  padding: var(--space-4);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: min(380px, 100%);
+  padding: var(--space-8);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.login-form__title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  text-align: center;
+  margin-bottom: var(--space-2);
+}
+
+.login-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.login-form__field label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+}
+
+.login-form__submit {
+  margin-top: var(--space-2);
+  width: 100%;
+  justify-content: center;
+}
+
+.login-form__debug {
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-light);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.login-form__debug-title {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
+.login-form__debug-btn {
+  width: 100%;
+  justify-content: flex-start;
+  border: 1px solid var(--color-border-light);
+}
+
+/* ---------------------------------------------------------------------------
+   Project explorer
+   The left pane's project/suite/case tree when no project is selected.
+--------------------------------------------------------------------------- */
+
+.explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.explorer__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.explorer__filter {
+  margin: var(--space-2) var(--space-3) 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  background: var(--color-bg);
+}
+
+.explorer__notice {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.tree {
+  list-style: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.tree-node:hover {
+  background: var(--color-surface-hover);
+}
+
+.tree-node--active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.tree-node--child {
+  padding-left: var(--space-6);
+}
+
+.tree-node--grandchild {
+  padding-left: var(--space-8);
+  color: var(--color-text-secondary);
+}
+
+.tree-node__icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.tree-node__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-node__count {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-active);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+
+/* ---------------------------------------------------------------------------
+   Option list
+   The selectable suite/case/run lists inside the run and milestone forms.
+--------------------------------------------------------------------------- */
+
+.option-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+}
+
+.option-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+
+.option-list__item:hover {
+  background: var(--color-surface-hover);
+}
+
+.option-list__item label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex: 1;
+  cursor: pointer;
+}
+
+.option__name {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.option__meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Steps editor
+   A case's ordered steps: the read-only list and its inline add/edit form.
+--------------------------------------------------------------------------- */
+
+.steps-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.steps-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.steps-editor__empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.steps-editor__form {
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+}
+
+.steps-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  counter-reset: step;
+}
+
+.steps-list__item {
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  counter-increment: step;
+  position: relative;
+  padding-left: var(--space-8);
+}
+
+.steps-list__item::before {
+  content: counter(step);
+  position: absolute;
+  left: var(--space-3);
+  top: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.steps-list__action {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.steps-list__expected {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.steps-list__controls {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.steps-list__attachments {
+  margin-top: var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Import section
+   A test run's JUnit import control and the summary its result renders.
+--------------------------------------------------------------------------- */
+
+.import-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border-light);
+}
+
+.import-section__title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.import-section__hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+}
+
+.import-summary__source {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.import-summary__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.import-summary__stat-label {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.import-summary__stat-value {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ---------------------------------------------------------------------------
+   Attachment section
+--------------------------------------------------------------------------- */
+
+.attachment-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.attachment-section__empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.attachment__preview {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+}
+
+.attachment__preview-note {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   Reports
+--------------------------------------------------------------------------- */
+
+.reports {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+}
+
+.report__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.report__scope {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.report__note {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.report-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+}
+
+.report-filters__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.report-filters__hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.report__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+}
+
+.report__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report__stat-label {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.report__stat-value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+}
+
+.report__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.report__table th,
+.report__table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-light);
+  text-align: left;
+}
+
+.report__table th {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background: var(--color-bg);
+}
+
+.report__table tbody tr:hover {
+  background: var(--color-surface-hover);
 }
