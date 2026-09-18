@@ -1,9 +1,16 @@
 import { useEffect, useState } from "react";
-import type { Project, TestSuite } from "../../api/generated/index.js";
+import type {
+  CompositionRequest,
+  Project,
+  TestSuite,
+} from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { useProjectContext } from "../../app/ProjectContext.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import { Dialog } from "../../app/Dialog.js";
+import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 
 /**
  * Selection sentinel for the "Directly in project" node: the cases the project
@@ -96,12 +103,18 @@ export function SuiteTree({
   onSelectSuite,
 }: SuiteTreeProps) {
   const { client } = useAuth();
+  const { projectsVersion, refreshProjects, announce } = useProjectContext();
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiErrorInfo | null>(null);
   const [filter, setFilter] = useState("");
   const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set());
+  const [creating, setCreating] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<ApiErrorInfo | null>(null);
 
+  // Every suite mutation bumps `projectsVersion`, so the tree re-reads the
+  // project it lists rather than holding a stale copy of its suites.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -122,7 +135,7 @@ export function SuiteTree({
     return () => {
       cancelled = true;
     };
-  }, [client, projectId]);
+  }, [client, projectId, projectsVersion]);
 
   // A filter and the rows it was set against belong to the project they were
   // chosen on, not to the next one the switcher lands on.
@@ -143,6 +156,47 @@ export function SuiteTree({
     });
   };
 
+  const openCreate = () => {
+    setCreateError(null);
+    setCreating(true);
+  };
+
+  const closeCreate = () => {
+    setCreating(false);
+    setCreateError(null);
+  };
+
+  const createSuite = async (values: EntityFormValues) => {
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      // The API stores the create body verbatim and validates it against the
+      // suite document, so a field the user left empty is left out rather than
+      // written as an empty string. `CompositionRequest` documents the body as
+      // name-only; the description and tags the schema omits are the fields
+      // `TestSuite` declares and the route accepts.
+      const requestBody: CompositionRequest & {
+        description?: string;
+        tags?: string[];
+      } = {
+        name: values.name,
+        ...(values.description ? { description: values.description } : {}),
+        ...(values.tags.length > 0 ? { tags: values.tags } : {}),
+      };
+      const created = await apiFetch(() =>
+        client.projects.addProjectTestSuite({ id: projectId, requestBody }),
+      );
+      closeCreate();
+      refreshProjects();
+      announce(created.message);
+      onSelectSuite(created.id);
+    } catch (err: unknown) {
+      setCreateError(readApiError(err, "Failed to create suite"));
+    } finally {
+      setCreateBusy(false);
+    }
+  };
+
   const directCaseCount = (project?.testCases ?? []).length;
   const totalCaseCount = project ? countProjectCases(project) : 0;
   const needle = filter.trim().toLowerCase();
@@ -159,11 +213,23 @@ export function SuiteTree({
           className="btn btn-icon"
           title="New suite"
           aria-label="New suite"
-          disabled
+          onClick={openCreate}
         >
           +
         </button>
       </div>
+
+      {creating && (
+        <Dialog title="New suite" onClose={closeCreate}>
+          <EntityForm
+            submitLabel="Create suite"
+            busy={createBusy}
+            error={createError}
+            onSubmit={createSuite}
+            onCancel={closeCreate}
+          />
+        </Dialog>
+      )}
 
       <div className="suite-tree__search">
         <input
