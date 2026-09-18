@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import type { Project } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
@@ -7,9 +7,11 @@ import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
+import { parseTags } from "../../app/tags.js";
 
 export function ProjectExplorer() {
   const { client } = useAuth();
+  const fieldId = useId();
   const {
     selectedProjectId,
     setSelectedProjectId,
@@ -28,11 +30,20 @@ export function ProjectExplorer() {
   const [creating, setCreating] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<ApiErrorInfo | null>(null);
+  const [tagInput, setTagInput] = useState("");
+  const [tagsFilter, setTagsFilter] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    apiFetch(() => client.projects.listProjects({}))
+    // `GET /projects` is the only list route the contract gives a `tags`
+    // parameter. The API reads an empty one as matching nothing at all, so the
+    // parameter is left off the request rather than sent blank.
+    apiFetch(() =>
+      client.projects.listProjects(
+        tagsFilter === "" ? {} : { tags: tagsFilter },
+      ),
+    )
       .then(async (ids) => {
         const docs = await Promise.all(
           ids.map((id) =>
@@ -53,7 +64,17 @@ export function ProjectExplorer() {
     return () => {
       cancelled = true;
     };
-  }, [client, projectsVersion]);
+  }, [client, projectsVersion, tagsFilter]);
+
+  const applyTagFilter = (event: FormEvent) => {
+    event.preventDefault();
+    setTagsFilter(parseTags(tagInput).join(","));
+  };
+
+  const clearTagFilter = () => {
+    setTagInput("");
+    setTagsFilter("");
+  };
 
   const toggleExpand = (id: string) => {
     setExpandedProjects((prev) => {
@@ -122,6 +143,40 @@ export function ProjectExplorer() {
         </button>
       </div>
 
+      <form
+        className="explorer__filter"
+        onSubmit={applyTagFilter}
+        aria-label="Filter projects by tags"
+      >
+        <div className="form-field">
+          <label htmlFor={`${fieldId}-tags`}>Filter by tags</label>
+          <input
+            id={`${fieldId}-tags`}
+            type="text"
+            value={tagInput}
+            onChange={(event) => setTagInput(event.target.value)}
+            aria-describedby={`${fieldId}-tags-hint`}
+          />
+          <p className="form-field__hint" id={`${fieldId}-tags-hint`}>
+            A project matches any tag it carries. Separate tags with commas.
+          </p>
+        </div>
+        <div className="dialog__actions">
+          {tagsFilter !== "" && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={clearTagFilter}
+            >
+              Clear
+            </button>
+          )}
+          <button type="submit" className="btn btn-primary">
+            Filter
+          </button>
+        </div>
+      </form>
+
       {creating && (
         <Dialog title="New project" onClose={closeCreate}>
           <EntityForm
@@ -145,7 +200,11 @@ export function ProjectExplorer() {
         </div>
       ) : projects.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-state__message">No projects found</div>
+          <div className="empty-state__message">
+            {tagsFilter === ""
+              ? "No projects found"
+              : `No projects carry “${tagsFilter}”`}
+          </div>
         </div>
       ) : (
         <ul className="tree" role="tree">

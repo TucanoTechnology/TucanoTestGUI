@@ -5,6 +5,7 @@ import type {
 } from "../../api/generated/index.js";
 import type { ApiErrorInfo } from "../../api/errors.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import { parseTags } from "../../app/tags.js";
 import type { RunCaseOption } from "./runSelection.js";
 
 export interface RunFormValues {
@@ -30,14 +31,6 @@ interface RunFormProps {
   error?: ApiErrorInfo | null;
   onSubmit: (values: RunFormValues) => void;
   onCancel: () => void;
-}
-
-/** A comma-separated tag field, trimmed and stripped of empty entries. */
-function parseTags(value: string): string[] {
-  return value
-    .split(",")
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
 }
 
 function toggleId(ids: string[], id: string): string[] {

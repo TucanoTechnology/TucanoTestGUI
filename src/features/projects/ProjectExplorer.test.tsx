@@ -203,6 +203,111 @@ describe("ProjectExplorer", () => {
     });
   });
 
+  it("filters the project list by tag through the API", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, [CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects?tags=web%2Csmoke" && method === "GET") {
+        return jsonResponse(200, [CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, CHECKOUT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderExplorer();
+    expect(await screen.findByText("Checkout")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter by tags"), {
+      target: { value: "web, smoke, web" },
+    });
+    // Typing alone does not filter: the list is fetched on submit.
+    expect(requests.some((request) => request.url.includes("tags"))).toBe(
+      false,
+    );
+
+    fireEvent.submit(
+      screen.getByRole("form", { name: "Filter projects by tags" }),
+    );
+
+    await waitFor(() => {
+      expect(requests.some((request) => request.url === "/api/projects?tags=web%2Csmoke")).toBe(
+        true,
+      );
+    });
+  });
+
+  it("never sends an empty tags parameter", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, [CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, CHECKOUT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderExplorer();
+    expect(await screen.findByText("Checkout")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter by tags"), {
+      target: { value: " , " },
+    });
+    fireEvent.submit(
+      screen.getByRole("form", { name: "Filter projects by tags" }),
+    );
+
+    // A field with nothing in it is the unfiltered list: the API reads `?tags=`
+    // as matching nothing, so the parameter stays off the request entirely.
+    expect(requests.some((request) => request.url.includes("tags"))).toBe(
+      false,
+    );
+    expect(
+      requests.filter((request) => request.url === "/api/projects"),
+    ).toHaveLength(1);
+    expect(screen.getByText("Checkout")).toBeInTheDocument();
+  });
+
+  it("clears the tag filter and returns to the unfiltered list", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, [CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects?tags=web" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, CHECKOUT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderExplorer();
+    expect(await screen.findByText("Checkout")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Filter by tags"), {
+      target: { value: "web" },
+    });
+    fireEvent.submit(
+      screen.getByRole("form", { name: "Filter projects by tags" }),
+    );
+
+    expect(await screen.findByText("No projects carry “web”")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+
+    expect(await screen.findByText("Checkout")).toBeInTheDocument();
+    expect(
+      requests.filter((request) => request.url === "/api/projects"),
+    ).toHaveLength(2);
+    expect(
+      screen.queryByRole("button", { name: "Clear" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("has no accessibility violations with the create form open", async () => {
     mockApi(({ url, method }) => {
       if (url === "/api/projects" && method === "GET") {

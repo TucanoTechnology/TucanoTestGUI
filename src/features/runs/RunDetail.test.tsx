@@ -389,6 +389,34 @@ describe("RunDetail", () => {
     );
   });
 
+  it("stores edited tags through the run form", async () => {
+    const store = emptyStore();
+    await openDetail(store);
+
+    const form = await openEdit();
+    // The stored tags arrive as the comma-separated field they were typed in.
+    expect(within(form).getByLabelText("Tags")).toHaveValue("nightly");
+
+    fireEvent.change(within(form).getByLabelText("Tags"), {
+      target: { value: " smoke, regression, smoke " },
+    });
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("form", { name: "Save changes form" }),
+      ).not.toBeInTheDocument();
+    });
+    // Blank entries and repeats never reach the API.
+    expect(store.puts).toEqual([{ tags: ["smoke", "regression"] }]);
+    // The stored run is re-read, so the chips only repaint once that lands.
+    expect(await screen.findByText("smoke")).toBeInTheDocument();
+    expect(screen.getByText("regression")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByText("nightly")).not.toBeInTheDocument();
+    });
+  });
+
   it("sends nothing when the edit changes no field", async () => {
     const store = emptyStore();
     const { requests } = await openDetail(store);
