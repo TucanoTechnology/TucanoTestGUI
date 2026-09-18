@@ -4,19 +4,20 @@ Every colour, spacing, radius, type and layout value in the GUI lives in the `:r
 of [`src/styles.css`](../src/styles.css). Components reference the tokens through `var(...)` instead
 of literals, so the palette can be reviewed and changed in one place.
 
-`src/styles.css` holds the **token layer, the global resets and the utilities**, and two tickets have
-landed rules on top of them so far:
+`src/styles.css` holds the **token layer, the global resets and the utilities**, and three tickets
+have landed rules on top of them so far:
 
 - the **application-shell layout** — the top bar, the icon nav rail, the three-pane grid and its
-  narrow-viewport behaviour; and
+  narrow-viewport behaviour;
 - the **shared control primitives** — `.btn` with its variants, and the bare `input`/`select`/
-  `textarea` box.
+  `textarea` box; and
+- the **suite tree** — the left pane's hierarchy, its two pinned virtual nodes and the case rows a
+  suite expands into.
 
-Every other surface (the suite tree, the case list and table, the case detail, the runs,
-milestones, configurations and reports surfaces, and the shared state views) is styled by the ticket
-that owns it (#128–#133), so those surfaces still render unstyled in a browser until their ticket
-lands. The token names and values are frozen: later tickets consume them, they do not re-define
-them.
+Every other surface (the case list and table, the case detail, the runs, milestones, configurations
+and reports surfaces, and the shared state views) is styled by the ticket that owns it (#129–#133),
+so those surfaces still render unstyled in a browser until their ticket lands. The token names and
+values are frozen: later tickets consume them, they do not re-define them.
 
 ## What the suite enforces
 
@@ -77,6 +78,18 @@ Two things are worth knowing about how that is checked:
 Before release, verify any new colour pair in a real browser (or with an axe browser run), and check
 it against the token it is composited on rather than against white alone.
 
+Three pairs are known to be under the 4.5:1 text floor and are carried to the design-system and
+accessibility ticket, which owns the audit rather than each surface's own ticket:
+
+| Pair | Ratio | Used by |
+| --- | --- | --- |
+| `--color-primary` on `--color-primary-light` | ≈ 4.24:1 | `.navrail__item--active`, `.suite-tree__node--active` |
+| `--color-text-secondary` on `--color-bg` | ≈ 4.45:1 | Secondary text against the centre pane |
+| `--color-text-muted` on `--color-surface` | ≈ 2.07:1 | Non-essential text only, per the note above |
+
+`--color-primary-hover` on `--color-primary-light` is ≈ 5.49:1, so a darker active-row foreground
+clears the floor without a new token.
+
 ## Decisions recorded here
 
 - The ~700 lines of legacy component rules that referenced the pre-rebuild token names were deleted
@@ -97,3 +110,17 @@ it against the token it is composited on rather than against white alone.
   That rule is kept, and a top-bar toggle (labelled, with `aria-expanded`) reveals the left pane as
   an overlay while `.app-layout--sidebar-open` is set, so the tree stays reachable from the
   keyboard on a narrow viewport.
+- The suite tree's data is flat. `TestSuite` carries no parent field, so the ticket's recursive
+  "nested suites" sketch has nothing to recurse over: the tree is one level deep and expanding a
+  suite reveals the cases it holds. The two virtual nodes the case list filters on ("All test
+  cases" and "Directly in project") are pinned above the project's suites and carry case counts,
+  but selecting either clears the detail selection instead of opening a detail panel, because
+  neither is an entity the API can return.
+- A case row inside an expanded suite is a leaf, not a control: the ticket gives the tree no
+  case-selection callback, and the centre pane's case list is what opens a case. The row therefore
+  keeps the `.suite-tree__label`/`.suite-tree__count` spans but drops the pointer affordances the
+  suite rows carry.
+- The shell swaps the left pane by project: the project explorer (the only place a project can be
+  created) renders while no project is active, and the suite tree takes its place once one is, with
+  the pane's accessible name following. Picking the switcher's empty option returns to the
+  explorer, so project creation stays reachable.

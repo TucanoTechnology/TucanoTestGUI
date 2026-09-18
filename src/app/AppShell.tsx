@@ -5,6 +5,7 @@ import { ProjectExplorer } from "../features/projects/ProjectExplorer.js";
 import { ProjectSwitcher } from "../features/projects/ProjectSwitcher.js";
 import { ProjectDetail } from "../features/projects/ProjectDetail.js";
 import { SuiteDetail } from "../features/suites/SuiteDetail.js";
+import { DIRECT_SUITE_ID, SuiteTree } from "../features/suites/SuiteTree.js";
 import { CaseDetail } from "../features/cases/CaseDetail.js";
 import { RunDetail } from "../features/runs/RunDetail.js";
 import { MilestoneDetail } from "../features/milestones/MilestoneDetail.js";
@@ -28,12 +29,29 @@ type ModuleId = (typeof NAV_ITEMS)[number]["id"];
 
 function AppShellContent() {
   const { username, logout } = useAuth();
-  const { selection, setSelection, announcement } = useProjectContext();
+  const { selectedProjectId, selection, setSelection, announcement } =
+    useProjectContext();
   const [activeModule, setActiveModule] = useState<ModuleId>("cases");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const activeItem =
     NAV_ITEMS.find((item) => item.id === activeModule) ?? NAV_ITEMS[0];
+
+  const selectedSuiteId = selection?.type === "suite" ? selection.id : null;
+
+  // The two pinned tree nodes are filters the centre list applies, not
+  // entities the detail pane can open, so neither carries a selection.
+  const selectSuite = (suiteId: string | null) => {
+    if (suiteId === null || suiteId === DIRECT_SUITE_ID) {
+      setSelection(null);
+      return;
+    }
+    setSelection({
+      type: "suite",
+      id: suiteId,
+      projectId: selectedProjectId ?? undefined,
+    });
+  };
 
   const renderDetail = () => {
     if (!selection) {
@@ -131,8 +149,19 @@ function AppShellContent() {
       </nav>
 
       <div className="panes">
-        <aside className="pane-left" aria-label="Project explorer">
-          <ProjectExplorer />
+        <aside
+          className="pane-left"
+          aria-label={selectedProjectId ? "Suite tree" : "Project explorer"}
+        >
+          {selectedProjectId ? (
+            <SuiteTree
+              projectId={selectedProjectId}
+              selectedSuiteId={selectedSuiteId}
+              onSelectSuite={selectSuite}
+            />
+          ) : (
+            <ProjectExplorer />
+          )}
         </aside>
 
         <main className="pane-center" aria-label={activeItem.label}>
