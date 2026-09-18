@@ -1,11 +1,39 @@
 import { useEffect, useState } from "react";
-import type { TestCase } from "../../api/generated/index.js";
+import type { Project, TestCase } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
+import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+
+/**
+ * A case identifier is unique inside its parent, not deployment-wide, so
+ * `GET /test_cases/{id}` answers `409` when several parents hold the same case
+ * (the seeded `TC-LOGIN-1` sits in two projects). A project document embeds
+ * every case its suites carry plus the ones it owns itself, so it resolves the
+ * case without the ambiguity.
+ */
+function findCaseInProject(
+  project: Project,
+  caseId: string,
+): TestCase | undefined {
+  const direct = (project.testCases ?? []).find(
+    (testCase) => testCase.testCaseId === caseId,
+  );
+  if (direct) return direct;
+
+  for (const suite of project.testSuites ?? []) {
+    const inSuite = (suite.testCases ?? []).find(
+      (testCase) => testCase.testCaseId === caseId,
+    );
+    if (inSuite) return inSuite;
+  }
+
+  return undefined;
+}
 
 export function CaseDetail({
   caseId,
-  projectId: _projectId,
+  projectId,
 }: {
   caseId: string;
   projectId?: string;
@@ -13,24 +41,42 @@ export function CaseDetail({
   const { client } = useAuth();
   const [testCase, setTestCase] = useState<TestCase | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    apiFetch(() => client.testCases.getTestCase({ id: caseId }))
+
+    const request = projectId
+      ? apiFetch(() => client.projects.getProject({ id: projectId })).then(
+          (project) => findCaseInProject(project, caseId),
+        )
+      : apiFetch(() => client.testCases.getTestCase({ id: caseId }));
+
+    request
       .then((data) => {
-        setTestCase(data);
+        if (cancelled) return;
+        if (data) {
+          setTestCase(data);
+        } else {
+          setError({
+            code: null,
+            message: `Test case ${caseId} is not part of project ${projectId}`,
+          });
+        }
         setLoading(false);
       })
       .catch((err: unknown) => {
-        const message =
-          (err as { body?: { error?: { message?: string } } })?.body?.error
-            ?.message ?? "Failed to load test case";
-        setError(message);
+        if (cancelled) return;
+        setError(readApiError(err, "Failed to load test case"));
         setLoading(false);
       });
-  }, [client, caseId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, caseId, projectId]);
 
   if (loading) {
     return (
@@ -42,11 +88,7 @@ export function CaseDetail({
   }
 
   if (error) {
-    return (
-      <div className="error-display" role="alert">
-        {error}
-      </div>
-    );
+    return <ApiErrorNotice error={error} />;
   }
 
   if (!testCase) return null;
@@ -139,6 +181,26 @@ export function CaseDetail({
         <div className="detail-field">
           <div className="detail-field__label">Expected Result</div>
           <div className="detail-field__value">{testCase.expectedResult}</div>
+        </div>
+      )}
+
+      {testCase.attachments && testCase.attachments.length > 0 && (
+        <div className="detail-field">
+          <div className="detail-field__label">
+            Attachments ({testCase.attachments.length})
+          </div>
+          <ul className="entity-list">
+            {testCase.attachments.map((attachment) => (
+              <li key={attachment.filename} className="entity-list__item">
+                <span className="entity-list__name">
+                  {attachment.originalName}
+                </span>
+                <span className="entity-list__meta">
+                  {attachment.size} bytes
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

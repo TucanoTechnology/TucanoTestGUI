@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Milestone, MilestoneProgress } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
+import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 
 export function MilestoneDetail({
   milestoneId,
@@ -14,9 +16,10 @@ export function MilestoneDetail({
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   const [progress, setProgress] = useState<MilestoneProgress | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     Promise.all([
@@ -26,17 +29,20 @@ export function MilestoneDetail({
       ),
     ])
       .then(([m, p]) => {
+        if (cancelled) return;
         setMilestone(m);
         setProgress(p);
         setLoading(false);
       })
       .catch((err: unknown) => {
-        const message =
-          (err as { body?: { error?: { message?: string } } })?.body?.error
-            ?.message ?? "Failed to load milestone";
-        setError(message);
+        if (cancelled) return;
+        setError(readApiError(err, "Failed to load milestone"));
         setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [client, milestoneId]);
 
   void projectId;
@@ -51,11 +57,7 @@ export function MilestoneDetail({
   }
 
   if (error) {
-    return (
-      <div className="error-display" role="alert">
-        {error}
-      </div>
-    );
+    return <ApiErrorNotice error={error} />;
   }
 
   if (!milestone) return null;
