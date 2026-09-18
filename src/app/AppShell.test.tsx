@@ -156,6 +156,68 @@ describe("AppShell", () => {
     expect(sessionStorage.getItem("selectedProjectId")).toBe("checkout");
   });
 
+  it("mounts the suite tree in the left pane once a project is active", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, [CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, {
+          ...CHECKOUT,
+          testSuites: [
+            {
+              suiteId: "suite-login",
+              name: "Login",
+              testCases: [{ testCaseId: "case-signin", title: "Signs in" }],
+            },
+          ],
+        });
+      }
+      if (url === "/api/projects/checkout/test_cases" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/test_suites/suite-login" && method === "GET") {
+        return jsonResponse(200, { suiteId: "suite-login", name: "Login" });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderShell();
+    expect(
+      screen.getByRole("complementary", { name: "Project explorer" }),
+    ).toBeInTheDocument();
+
+    await screen.findByRole("option", { name: "Checkout" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Active project" }), {
+      target: { value: CHECKOUT.projectId },
+    });
+
+    const pane = await screen.findByRole("complementary", {
+      name: "Suite tree",
+    });
+    expect(
+      screen.queryByRole("complementary", { name: "Project explorer" }),
+    ).not.toBeInTheDocument();
+    expect(within(pane).getByRole("heading", { name: "Suites" })).toBeInTheDocument();
+    expect(
+      await within(pane).findByRole("button", { name: /All test cases/ }),
+    ).toBeInTheDocument();
+    expect(
+      within(pane).getByRole("button", { name: /Directly in project/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(pane).getByRole("button", { name: /Login/ }));
+
+    expect(
+      await screen.findByText("Selected suite: suite-login", {
+        selector: ".sr-only",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Login" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows the signed-in account and signs out from the top bar", async () => {
     setRefreshToken("refresh-1");
     const requests = mockApi(({ url, method }) => {

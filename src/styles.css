@@ -365,3 +365,115 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
+
+/* ---------------------------------------------------------------------------
+   Suite tree
+   The left pane's hierarchy: two virtual nodes, then the project's suites.
+--------------------------------------------------------------------------- */
+
+.suite-tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.suite-tree__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.suite-tree__title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary);
+}
+
+.suite-tree__search {
+  padding: var(--space-2) var(--space-3);
+}
+
+.suite-tree__search-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  background: var(--color-bg);
+}
+
+.suite-tree__list {
+  list-style: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-1) 0;
+}
+
+.suite-tree__node {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  transition: background var(--transition-fast);
+  border-radius: var(--radius-sm);
+}
+
+.suite-tree__node:hover {
+  background: var(--color-surface-hover);
+}
+
+.suite-tree__node--active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.suite-tree__node--pinned {
+  font-weight: var(--font-weight-medium);
+}
+
+.suite-tree__icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.suite-tree__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suite-tree__count {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-active);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+}
+
+/* A case row is a leaf. It shows what a suite holds, but the case list in the
+   centre pane is what opens a case, so the row drops the pointer affordances
+   the suite rows carry. */
+.suite-tree__node--leaf,
+.suite-tree__node--leaf:hover {
+  padding-left: var(--space-6);
+  color: var(--color-text-secondary);
+  background: none;
+  cursor: default;
+}
+
+.suite-tree__empty {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
