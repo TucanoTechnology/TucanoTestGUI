@@ -10,6 +10,7 @@ import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
+import { isJsonKeyName, toJsonKey } from "../../app/keys.js";
 
 type Mode = "view" | "edit" | "duplicate" | "delete";
 
@@ -120,19 +121,31 @@ export function SuiteDetail({
     }
   };
 
+  const trimmedNewId = newId.trim();
+  const trimmedNewName = newName.trim();
+  // A typed ID is completed with `.json` rather than forwarded as it stands, so
+  // the friendly path cannot send the API a key it always refuses. Only the one
+  // thing the contract states is refused here; every other refusal still reads
+  // from the API's own envelope.
+  const newIdError =
+    trimmedNewId === "" || isJsonKeyName(trimmedNewId)
+      ? null
+      : `This ID would be “${toJsonKey(trimmedNewId)}”, which is not a single path component. An ID cannot contain “/”.`;
+
   const duplicateSuite = async (event: FormEvent) => {
     event.preventDefault();
+    // The submit button is disabled while the ID cannot work, but a form can be
+    // submitted without it.
+    if (newIdError !== null) return;
     setBusy(true);
     setActionError(null);
     try {
-      const trimmedId = newId.trim();
-      const trimmedName = newName.trim();
       const duplicated = await apiFetch(() =>
         client.testSuites.duplicateTestSuite({
           id: suiteId,
           requestBody: {
-            ...(trimmedId ? { newId: trimmedId } : {}),
-            ...(trimmedName ? { newName: trimmedName } : {}),
+            ...(trimmedNewId ? { newId: toJsonKey(trimmedNewId) } : {}),
+            ...(trimmedNewName ? { newName: trimmedNewName } : {}),
           },
         }),
       );
@@ -295,12 +308,29 @@ export function SuiteDetail({
                 type="text"
                 value={newId}
                 onChange={(event) => setNewId(event.target.value)}
-                aria-describedby={`${fieldId}-new-id-hint`}
+                aria-invalid={newIdError === null ? undefined : true}
+                aria-describedby={
+                  newIdError === null
+                    ? `${fieldId}-new-id-hint`
+                    : `${fieldId}-new-id-error`
+                }
               />
-              <p className="form-field__hint" id={`${fieldId}-new-id-hint`}>
-                Leave blank to derive the copy&apos;s ID from the source. A new
-                ID is one name ending in .json, such as checkout-flow.json.
-              </p>
+              {newIdError === null ? (
+                <p className="form-field__hint" id={`${fieldId}-new-id-hint`}>
+                  Leave blank to derive the copy&apos;s ID from the source. A
+                  new ID is one name ending in .json, such as
+                  checkout-flow.json; the suffix is added for you if you leave
+                  it off.
+                </p>
+              ) : (
+                <p
+                  className="form-field__hint"
+                  id={`${fieldId}-new-id-error`}
+                  role="alert"
+                >
+                  {newIdError}
+                </p>
+              )}
             </div>
 
             <div className="form-field">
@@ -326,7 +356,11 @@ export function SuiteDetail({
               >
                 Cancel
               </button>
-              <button type="submit" className="btn btn-primary" disabled={busy}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy || newIdError !== null}
+              >
                 {busy ? "Duplicating…" : "Duplicate suite"}
               </button>
             </div>

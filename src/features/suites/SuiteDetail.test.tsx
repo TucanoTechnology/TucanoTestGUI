@@ -33,9 +33,9 @@ const LOGIN = {
 function suiteReader() {
   const suites: Record<string, unknown> = {
     "/api/test_suites/suite-login": LOGIN,
-    "/api/test_suites/suite-login-copy": {
+    "/api/test_suites/suite-login-copy.json": {
       ...LOGIN,
-      suiteId: "suite-login-copy",
+      suiteId: "suite-login-copy.json",
     },
   };
 
@@ -245,7 +245,7 @@ describe("SuiteDetail", () => {
       if (url === "/api/test_suites/suite-login/duplicate" && method === "POST") {
         return jsonResponse(201, {
           message: "Suite duplicated",
-          id: "suite-login-copy",
+          id: "suite-login-copy.json",
         });
       }
       return suiteReader()({ url, method } as RecordedRequest);
@@ -274,15 +274,17 @@ describe("SuiteDetail", () => {
 
     await waitFor(() => {
       expect(screen.getByTestId("selection").textContent).toBe(
-        "suite:suite-login-copy",
+        "suite:suite-login-copy.json",
       );
     });
 
     const posts = requests.filter((request) => request.method === "POST");
     expect(posts).toHaveLength(1);
     expect(posts[0]?.url).toBe("/api/test_suites/suite-login/duplicate");
+    // The suffix is added on the way out, so the id the API refuses never
+    // leaves the dialog.
     expect(posts[0]?.body).toEqual({
-      newId: "suite-login-copy",
+      newId: "suite-login-copy.json",
       newName: "Login copy",
     });
     expect(screen.getByTestId("announcement")).toHaveTextContent(
@@ -290,12 +292,89 @@ describe("SuiteDetail", () => {
     );
   });
 
+  it("leaves an id that already ends in .json alone", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/test_suites/suite-login/duplicate" && method === "POST") {
+        return jsonResponse(201, {
+          message: "Suite duplicated",
+          id: "suite-login-copy.json",
+        });
+      }
+      return suiteReader()({ url, method } as RecordedRequest);
+    });
+
+    await openDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Duplicate suite",
+    });
+    const form = within(dialog).getByRole("form", {
+      name: "Duplicate suite form",
+    });
+    fireEvent.change(within(form).getByLabelText("New ID (optional)"), {
+      target: { value: "  suite-login-copy.json  " },
+    });
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(
+        requests.filter((request) => request.method === "POST"),
+      ).toHaveLength(1);
+    });
+    const [post] = requests.filter((request) => request.method === "POST");
+    expect(post?.body).toEqual({ newId: "suite-login-copy.json" });
+  });
+
+  it("refuses an id the API cannot address, and sends no request", async () => {
+    const requests = mockApi(suiteReader());
+
+    await openDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Duplicate suite",
+    });
+    const form = within(dialog).getByRole("form", {
+      name: "Duplicate suite form",
+    });
+    const idField = within(form).getByLabelText("New ID (optional)");
+
+    fireEvent.change(idField, { target: { value: "team/copy" } });
+
+    const alert = within(dialog).getByRole("alert");
+    expect(alert).toHaveTextContent("team/copy.json");
+    expect(idField).toHaveAttribute("aria-invalid", "true");
+    expect(idField).toHaveAccessibleDescription(/not a single path component/);
+    expect(
+      within(dialog).getByRole("button", { name: "Duplicate suite" }),
+    ).toBeDisabled();
+
+    // The control is disabled, but a form can be submitted without it, and the
+    // API would answer the same id with an `invalid_request` the user cannot
+    // act on rather than with the field's own explanation of it.
+    fireEvent.submit(form);
+    expect(
+      screen.getByRole("dialog", { name: "Duplicate suite" }),
+    ).toBeInTheDocument();
+    expect(requests.filter((request) => request.method === "POST")).toHaveLength(
+      0,
+    );
+
+    fireEvent.change(idField, { target: { value: "team-copy.json" } });
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    expect(idField).not.toHaveAttribute("aria-invalid");
+    expect(
+      within(dialog).getByRole("button", { name: "Duplicate suite" }),
+    ).toBeEnabled();
+  });
+
   it("omits both optional duplicate fields when they are left blank", async () => {
     const requests = mockApi(({ url, method }) => {
       if (url === "/api/test_suites/suite-login/duplicate" && method === "POST") {
         return jsonResponse(201, {
           message: "Suite duplicated",
-          id: "suite-login-copy",
+          id: "suite-login-copy.json",
         });
       }
       return suiteReader()({ url, method } as RecordedRequest);
@@ -378,6 +457,27 @@ describe("SuiteDetail", () => {
     const { baseElement } = await openDetail();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await screen.findByRole("dialog", { name: "Delete suite" });
+
+    const { default: axe } = await import("axe-core");
+    const results = await axe.run(baseElement, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(results.violations).toEqual([]);
+  });
+
+  it("has no accessibility violations with the duplicate form refusing an id", async () => {
+    mockApi(suiteReader());
+
+    const { baseElement } = await openDetail();
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Duplicate suite",
+    });
+    fireEvent.change(within(dialog).getByLabelText("New ID (optional)"), {
+      target: { value: "team/copy" },
+    });
+    await within(dialog).findByRole("alert");
 
     const { default: axe } = await import("axe-core");
     const results = await axe.run(baseElement, {
