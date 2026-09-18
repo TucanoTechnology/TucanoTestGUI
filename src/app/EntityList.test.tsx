@@ -78,6 +78,18 @@ function renderMilestones() {
   );
 }
 
+function renderConfigurations() {
+  sessionStorage.setItem("selectedProjectId", PAYMENTS.projectId);
+  return render(
+    <AuthProvider>
+      <ProjectProvider>
+        <EntityList entityType="configuration" />
+        <SelectionProbe />
+      </ProjectProvider>
+    </AuthProvider>,
+  );
+}
+
 afterEach(() => {
   resetTestApi();
 });
@@ -604,6 +616,167 @@ describe("EntityList", () => {
     expect(alert).toHaveTextContent("no grant on this project");
   });
 
+  it("lists configurations under the key the project holds them by", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/configurations" && method === "GET") {
+        return jsonResponse(200, ["probe-config.json"]);
+      }
+      if (url === "/api/configurations/probe-config.json" && method === "GET") {
+        // The document carries an identifier that differs from the key the
+        // project lists it under, and the key is what addresses it.
+        return jsonResponse(200, {
+          configId: "probe-config",
+          name: "Probe config",
+          browser: "Chrome 140",
+          os: "Linux",
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderConfigurations();
+
+    const list = await screen.findByRole("list", { name: "configuration list" });
+    expect(within(list).getAllByRole("button")).toHaveLength(1);
+    expect(
+      within(list).getByRole("button", { name: /Probe config/ }),
+    ).toBeInTheDocument();
+    expect(within(list).getByText("Chrome 140, Linux")).toBeInTheDocument();
+
+    fireEvent.click(within(list).getByRole("button", { name: /Probe config/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "configuration:probe-config.json",
+      );
+    });
+    expect(
+      requests.filter((request) =>
+        request.url.startsWith("/api/configurations"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("creates a configuration through the project", async () => {
+    const created: string[] = [];
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/configurations" && method === "GET") {
+        return jsonResponse(200, created);
+      }
+      if (url === "/api/projects/payments/configurations" && method === "POST") {
+        created.push("mobile-safari.json");
+        return jsonResponse(201, {
+          message: "Test configuration created",
+          id: "mobile-safari.json",
+        });
+      }
+      if (url === "/api/configurations/mobile-safari.json" && method === "GET") {
+        return jsonResponse(200, {
+          configId: "AO116-EXPLICIT.json",
+          name: "Mobile Safari",
+          browser: "Safari 18",
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderConfigurations();
+    await screen.findByText("No configurations found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New configuration" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "New configuration",
+    });
+    const form = within(dialog).getByRole("form", {
+      name: "Create configuration form",
+    });
+    fireEvent.change(within(form).getByLabelText("Name"), {
+      target: { value: "Mobile Safari" },
+    });
+    fireEvent.change(within(form).getByLabelText("Browser"), {
+      target: { value: "Safari 18" },
+    });
+    fireEvent.change(within(form).getByLabelText("Device"), {
+      target: { value: "iPhone" },
+    });
+    fireEvent.submit(form);
+
+    // The create response names the key the project now lists it under, and
+    // that key — not the identifier inside the document — is what addresses it.
+    await waitFor(() => {
+      expect(screen.getByTestId("selection")).toHaveTextContent(
+        "configuration:mobile-safari.json",
+      );
+    });
+
+    const posts = requests.filter((request) => request.method === "POST");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.url).toBe("/api/projects/payments/configurations");
+    // The blank optionals are left out: the API rejects an unknown field and
+    // stores a supplied empty string.
+    expect(posts[0]?.body).toEqual({
+      name: "Mobile Safari",
+      browser: "Safari 18",
+      device: "iPhone",
+    });
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "Test configuration created",
+    );
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      requests.filter(
+        (request) =>
+          request.url === "/api/projects/payments/configurations" &&
+          request.method === "GET",
+      ),
+    ).toHaveLength(2);
+
+    const list = await screen.findByRole("list", {
+      name: "configuration list",
+    });
+    expect(
+      within(list).getByRole("button", { name: /Mobile Safari/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the configuration dialog open and shows the envelope when creation is rejected", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/payments/configurations" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/projects/payments/configurations" && method === "POST") {
+        return errorEnvelope(
+          400,
+          "invalid_request",
+          "Required fields are missing",
+        );
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderConfigurations();
+    await screen.findByText("No configurations found");
+
+    fireEvent.click(screen.getByRole("button", { name: "New configuration" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "New configuration",
+    });
+    const form = within(dialog).getByRole("form", {
+      name: "Create configuration form",
+    });
+    fireEvent.change(within(form).getByLabelText("Name"), {
+      target: { value: "Probe config" },
+    });
+    fireEvent.submit(form);
+
+    const alert = await within(dialog).findByRole("alert");
+    expect(alert).toHaveTextContent("invalid_request");
+    expect(alert).toHaveTextContent("Required fields are missing");
+    expect(
+      screen.getByRole("dialog", { name: "New configuration" }),
+    ).toBeInTheDocument();
+  });
+
   it("offers no create control outside a case list", async () => {
     mockApi(({ url, method }) => {
       if (url === "/api/projects/payments/test_suites" && method === "GET") {
@@ -624,6 +797,9 @@ describe("EntityList", () => {
     await screen.findByText("No suites found");
     expect(
       screen.queryByRole("button", { name: "New case" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "New configuration" }),
     ).not.toBeInTheDocument();
   });
 });
