@@ -1,19 +1,20 @@
 import { useId, useState, type FormEvent } from "react";
-import type { ApiErrorInfo } from "../../api/errors.js";
-import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import type { ApiErrorInfo } from "../api/errors.js";
+import { ApiErrorNotice } from "./ApiErrorNotice.js";
 
-export interface ProjectFormValues {
+export interface EntityFormValues {
   name: string;
   description: string;
   tags: string[];
 }
 
-interface ProjectFormProps {
+interface EntityFormProps {
+  /** Wording the submit button carries, e.g. "Create suite". */
   submitLabel: string;
-  initialValues?: Partial<ProjectFormValues>;
+  initialValues?: Partial<EntityFormValues>;
   busy?: boolean;
   error?: ApiErrorInfo | null;
-  onSubmit: (values: ProjectFormValues) => void;
+  onSubmit: (values: EntityFormValues) => void;
   onCancel: () => void;
 }
 
@@ -21,14 +22,22 @@ function parseTags(value: string): string[] {
   return [...new Set(value.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
-export function ProjectForm({
+/**
+ * The name, description and tags form a project and a test suite are both
+ * created and edited with: the two documents carry the same three fields.
+ *
+ * Neither document carries its identifier in a form: a project id is chosen at
+ * creation only, and the API writes a suite `suiteId` into the document without
+ * moving the suite, so offering one would corrupt the resource.
+ */
+export function EntityForm({
   submitLabel,
   initialValues,
   busy = false,
   error = null,
   onSubmit,
   onCancel,
-}: ProjectFormProps) {
+}: EntityFormProps) {
   const fieldId = useId();
   const [name, setName] = useState(initialValues?.name ?? "");
   const [description, setDescription] = useState(
@@ -49,7 +58,7 @@ export function ProjectForm({
 
   return (
     <form
-      className="project-form"
+      className="entity-form"
       onSubmit={handleSubmit}
       aria-label={`${submitLabel} form`}
     >
