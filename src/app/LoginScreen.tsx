@@ -1,19 +1,69 @@
 import { useState, type FormEvent } from "react";
 import { useAuth } from "./AuthProvider.js";
 
-const DEBUG_LOGIN = import.meta.env.VITE_DEBUG_LOGIN === "true";
+/**
+ * The build-time environment the debug flag and demo passwords are read from.
+ * The index signature lets `import.meta.env` — which declares no `VITE_` name —
+ * be passed straight in.
+ */
+export interface DebugLoginEnv {
+  [key: string]: string | undefined;
+  VITE_DEBUG_LOGIN?: string;
+  VITE_DEMO_ADMIN_PASSWORD?: string;
+  VITE_DEMO_VIEWER_PASSWORD?: string;
+}
 
-const DEMO_ACCOUNTS = [
-  { label: "admin (systemAdmin)", username: "admin", password: "admin" },
-  { label: "owner", username: "owner", password: "owner" },
-  { label: "editor", username: "editor", password: "editor" },
-  { label: "viewer", username: "viewer", password: "viewer" },
-];
+export interface DemoAccount {
+  label: string;
+  username: string;
+  password: string;
+}
+
+export function debugLoginEnabled(env: DebugLoginEnv): boolean {
+  return env.VITE_DEBUG_LOGIN === "true";
+}
+
+/**
+ * The accounts a seeded TucanoTestAPI deployment can sign in as, with the
+ * defaults its own seed path documents: `admin` is the bootstrap account
+ * (`scripts/demo.sh`, `DEMO_ADMIN_PASSWORD`) and `viewer` is the one account the
+ * seed creates and grants (`scripts/seed.mjs`, `TUCANO_SEED_VIEWER_PASSWORD`).
+ * A deployment that seeds its own passwords supplies them at build time.
+ *
+ * The seed grants no other account, so there is no separate `owner` or `editor`
+ * login to pre-fill until TucanoTestAPI seeds one.
+ */
+export function readDemoAccounts(env: DebugLoginEnv): DemoAccount[] {
+  return [
+    {
+      label: "admin (systemAdmin)",
+      username: "admin",
+      password: env.VITE_DEMO_ADMIN_PASSWORD ?? "demo-admin-password",
+    },
+    {
+      label: "viewer (owner on checkout.json)",
+      username: "viewer",
+      password: env.VITE_DEMO_VIEWER_PASSWORD ?? "viewer-seed-password",
+    },
+  ];
+}
+
+export function initialCredentials(
+  enabled: boolean,
+  accounts: DemoAccount[],
+): { username: string; password: string } {
+  const first = enabled ? accounts[0] : undefined;
+  return { username: first?.username ?? "", password: first?.password ?? "" };
+}
+
+const DEBUG_LOGIN = debugLoginEnabled(import.meta.env);
+const DEMO_ACCOUNTS = readDemoAccounts(import.meta.env);
+const INITIAL_CREDENTIALS = initialCredentials(DEBUG_LOGIN, DEMO_ACCOUNTS);
 
 export function LoginScreen() {
   const { login } = useAuth();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(INITIAL_CREDENTIALS.username);
+  const [password, setPassword] = useState(INITIAL_CREDENTIALS.password);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -30,9 +80,10 @@ export function LoginScreen() {
     }
   };
 
-  const fillDemo = (account: (typeof DEMO_ACCOUNTS)[number]) => {
+  const fillDemo = (account: DemoAccount) => {
     setUsername(account.username);
     setPassword(account.password);
+    setError(null);
   };
 
   return (
@@ -82,7 +133,7 @@ export function LoginScreen() {
 
         {DEBUG_LOGIN && (
           <div className="login-form__debug">
-            <p className="login-form__debug-title">Debug accounts</p>
+            <p className="login-form__debug-title">Demo accounts</p>
             {DEMO_ACCOUNTS.map((account) => (
               <button
                 key={account.username}
@@ -90,7 +141,7 @@ export function LoginScreen() {
                 className="login-form__debug-btn"
                 onClick={() => fillDemo(account)}
               >
-                {account.label}
+                {account.label} — {account.username} / {account.password}
               </button>
             ))}
           </div>

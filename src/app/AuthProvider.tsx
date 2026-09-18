@@ -11,11 +11,13 @@ import {
   clearTokens,
   getAccessToken,
   getRefreshToken,
+  onSessionExpired,
+  refreshSession,
   setAccessToken,
   setRefreshToken,
   setApiClient,
 } from "../api/client.js";
-import { createApiClient, type ApiClient } from "../api/configure.js";
+import { API_BASE_URL, createApiClient, type ApiClient } from "../api/configure.js";
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -38,78 +40,76 @@ export function useAuth(): AuthState {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState<string | null>(null);
-  const [tokenVersion, setTokenVersion] = useState(0);
 
+  // Built once. Its token provider reads the stored access token per request, so
+  // sign-in and refresh do not have to rebuild it to change the bearer header.
   const client = useMemo(() => {
-    const token = getAccessToken();
-    const newClient = createApiClient({ baseUrl: "/api", token: token ?? undefined });
+    const newClient = createApiClient({
+      baseUrl: API_BASE_URL,
+      token: getAccessToken,
+    });
     setApiClient(newClient);
     return newClient;
-  }, [tokenVersion]);
+  }, []);
+
+  const signOut = useCallback(() => {
+    clearTokens();
+    setIsAuthenticated(false);
+    setUsername(null);
+  }, []);
+
+  useEffect(() => onSessionExpired(signOut), [signOut]);
 
   const login = useCallback(
     async (user: string, password: string) => {
-      const loginClient = createApiClient({ baseUrl: "/api" });
-      const session = await loginClient.auth.login({
-        requestBody: { username: user, password },
-      });
+      const session = await createApiClient({
+        baseUrl: API_BASE_URL,
+      }).auth.login({ requestBody: { username: user, password } });
+
       setAccessToken(session.accessToken);
       setRefreshToken(session.refreshToken);
-      setTokenVersion((v) => v + 1);
 
-      const tokenClient = createApiClient({
-        baseUrl: "/api",
-        token: session.accessToken,
-      });
-      const me = await tokenClient.auth.getCurrentUser();
+      const me = await client.auth.getCurrentUser();
       setUsername(me.username);
       setIsAuthenticated(true);
     },
-    [],
+    [client],
   );
 
   const logout = useCallback(async () => {
-    const rt = getRefreshToken();
+    const refreshToken = getRefreshToken();
     try {
-      if (rt && getAccessToken()) {
-        await client.auth.logout({
-          requestBody: { refreshToken: rt },
-        });
+      if (refreshToken && getAccessToken()) {
+        await client.auth.logout({ requestBody: { refreshToken } });
       }
     } catch {
       // best-effort logout
     }
-    clearTokens();
-    setTokenVersion((v) => v + 1);
-    setIsAuthenticated(false);
-    setUsername(null);
-  }, [client]);
+    signOut();
+  }, [client, signOut]);
 
   useEffect(() => {
-    const rt = getRefreshToken();
-    if (!rt) return;
+    if (!getRefreshToken()) return;
 
-    const bootstrapClient = createApiClient({ baseUrl: "/api" });
-    bootstrapClient.auth
-      .refreshSession({ requestBody: { refreshToken: rt } })
-      .then((session) => {
-        setAccessToken(session.accessToken);
-        setRefreshToken(session.refreshToken);
-        setTokenVersion((v) => v + 1);
-        const tokenClient = createApiClient({
-          baseUrl: "/api",
-          token: session.accessToken,
-        });
-        return tokenClient.auth.getCurrentUser();
-      })
-      .then((me) => {
+    let cancelled = false;
+
+    void (async () => {
+      if (!(await refreshSession())) return;
+
+      try {
+        const me = await client.auth.getCurrentUser();
+        if (cancelled) return;
         setUsername(me.username);
         setIsAuthenticated(true);
-      })
-      .catch(() => {
-        clearTokens();
-      });
-  }, []);
+      } catch {
+        // The stored session could not be confirmed; stay on the login screen.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   const value = useMemo(
     () => ({ isAuthenticated, username, client, login, logout }),
