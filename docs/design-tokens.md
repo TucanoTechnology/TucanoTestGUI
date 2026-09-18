@@ -4,10 +4,19 @@ Every colour, spacing, radius, type and layout value in the GUI lives in the `:r
 of [`src/styles.css`](../src/styles.css). Components reference the tokens through `var(...)` instead
 of literals, so the palette can be reviewed and changed in one place.
 
-`src/styles.css` is currently the **token layer plus global resets and utilities only**. Component
-rules are added back ticket by ticket (#127 onwards), so until those land the components render
-unstyled in a browser. The token names and values are frozen: later tickets consume them, they do
-not re-define them.
+`src/styles.css` holds the **token layer, the global resets and the utilities**, and two tickets have
+landed rules on top of them so far:
+
+- the **application-shell layout** — the top bar, the icon nav rail, the three-pane grid and its
+  narrow-viewport behaviour; and
+- the **shared control primitives** — `.btn` with its variants, and the bare `input`/`select`/
+  `textarea` box.
+
+Every other surface (the suite tree, the case list and table, the case detail, the runs,
+milestones, configurations and reports surfaces, and the shared state views) is styled by the ticket
+that owns it (#128–#133), so those surfaces still render unstyled in a browser until their ticket
+lands. The token names and values are frozen: later tickets consume them, they do not re-define
+them.
 
 ## What the suite enforces
 
@@ -18,7 +27,8 @@ any of these invariants breaks:
 2. **Every `var(...)` reference resolves.** A `var(--x)` with no matching declaration in the
    stylesheet is a dangling custom property and fails the test.
 3. **No colour literal outside `:root`.** A hex or `rgb()`/`rgba()` value anywhere else fails the
-   test. Add a token and reference it.
+   test. Add a token and reference it. The check is a text search over the whole file, so it also
+   reads comments: a ticket reference like `#127` inside one trips it. Write the number bare.
 4. **One spelling.** The colour prefix is `--color-`; the legacy `--colour-` spelling is rejected.
 5. **The utilities exist.** `.sr-only` and `.truncate` are part of the public surface the components
    rely on.
@@ -78,3 +88,12 @@ it against the token it is composited on rather than against white alone.
   no `--status-*` or `--priority-*` token exists.
 - `--color-text-muted` is the lightest text value in the layer. It is reserved for non-essential
   text; verify it against its actual background before putting real content in it.
+- `.btn` and the bare form-control box live in a shared-controls section rather than in any one
+  component's ticket: the shell's JSX and every later module's JSX use `.btn`, `.btn-primary`, and
+  `.btn-ghost`, and no design ticket owns those class names. `.btn-danger`'s hover state deepens the
+  fill it already has, because the frozen layer names no danger-hover colour.
+- The shell departs from the layout ticket in one place. The ticket hides `.pane-left` and
+  `.pane-right` below 1024px, which strands the project hierarchy with no way to reach it again.
+  That rule is kept, and a top-bar toggle (labelled, with `aria-expanded`) reveals the left pane as
+  an overlay while `.app-layout--sidebar-open` is set, so the tree stays reachable from the
+  keyboard on a narrow viewport.
