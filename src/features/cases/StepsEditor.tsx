@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import type { TestStep } from "../../api/generated/index.js";
 import type { ApiErrorInfo } from "../../api/errors.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
@@ -25,6 +25,12 @@ interface StepsEditorProps {
   onSave: (steps: TestStep[]) => Promise<boolean>;
   /** Called when this editor opens, to drop an error left by an earlier action. */
   onDismissError?: () => void;
+  /**
+   * Rendered under each step, for the controls that step carries on its own.
+   * The editor stays unaware of what they are: the caller owns the requests
+   * and the re-fetch that follows them.
+   */
+  renderStepAttachments?: (step: TestStep, index: number) => ReactNode;
 }
 
 function normalise(step: string | TestStep): TestStep {
@@ -61,6 +67,7 @@ export function StepsEditor({
   error = null,
   onSave,
   onDismissError,
+  renderStepAttachments,
 }: StepsEditorProps) {
   const fieldId = useId();
   const [editor, setEditor] = useState<Editor>({ kind: "idle" });
@@ -255,6 +262,12 @@ export function StepsEditor({
                     Delete
                   </button>
                 </div>
+
+                {renderStepAttachments && (
+                  <div className="steps-list__attachments">
+                    {renderStepAttachments(step, index)}
+                  </div>
+                )}
               </li>
             ),
           )}

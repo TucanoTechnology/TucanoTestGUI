@@ -12,6 +12,8 @@ export interface RecordedRequest {
   method: string;
   headers: Record<string, string>;
   body: unknown;
+  /** Present when the request carried `FormData`: a multipart body is not JSON. */
+  formData?: FormData;
 }
 
 export type RequestHandler = (
@@ -71,11 +73,14 @@ export function mockApi(handler: RequestHandler): RecordedRequest[] {
           : input instanceof URL
             ? input.toString()
             : input.url;
+      const body = init?.body;
+      const formData = body instanceof FormData ? body : undefined;
       const request: RecordedRequest = {
         url,
         method: (init?.method ?? "GET").toUpperCase(),
         headers: readHeaders(init),
-        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        body: body && !formData ? JSON.parse(String(body)) : undefined,
+        ...(formData ? { formData } : {}),
       };
       requests.push(request);
       return handler(request);

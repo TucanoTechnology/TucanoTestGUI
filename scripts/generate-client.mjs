@@ -9,7 +9,7 @@
 import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { relative } from 'node:path';
+import { relative, resolve } from 'node:path';
 
 import { CONTRACT_PATH, GENERATED_DIR, REPO_ROOT, verifyContract } from './lib/contract.mjs';
 
@@ -28,6 +28,12 @@ if (version !== lock.generator.version) {
 
 const generatorBin = require.resolve('openapi-typescript-codegen/bin/index.js');
 
+// The repo owns the request layer: the generator's `--request` option copies
+// the given file verbatim over `core/request.ts`, with no template processing,
+// so what is committed is what this file holds. The template adds the Blob
+// branch a binary route needs to `scripts/openapi/request.ts`.
+const REQUEST_TEMPLATE = resolve(REPO_ROOT, 'scripts/openapi/request.ts');
+
 rmSync(GENERATED_DIR, { recursive: true, force: true });
 
 execFileSync(
@@ -42,6 +48,8 @@ execFileSync(
     'fetch',
     '--name',
     'TucanoApi',
+    '--request',
+    REQUEST_TEMPLATE,
     '--useOptions',
     '--useUnionTypes',
     '--exportSchemas',
