@@ -136,3 +136,232 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Application shell
+   Five areas: top bar, icon nav rail, and a three-pane content grid.
+--------------------------------------------------------------------------- */
+
+.app-layout {
+  display: grid;
+  grid-template-areas:
+    "topbar topbar topbar"
+    "navrail panes panes";
+  grid-template-rows: var(--topbar-height) 1fr;
+  grid-template-columns: var(--navrail-width) 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  height: var(--topbar-height);
+}
+
+.topbar__brand {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+}
+
+.topbar__project-switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.topbar__spacer {
+  flex: 1;
+}
+
+.topbar__user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.topbar__username {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.topbar__menu-toggle {
+  display: none;
+}
+
+.project-switcher__select {
+  max-width: 240px;
+  font-size: var(--font-size-sm);
+}
+
+.project-switcher__error {
+  font-size: var(--font-size-xs);
+  color: var(--color-danger);
+}
+
+.navrail {
+  grid-area: navrail;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) 0;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  width: var(--navrail-width);
+}
+
+.navrail__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-lg);
+  transition: background var(--transition-fast);
+}
+
+.navrail__item:hover {
+  background: var(--color-surface-hover);
+}
+
+.navrail__item--active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.panes {
+  grid-area: panes;
+  display: grid;
+  grid-template-columns: var(--leftpane-width) 1fr var(--rightpane-width);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.pane-left {
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  background: var(--color-surface);
+}
+
+.pane-center {
+  overflow-y: auto;
+  background: var(--color-bg);
+  /* A grid item defaults to min-width: auto, which lets wide content push the
+     centre track past its share and take the right pane's width with it. */
+  min-width: 0;
+}
+
+.pane-right {
+  border-left: 1px solid var(--color-border);
+  overflow-y: auto;
+  background: var(--color-surface);
+}
+
+@media (max-width: 1024px) {
+  .panes {
+    grid-template-columns: 1fr;
+  }
+
+  .pane-left,
+  .pane-right {
+    display: none;
+  }
+
+  /* The grid above hides the side panes on narrow viewports; the top-bar
+     toggle reveals the left pane as an overlay so the hierarchy stays
+     reachable without a pointer. */
+  .topbar__menu-toggle {
+    display: block;
+  }
+
+  .app-layout--sidebar-open .pane-left {
+    display: block;
+    position: fixed;
+    inset: var(--topbar-height) auto 0 0;
+    width: min(var(--leftpane-width), 80vw);
+    z-index: 20;
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Shared controls
+   The button and form-control primitives every pane reuses.
+--------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.btn-ghost {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: var(--color-primary-text);
+}
+
+/* The token layer is frozen and names no danger-hover colour, so the hover
+   state deepens the fill it already has rather than introducing a second one. */
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.btn-icon {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+}
+
+.btn-sm {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+}
+
+input,
+select,
+textarea {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}

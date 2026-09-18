@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useAuth } from "./AuthProvider.js";
-import { ProjectProvider, useProjectContext, type EntityType } from "./ProjectContext.js";
+import { ProjectProvider, useProjectContext } from "./ProjectContext.js";
 import { ProjectExplorer } from "../features/projects/ProjectExplorer.js";
+import { ProjectSwitcher } from "../features/projects/ProjectSwitcher.js";
 import { ProjectDetail } from "../features/projects/ProjectDetail.js";
 import { SuiteDetail } from "../features/suites/SuiteDetail.js";
 import { CaseDetail } from "../features/cases/CaseDetail.js";
@@ -10,21 +11,29 @@ import { MilestoneDetail } from "../features/milestones/MilestoneDetail.js";
 import { ConfigurationDetail } from "../features/configurations/ConfigurationDetail.js";
 import { EntityList } from "./EntityList.js";
 
-const NAV_TABS: { type: EntityType; label: string }[] = [
-  { type: "project", label: "Projects" },
-  { type: "suite", label: "Suites" },
-  { type: "case", label: "Cases" },
-  { type: "run", label: "Runs" },
-  { type: "milestone", label: "Milestones" },
-  { type: "configuration", label: "Configs" },
-];
+const NAV_ITEMS = [
+  { id: "cases", label: "Test Cases", icon: "📋", entityType: "case" },
+  { id: "runs", label: "Test Runs", icon: "▶", entityType: "run" },
+  { id: "milestones", label: "Milestones", icon: "🎯", entityType: "milestone" },
+  {
+    id: "configurations",
+    label: "Configurations",
+    icon: "⚙",
+    entityType: "configuration",
+  },
+  { id: "reports", label: "Reports", icon: "📊", entityType: null },
+] as const;
+
+type ModuleId = (typeof NAV_ITEMS)[number]["id"];
 
 function AppShellContent() {
   const { username, logout } = useAuth();
-  const { selectedProjectId, selection, setSelection, announcement } =
-    useProjectContext();
-  const [activeTab, setActiveTab] = useState<EntityType>("project");
+  const { selection, setSelection, announcement } = useProjectContext();
+  const [activeModule, setActiveModule] = useState<ModuleId>("cases");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const activeItem =
+    NAV_ITEMS.find((item) => item.id === activeModule) ?? NAV_ITEMS[0];
 
   const renderDetail = () => {
     if (!selection) {
@@ -45,18 +54,10 @@ function AppShellContent() {
         return <ProjectDetail projectId={selection.id} />;
       case "suite":
         return (
-          <SuiteDetail
-            suiteId={selection.id}
-            projectId={selection.projectId}
-          />
+          <SuiteDetail suiteId={selection.id} projectId={selection.projectId} />
         );
       case "case":
-        return (
-          <CaseDetail
-            caseId={selection.id}
-            projectId={selection.projectId}
-          />
-        );
+        return <CaseDetail caseId={selection.id} projectId={selection.projectId} />;
       case "run":
         return <RunDetail runId={selection.id} />;
       case "milestone":
@@ -78,72 +79,81 @@ function AppShellContent() {
     }
   };
 
-  const handleTabClick = (type: EntityType) => {
-    setActiveTab(type);
+  const handleModuleClick = (moduleId: ModuleId) => {
+    setActiveModule(moduleId);
     setSelection(null);
+    setSidebarOpen(false);
   };
 
   return (
-    <div className="app-layout">
-      <header className="app-header">
+    <div
+      className={`app-layout ${sidebarOpen ? "app-layout--sidebar-open" : ""}`}
+    >
+      <header className="topbar">
         <button
-          className="btn btn-ghost sidebar-toggle"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="Toggle sidebar"
+          type="button"
+          className="btn btn-ghost topbar__menu-toggle"
+          onClick={() => setSidebarOpen((open) => !open)}
+          aria-label="Toggle navigation panes"
           aria-expanded={sidebarOpen}
         >
           ☰
         </button>
-        <span className="app-header__brand">Tucano Test</span>
-        {selectedProjectId && (
-          <div className="header-context">
-            <span className="header-chip">
-              Project: {selectedProjectId.slice(0, 8)}…
-            </span>
-          </div>
-        )}
-        <div className="header-spacer" />
-        <div className="header-user">
-          <span>{username}</span>
-          <button className="btn btn-ghost" onClick={logout}>
+        <span className="topbar__brand">Tucano Test</span>
+        <ProjectSwitcher />
+        <div className="topbar__spacer" />
+        <div className="topbar__user">
+          <span className="topbar__username">{username}</span>
+          <button type="button" className="btn btn-ghost" onClick={logout}>
             Sign out
           </button>
         </div>
       </header>
 
-      {sidebarOpen && (
-        <div
-          className="sidebar-overlay"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
+      <nav className="navrail" aria-label="Module navigation">
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`navrail__item ${
+              activeModule === item.id ? "navrail__item--active" : ""
+            }`}
+            onClick={() => handleModuleClick(item.id)}
+            title={item.label}
+            aria-label={item.label}
+            aria-current={activeModule === item.id ? "page" : undefined}
+          >
+            <span className="navrail__icon" aria-hidden="true">
+              {item.icon}
+            </span>
+          </button>
+        ))}
+      </nav>
 
-      <aside
-        className={`app-sidebar ${sidebarOpen ? "app-sidebar--open" : ""}`}
-        aria-label="Sidebar"
-      >
-        <ProjectExplorer />
-      </aside>
+      <div className="panes">
+        <aside className="pane-left" aria-label="Project explorer">
+          <ProjectExplorer />
+        </aside>
 
-      <main className="app-main">
-        <nav className="nav-tabs" aria-label="Entity type navigation">
-          {NAV_TABS.map((tab) => (
-            <button
-              key={tab.type}
-              className={`nav-tab ${activeTab === tab.type ? "nav-tab--active" : ""}`}
-              onClick={() => handleTabClick(tab.type)}
-              aria-current={activeTab === tab.type ? "page" : undefined}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <main className="pane-center" aria-label={activeItem.label}>
+          {activeItem.entityType ? (
+            <EntityList entityType={activeItem.entityType} />
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state__icon" aria-hidden="true">
+                📊
+              </div>
+              <p className="empty-state__message">
+                Reports are not available yet
+              </p>
+            </div>
+          )}
+        </main>
 
-        <EntityList entityType={activeTab} />
-
-        {selection && <div className="panel">{renderDetail()}</div>}
-      </main>
+        <aside className="pane-right" aria-label="Detail panel">
+          {renderDetail()}
+        </aside>
+      </div>
 
       <div className="sr-only" aria-live="polite" role="status">
         {selection
