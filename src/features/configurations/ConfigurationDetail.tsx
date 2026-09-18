@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { TestConfiguration } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
+import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 
 export function ConfigurationDetail({
   configId,
@@ -13,25 +15,27 @@ export function ConfigurationDetail({
   const { client } = useAuth();
   const [config, setConfig] = useState<TestConfiguration | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    apiFetch(() =>
-      client.configurations.getConfiguration({ id: configId }),
-    )
+    apiFetch(() => client.configurations.getConfiguration({ id: configId }))
       .then((data) => {
+        if (cancelled) return;
         setConfig(data);
         setLoading(false);
       })
       .catch((err: unknown) => {
-        const message =
-          (err as { body?: { error?: { message?: string } } })?.body?.error
-            ?.message ?? "Failed to load configuration";
-        setError(message);
+        if (cancelled) return;
+        setError(readApiError(err, "Failed to load configuration"));
         setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [client, configId]);
 
   if (loading) {
@@ -44,11 +48,7 @@ export function ConfigurationDetail({
   }
 
   if (error) {
-    return (
-      <div className="error-display" role="alert">
-        {error}
-      </div>
-    );
+    return <ApiErrorNotice error={error} />;
   }
 
   if (!config) return null;

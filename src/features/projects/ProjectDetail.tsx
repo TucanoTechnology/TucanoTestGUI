@@ -267,6 +267,39 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               </ul>
             </div>
           )}
+
+          {project.testCases && project.testCases.length > 0 && (
+            <div className="detail-field">
+              <div className="detail-field__label">
+                Test Cases ({project.testCases.length})
+              </div>
+              <ul className="entity-list">
+                {project.testCases.map((testCase) => (
+                  <li key={testCase.testCaseId}>
+                    <button
+                      className="entity-list__item"
+                      onClick={() =>
+                        setSelection({
+                          type: "case",
+                          id: testCase.testCaseId,
+                          projectId,
+                        })
+                      }
+                    >
+                      <span className="entity-list__name">
+                        {testCase.title}
+                      </span>
+                      {testCase.priority && (
+                        <span className="entity-list__meta">
+                          {testCase.priority}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
 

@@ -279,4 +279,47 @@ describe("ProjectDetail", () => {
     });
     expect(results.violations).toEqual([]);
   });
+
+  it("lists the suites it carries and the cases it owns directly", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, {
+          ...CHECKOUT,
+          testSuites: [
+            {
+              suiteId: "smoke.checkout",
+              name: "Checkout smoke",
+              testCases: [{ testCaseId: "TC-LOGIN-1", title: "Log in" }],
+            },
+          ],
+          testCases: [
+            {
+              testCaseId: "TC-PROJECT-1",
+              title: "Project level case",
+              priority: "Low",
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    const { baseElement } = await openDetail();
+
+    expect(screen.getByText("Test Suites (1)")).toBeInTheDocument();
+    expect(screen.getByText("Test Cases (1)")).toBeInTheDocument();
+
+    const { default: axe } = await import("axe-core");
+    const results = await axe.run(baseElement, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(results.violations).toEqual([]);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Project level case/ }),
+    );
+    expect(screen.getByTestId("selection")).toHaveTextContent(
+      "case:TC-PROJECT-1",
+    );
+  });
 });

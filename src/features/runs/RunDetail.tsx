@@ -1,29 +1,35 @@
 import { useEffect, useState } from "react";
 import type { TestRun } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
+import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 
 export function RunDetail({ runId }: { runId: string }) {
   const { client } = useAuth();
   const [run, setRun] = useState<TestRun | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     apiFetch(() => client.testRuns.getTestRun({ id: runId }))
       .then((data) => {
+        if (cancelled) return;
         setRun(data);
         setLoading(false);
       })
       .catch((err: unknown) => {
-        const message =
-          (err as { body?: { error?: { message?: string } } })?.body?.error
-            ?.message ?? "Failed to load test run";
-        setError(message);
+        if (cancelled) return;
+        setError(readApiError(err, "Failed to load test run"));
         setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [client, runId]);
 
   if (loading) {
@@ -36,11 +42,7 @@ export function RunDetail({ runId }: { runId: string }) {
   }
 
   if (error) {
-    return (
-      <div className="error-display" role="alert">
-        {error}
-      </div>
-    );
+    return <ApiErrorNotice error={error} />;
   }
 
   if (!run) return null;
@@ -96,6 +98,21 @@ export function RunDetail({ runId }: { runId: string }) {
             {run.testSuites.map((s) => (
               <li key={s.suiteId} className="entity-list__item">
                 <span className="entity-list__name">{s.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {run.testCases && run.testCases.length > 0 && (
+        <div className="detail-field">
+          <div className="detail-field__label">
+            Test Cases ({run.testCases.length})
+          </div>
+          <ul className="entity-list">
+            {run.testCases.map((testCase) => (
+              <li key={testCase.testCaseId} className="entity-list__item">
+                <span className="entity-list__name">{testCase.title}</span>
               </li>
             ))}
           </ul>

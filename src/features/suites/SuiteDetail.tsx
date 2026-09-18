@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { TestSuite } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
+import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 
 export function SuiteDetail({
@@ -15,23 +17,27 @@ export function SuiteDetail({
   const { setSelection } = useProjectContext();
   const [suite, setSuite] = useState<TestSuite | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError(null);
     apiFetch(() => client.testSuites.getTestSuite({ id: suiteId }))
       .then((data) => {
+        if (cancelled) return;
         setSuite(data);
         setLoading(false);
       })
       .catch((err: unknown) => {
-        const message =
-          (err as { body?: { error?: { message?: string } } })?.body?.error
-            ?.message ?? "Failed to load suite";
-        setError(message);
+        if (cancelled) return;
+        setError(readApiError(err, "Failed to load suite"));
         setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [client, suiteId]);
 
   if (loading) {
@@ -44,11 +50,7 @@ export function SuiteDetail({
   }
 
   if (error) {
-    return (
-      <div className="error-display" role="alert">
-        {error}
-      </div>
-    );
+    return <ApiErrorNotice error={error} />;
   }
 
   if (!suite) return null;
