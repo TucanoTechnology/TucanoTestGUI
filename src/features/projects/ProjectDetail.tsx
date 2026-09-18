@@ -7,6 +7,7 @@ import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
+import { toJsonKey } from "../../app/keys.js";
 
 type Mode = "view" | "edit" | "duplicate" | "delete";
 
@@ -116,7 +117,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         client.projects.duplicateProject({
           id: projectId,
           requestBody: {
-            ...(trimmedId ? { newId: trimmedId } : {}),
+            ...(trimmedId ? { newId: toJsonKey(trimmedId) } : {}),
             ...(trimmedName ? { newName: trimmedName } : {}),
           },
         }),
@@ -322,7 +323,9 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 aria-describedby={`${fieldId}-new-id-hint`}
               />
               <p className="form-field__hint" id={`${fieldId}-new-id-hint`}>
-                Leave blank to derive the copy&apos;s ID from the source.
+                Leave blank to derive the copy&apos;s ID from the source. A new
+                ID is one name ending in .json, such as checkout-copy.json; the
+                suffix is added for you if you leave it off.
               </p>
             </div>
 
