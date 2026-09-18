@@ -109,10 +109,33 @@ describe("AppShell", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the reports placeholder until reports land", async () => {
+  it("mounts the reports views in the centre pane", async () => {
     mockApi(({ url, method }) => {
       if (url === "/api/projects" && method === "GET") {
         return jsonResponse(200, []);
+      }
+      if (url === "/api/reports/coverage" && method === "GET") {
+        return jsonResponse(200, {
+          totalCases: 4,
+          suites: [
+            {
+              suiteId: "smoke.checkout.json",
+              name: "smoke.checkout",
+              caseCount: 4,
+            },
+          ],
+        });
+      }
+      if (url === "/api/reports/summary" && method === "GET") {
+        return jsonResponse(200, {
+          total: 6,
+          passed: 2,
+          failed: 2,
+          blocked: 1,
+          untested: 0,
+          passPercentage: 33.33333333333333,
+          totalDurationMs: 2000,
+        });
       }
       throw new Error(`Unexpected request: ${method} ${url}`);
     });
@@ -120,9 +143,13 @@ describe("AppShell", () => {
     renderShell();
     fireEvent.click(screen.getByRole("button", { name: "Reports" }));
 
-    expect(screen.getByRole("main", { name: "Reports" })).toBeInTheDocument();
+    const pane = screen.getByRole("main", { name: "Reports" });
     expect(
-      screen.getByText("Reports are not available yet"),
+      await within(pane).findByRole("heading", { name: "Coverage" }),
+    ).toBeInTheDocument();
+    expect(within(pane).getByRole("heading", { name: "Summary" })).toBeInTheDocument();
+    expect(
+      within(pane).getByRole("group", { name: "Report filters" }),
     ).toBeInTheDocument();
   });
 
