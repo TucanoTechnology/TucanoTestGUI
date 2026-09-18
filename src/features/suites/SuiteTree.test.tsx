@@ -316,6 +316,76 @@ describe("SuiteTree", () => {
     ).toBeInTheDocument();
   });
 
+  it("states the ID a new suite's name derives", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, PROJECT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderTree();
+    await screen.findByRole("button", { name: /Login/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "New suite" }));
+    const dialog = await screen.findByRole("dialog", { name: "New suite" });
+
+    expect(within(dialog).getByLabelText("Name")).toHaveAccessibleDescription(
+      /with .json appended/,
+    );
+  });
+
+  it("refuses a name the API cannot derive an ID from, and sends no request", async () => {
+    const requests = mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, PROJECT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderTree();
+    await screen.findByRole("button", { name: /Login/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "New suite" }));
+    const dialog = await screen.findByRole("dialog", { name: "New suite" });
+    const form = within(dialog).getByRole("form", {
+      name: "Create suite form",
+    });
+    const name = within(dialog).getByLabelText("Name");
+
+    fireEvent.change(name, { target: { value: "checkout/flow" } });
+
+    const alert = within(dialog).getByRole("alert");
+    expect(alert).toHaveTextContent("checkout/flow.json");
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(name).toHaveAccessibleDescription(/not a single path component/);
+    expect(
+      within(dialog).getByRole("button", { name: "Create suite" }),
+    ).toBeDisabled();
+
+    // The control is disabled, but a form can be submitted without it, and the
+    // API would answer the same name with an `invalid_id` the user cannot act
+    // on rather than with the form's own explanation of it.
+    fireEvent.submit(form);
+    expect(
+      screen.getByRole("dialog", { name: "New suite" }),
+    ).toBeInTheDocument();
+    expect(
+      requests.filter(
+        (request) =>
+          request.url === "/api/projects/checkout/test_suites" &&
+          request.method === "POST",
+      ),
+    ).toHaveLength(0);
+
+    fireEvent.change(name, { target: { value: "Checkout flow" } });
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    expect(name).not.toHaveAttribute("aria-invalid");
+    expect(
+      within(dialog).getByRole("button", { name: "Create suite" }),
+    ).toBeEnabled();
+  });
+
   it("has no accessibility violations with the create form open", async () => {
     mockApi(({ url, method }) => {
       if (url === "/api/projects/checkout" && method === "GET") {

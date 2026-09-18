@@ -223,6 +223,7 @@ export function SuiteTree({
         <Dialog title="New suite" onClose={closeCreate}>
           <EntityForm
             submitLabel="Create suite"
+            derivedIdLabel="suite"
             busy={createBusy}
             error={createError}
             onSubmit={createSuite}

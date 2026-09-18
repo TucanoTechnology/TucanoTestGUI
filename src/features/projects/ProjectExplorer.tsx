@@ -191,6 +191,7 @@ export function ProjectExplorer() {
         <Dialog title="New project" onClose={closeCreate}>
           <EntityForm
             submitLabel="Create project"
+            derivedIdLabel="project"
             busy={createBusy}
             error={createError}
             onSubmit={createProject}

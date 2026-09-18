@@ -74,6 +74,9 @@ describe("ProjectDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     const form = await screen.findByRole("form", { name: "Save changes form" });
+    // The project's key is already fixed, so this name is not an identifier and
+    // the form says nothing about one being derived from it.
+    expect(within(form).queryByText(/with .json appended/)).not.toBeInTheDocument();
     fireEvent.change(within(form).getByLabelText("Name"), {
       target: { value: "Checkout v2" },
     });
