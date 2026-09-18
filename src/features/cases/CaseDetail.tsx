@@ -13,6 +13,7 @@ import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { CaseForm, type CaseFormValues } from "./CaseForm.js";
 import { StepsEditor } from "./StepsEditor.js";
+import { AttachmentSection } from "./AttachmentSection.js";
 
 type Mode = "view" | "edit" | "duplicate" | "delete";
 
@@ -201,6 +202,63 @@ export function CaseDetail({
     }
   };
 
+  /**
+   * Every attachment mutation re-reads the case: an upload is stored under a
+   * name only the API knows, and a delete has to drop its row. It shares `busy`
+   * with the step actions because a steps `PUT` sends the whole array — one
+   * built from a document read before an upload would drop that file. The
+   * error travels back to the section that started the action, which renders
+   * it next to the control the operator used.
+   */
+  const mutateAttachments = async (
+    request: () => Promise<{ message: string }>,
+  ): Promise<void> => {
+    setBusy(true);
+    try {
+      const response = await apiFetch(request);
+      setReloadToken((token) => token + 1);
+      refreshProjects();
+      announce(response.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const uploadCaseAttachment = (file: File) =>
+    mutateAttachments(() =>
+      client.testCases.uploadTestCaseAttachment({
+        id: caseId,
+        formData: { file },
+      }),
+    );
+
+  const deleteCaseAttachment = (filename: string) =>
+    mutateAttachments(() =>
+      client.testCases.deleteTestCaseAttachment({ id: caseId, filename }),
+    );
+
+  /**
+   * Step attachments have no download route, so their section is rendered
+   * without one and offers neither a preview nor a download.
+   */
+  const uploadStepAttachment = (stepIndex: number, file: File) =>
+    mutateAttachments(() =>
+      client.testCases.uploadStepAttachment({
+        id: caseId,
+        stepIndex,
+        formData: { file },
+      }),
+    );
+
+  const deleteStepAttachment = (stepIndex: number, filename: string) =>
+    mutateAttachments(() =>
+      client.testCases.deleteStepAttachment({
+        id: caseId,
+        stepIndex,
+        filename,
+      }),
+    );
+
   const duplicateCase = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -376,6 +434,15 @@ export function CaseDetail({
             error={actionError}
             onSave={saveSteps}
             onDismissError={() => setActionError(null)}
+            renderStepAttachments={(step, index) => (
+              <AttachmentSection
+                scope={`step ${index + 1}`}
+                attachments={step.attachments ?? []}
+                busy={busy}
+                onUpload={(file) => uploadStepAttachment(index, file)}
+                onDelete={(filename) => deleteStepAttachment(index, filename)}
+              />
+            )}
           />
 
           {testCase.expectedResult && (
@@ -387,25 +454,21 @@ export function CaseDetail({
             </div>
           )}
 
-          {testCase.attachments && testCase.attachments.length > 0 && (
-            <div className="detail-field">
-              <div className="detail-field__label">
-                Attachments ({testCase.attachments.length})
-              </div>
-              <ul className="entity-list">
-                {testCase.attachments.map((attachment) => (
-                  <li key={attachment.filename} className="entity-list__item">
-                    <span className="entity-list__name">
-                      {attachment.originalName}
-                    </span>
-                    <span className="entity-list__meta">
-                      {attachment.size} bytes
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <AttachmentSection
+            scope="this case"
+            attachments={testCase.attachments ?? []}
+            busy={busy}
+            onUpload={uploadCaseAttachment}
+            onDelete={deleteCaseAttachment}
+            onDownload={(filename) =>
+              apiFetch(() =>
+                client.testCases.downloadTestCaseAttachment({
+                  id: caseId,
+                  filename,
+                }),
+              )
+            }
+          />
         </>
       )}
 
