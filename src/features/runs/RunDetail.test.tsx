@@ -55,6 +55,15 @@ const DEFECT = {
   linkedAt: "1789655960",
 };
 
+/** What the API answers an import with: imported 3, nothing left unwritten. */
+const IMPORT_SUMMARY = {
+  imported: 3,
+  skipped: 3,
+  errors: 1,
+  duplicates: 2,
+  summary: { passed: 2, failed: 1, blocked: 0 },
+};
+
 interface ApiStore {
   run: Record<string, unknown>;
   puts: unknown[];
@@ -63,9 +72,20 @@ interface ApiStore {
   resultPosts: unknown[];
   /** Bodies posted to the defect link route, oldest first. */
   defectPosts: unknown[];
+  /** The two import routes, oldest first, with the headers they were sent. */
+  importPosts: {
+    url: string;
+    contentType: string | undefined;
+    body: unknown;
+  }[];
   deletes: string[];
   /** When set, the mutating routes answer this instead of succeeding. */
   refusal?: Response;
+  /**
+   * When set, reads of the run answer this instead, so a test can hold a
+   * reload open and look at the panel while it is still in flight.
+   */
+  heldRunRead?: Promise<Response>;
 }
 
 /** Applies `update` to the result the run records for `caseId`. */
@@ -85,8 +105,14 @@ function replaceResult(
 }
 
 function checkoutApi(store: ApiStore) {
-  return ({ url, method, body }: RecordedRequest): Response => {
-    if (url === "/api/test_runs/nightly.json" && method === "GET") {
+  return ({
+    url,
+    method,
+    body,
+    headers,
+  }: RecordedRequest): Response | Promise<Response> => {
+    if (/^\/api\/test_runs\/[^/]+$/.test(url) && method === "GET") {
+      if (store.heldRunRead) return store.heldRunRead;
       return jsonResponse(200, store.run);
     }
     if (
@@ -193,6 +219,18 @@ function checkoutApi(store: ApiStore) {
       store.deletes.push(url);
       return jsonResponse(200, { message: "Resource deleted" });
     }
+
+    const importMatch =
+      /^\/api\/test_runs\/nightly\.json\/import\/(json|junit)$/.exec(url);
+    if (importMatch && method === "POST") {
+      if (store.refusal) return store.refusal;
+      store.importPosts.push({
+        url,
+        contentType: headers["content-type"],
+        body,
+      });
+      return jsonResponse(200, IMPORT_SUMMARY);
+    }
     throw new Error(`Unexpected request: ${method} ${url}`);
   };
 }
@@ -204,6 +242,7 @@ function emptyStore(run: Record<string, unknown> = RUN): ApiStore {
     posts: [],
     resultPosts: [],
     defectPosts: [],
+    importPosts: [],
     deletes: [],
   };
 }
@@ -270,6 +309,50 @@ async function openDetail(store: ApiStore) {
 async function openEdit() {
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   return screen.findByRole("form", { name: "Save changes form" });
+}
+
+/** Picks `contents` as a file named `filename`, as a file control receives it. */
+function pickFile(
+  label: string,
+  filename: string,
+  contents: string,
+  type: string,
+) {
+  const file = new File([contents], filename, { type });
+  fireEvent.change(screen.getByLabelText(label), {
+    target: { files: [file] },
+  });
+}
+
+/** The import section stating the summary of the file just imported. */
+async function importedSection(filename: string): Promise<HTMLElement> {
+  const source = await screen.findByText(`Imported from ${filename}`);
+  const section = source.closest<HTMLElement>(".import-section");
+  if (!section) throw new Error("The summary is not inside an import section");
+  return section;
+}
+
+/** The summary's label/value rows, in the order the section states them. */
+function summaryRows(section: HTMLElement) {
+  return Array.from(section.querySelectorAll(".import-summary__stat")).map(
+    (stat) => [
+      stat.querySelector(".import-summary__stat-label")?.textContent,
+      stat.querySelector(".import-summary__stat-value")?.textContent,
+    ],
+  );
+}
+
+/**
+ * Leaves reads of the run unanswered until the returned function runs, so a
+ * test can look at the panel while a reload is still in flight. The answer is
+ * built when it is released, so it carries whatever the run holds by then.
+ */
+function holdRunRead(store: ApiStore): () => void {
+  let release = () => {};
+  store.heldRunRead = new Promise<Response>((resolve) => {
+    release = () => resolve(jsonResponse(200, store.run));
+  });
+  return release;
 }
 
 afterEach(() => {
@@ -881,5 +964,227 @@ describe("RunDetail", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(results.violations).toEqual([]);
+  });
+
+  it("imports a JSON results file and states what the import wrote", async () => {
+    const store = resultStore();
+    const { requests } = await openDetail(store);
+
+    pickFile(
+      "Import JSON results",
+      "nightly-results.json",
+      JSON.stringify([
+        { testCaseId: "TC-LOGIN-2", status: "Passed", notes: "second run" },
+      ]),
+      "application/json",
+    );
+
+    await waitFor(() => {
+      expect(store.importPosts).toEqual([
+        {
+          url: "/api/test_runs/nightly.json/import/json",
+          contentType: "application/json",
+          body: [
+            { testCaseId: "TC-LOGIN-2", status: "Passed", notes: "second run" },
+          ],
+        },
+      ]);
+    });
+
+    // Every count the summary carries is stated under the file it came from.
+    expect(summaryRows(await importedSection("nightly-results.json"))).toEqual([
+      ["Imported", "3"],
+      ["Skipped", "3"],
+      ["Passed", "2"],
+      ["Failed", "1"],
+      ["Blocked", "0"],
+      ["Already recorded", "2"],
+      ["Unusable", "1"],
+    ]);
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "Imported 3 results: 2 passed, 1 failed, 0 blocked. Skipped 3: 2 already recorded, 1 unusable.",
+    );
+    // The run is read again rather than the table being guessed at locally.
+    await waitFor(() => {
+      expect(
+        requests.filter(
+          (request) =>
+            request.url === "/api/test_runs/nightly.json" &&
+            request.method === "GET",
+        ),
+      ).toHaveLength(2);
+    });
+  });
+
+  it("posts a JUnit report to the XML route as the report stands", async () => {
+    const store = resultStore();
+    await openDetail(store);
+
+    const report =
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<testsuite name="smoke">\n' +
+      '  <testcase name="TC-LOGIN-2 &amp; co" />\n' +
+      '  <testcase name="TC-LOGIN-3"><failure>timed out</failure></testcase>\n' +
+      "</testsuite>";
+
+    pickFile(
+      "Import JUnit XML results",
+      "nightly-junit.xml",
+      report,
+      "application/xml",
+    );
+
+    await waitFor(() => {
+      expect(store.importPosts).toEqual([
+        {
+          url: "/api/test_runs/nightly.json/import/junit",
+          contentType: "application/xml",
+          body: report,
+        },
+      ]);
+    });
+    expect(
+      await importedSection("nightly-junit.xml"),
+    ).toBeInTheDocument();
+  });
+
+  it("refuses a picked file that is not JSON without reaching the API", async () => {
+    const store = resultStore();
+    const { requests } = await openDetail(store);
+
+    pickFile(
+      "Import JSON results",
+      "results.json",
+      "not json",
+      "application/json",
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The file is not valid JSON.");
+    // The refusal belongs to the control that caused it, not to the panel.
+    expect(alert.closest(".import-section")).not.toBeNull();
+    expect(requests.filter((request) => request.method === "POST")).toEqual([]);
+    expect(screen.queryByText(/^Imported from /)).not.toBeInTheDocument();
+  });
+
+  it("states the API refusal in place of the summary it replaced", async () => {
+    const store = resultStore();
+    await openDetail(store);
+
+    pickFile(
+      "Import JSON results",
+      "nightly-results.json",
+      "[]",
+      "application/json",
+    );
+    await importedSection("nightly-results.json");
+
+    store.refusal = errorEnvelope(
+      400,
+      "invalid_request",
+      "an entry omits testCaseId",
+    );
+    pickFile("Import JSON results", "second.json", "[]", "application/json");
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("invalid_request");
+    expect(alert).toHaveTextContent("an entry omits testCaseId");
+    // The counts on screen are only ever the ones an import that succeeded wrote.
+    expect(
+      screen.queryByText("Imported from nightly-results.json"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Imported from second.json")).not.toBeInTheDocument();
+  });
+
+  it("has no accessibility violations with an import summary on screen", async () => {
+    const store = resultStore();
+    const { view } = await openDetail(store);
+
+    pickFile(
+      "Import JSON results",
+      "nightly-results.json",
+      "[]",
+      "application/json",
+    );
+    await importedSection("nightly-results.json");
+
+    const { default: axe } = await import("axe-core");
+    const results = await axe.run(view.baseElement, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(results.violations).toEqual([]);
+  });
+
+  it("keeps the summary on screen while the run is read again", async () => {
+    const store = resultStore();
+    const { requests } = await openDetail(store);
+    // The read an import triggers is held open, so the panel is inspected at
+    // the moment a real API would still be answering it.
+    const release = holdRunRead(store);
+    const reads = () =>
+      requests.filter(
+        (request) =>
+          request.url === "/api/test_runs/nightly.json" &&
+          request.method === "GET",
+      );
+
+    pickFile(
+      "Import JSON results",
+      "nightly-results.json",
+      "[]",
+      "application/json",
+    );
+
+    // The reload is already under way, and the panel was not swapped for a
+    // spinner: the summary a section owns is still there with the read in
+    // flight, and stays there once it lands.
+    await waitFor(() => expect(reads()).toHaveLength(2));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Imported from nightly-results.json"),
+    ).toBeInTheDocument();
+
+    // The answered read carries a renamed run, so its landing can be waited
+    // for, and the state the section owns can be checked after it.
+    store.run = { ...store.run, name: "Nightly run again" };
+    release();
+    const section = await importedSection("nightly-results.json");
+    await screen.findByRole("heading", { name: "Nightly run again" });
+
+    expect(screen.getByText("Imported from nightly-results.json")).toBeInTheDocument();
+    expect(summaryRows(section)).toEqual([
+      ["Imported", "3"],
+      ["Skipped", "3"],
+      ["Passed", "2"],
+      ["Failed", "1"],
+      ["Blocked", "0"],
+      ["Already recorded", "2"],
+      ["Unusable", "1"],
+    ]);
+  });
+
+  it("blanks the panel while a different run is read", async () => {
+    const store = resultStore();
+    const { view } = await openDetail(store);
+    const release = holdRunRead(store);
+
+    // The detail pane keeps the component for as long as it shows this kind of
+    // entity, so a run selected in its place has no document yet: the panel it
+    // blanks is the previous run's, which must not stand in for the new one.
+    view.rerender(
+      <AuthProvider>
+        <ProjectProvider>
+          <Harness runId="smoke.json" />
+        </ProjectProvider>
+      </AuthProvider>,
+    );
+
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Nightly run" }),
+    ).not.toBeInTheDocument();
+
+    release();
+    await screen.findByRole("heading", { name: "Nightly run" });
   });
 });

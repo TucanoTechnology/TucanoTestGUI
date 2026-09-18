@@ -40,6 +40,20 @@ export function bearerToken(request: RecordedRequest): string | null {
   return header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
 }
 
+/**
+ * The body a test reads back: a JSON body parsed, and a body that is not JSON —
+ * a raw JUnit XML report, say — kept as the text that was sent, which is what a
+ * route taking a non-JSON body receives.
+ */
+function readBody(body: BodyInit | null | undefined): unknown {
+  if (typeof body !== "string") return undefined;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
+}
+
 export function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -79,7 +93,7 @@ export function mockApi(handler: RequestHandler): RecordedRequest[] {
         url,
         method: (init?.method ?? "GET").toUpperCase(),
         headers: readHeaders(init),
-        body: body && !formData ? JSON.parse(String(body)) : undefined,
+        body: formData ? undefined : readBody(body),
         ...(formData ? { formData } : {}),
       };
       requests.push(request);

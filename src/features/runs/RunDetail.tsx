@@ -1,5 +1,9 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
-import type { TestConfiguration, TestRun } from "../../api/generated/index.js";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import type {
+  ImportSummary,
+  TestConfiguration,
+  TestRun,
+} from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
@@ -9,6 +13,8 @@ import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { RunForm, type RunFormValues } from "./RunForm.js";
 import { buildRunUpdateRequest } from "./runSelection.js";
 import { ResultForm, type DefectLinkValues } from "./ResultForm.js";
+import { ImportSection } from "./ImportSection.js";
+import { describeImportSummary, type ImportRequest } from "./importResults.js";
 import {
   buildResultRequest,
   buildResultRows,
@@ -42,16 +48,22 @@ export function RunDetail({
   const [reloadToken, setReloadToken] = useState(0);
   const [newId, setNewId] = useState("");
   const [resultCaseId, setResultCaseId] = useState<string | null>(null);
+  // The run the document on screen was read with. A reload reads the same run
+  // again to pick up what an action changed, and the panel stays on screen
+  // while it does, so the state the sections own survives the read. A run that
+  // has not been read yet has no document to show and blanks the panel.
+  const loadedRunId = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setError(null);
+    if (loadedRunId.current !== runId) setLoading(true);
 
     apiFetch(() => client.testRuns.getTestRun({ id: runId }))
       .then((document) => {
         if (cancelled) return;
         setRun(document);
+        loadedRunId.current = runId;
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -285,6 +297,29 @@ export function RunDetail({
     }
   };
 
+  // An import rewrites the results the run records, so the run is read again
+  // rather than the table being guessed at locally. The request the section
+  // built carries the format, which is the route it goes to.
+  const importResults = async (
+    request: ImportRequest,
+  ): Promise<ImportSummary> => {
+    const summary = await apiFetch(() =>
+      request.format === "json"
+        ? client.testRuns.importJsonResults({
+            id: runId,
+            requestBody: request.body,
+          })
+        : client.testRuns.importJUnitResults({
+            id: runId,
+            requestBody: request.body,
+          }),
+    );
+    setReloadToken((token) => token + 1);
+    refreshProjects();
+    announce(describeImportSummary(summary));
+    return summary;
+  };
+
   return (
     <div className="detail-panel">
       <div className="detail-panel__header">
@@ -476,6 +511,8 @@ export function RunDetail({
               </table>
             </div>
           )}
+
+          <ImportSection busy={busy} onImport={importResults} />
         </>
       )}
 
