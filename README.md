@@ -63,7 +63,7 @@ npm run typecheck  # TypeScript only
 npm run build      # production bundle
 ```
 
-Point the application at an API with `VITE_API_BASE_URL`. When unset it calls `/api`, which nginx proxies to `TUCANO_API_URL` in the container.
+Point the application at an API with `VITE_API_BASE_URL`, read once at build time by `src/api/configure.ts`. When unset it calls `/api`, which nginx proxies to `TUCANO_API_URL` in the container.
 
 ## API client
 
@@ -74,15 +74,17 @@ npm run generate:client                # regenerate src/api/generated from api/o
 npm run sync:openapi -- --ref <sha>    # move the pin to another TucanoTestAPI revision
 ```
 
-`src/api/generated/` is committed and never edited by hand — the `client-drift` CI job regenerates it and fails when the committed output is stale. `src/api/client.ts` is the older hand-written client; components migrate off it one at a time.
+`src/api/generated/` is committed and never edited by hand — the `client-drift` CI job regenerates it and fails when the committed output is stale. `src/api/client.ts` holds the session around the generated client: the stored token pair, the `apiFetch` wrapper that retries once after a refresh, and the session-expired notification. It does not build requests of its own.
 
 Every action available in the GUI must have an API equivalent, and every API error must be renderable here. When a view needs data the API cannot serve, raise an API issue instead of adding a workaround — the GUI is a display layer and more logic belongs in the API, not less. See [docs/api-client.md](docs/api-client.md).
 
 ## Authentication
 
-The login screen exchanges credentials for a bearer token pair via `POST /auth/login`. The access token lives in memory only; the refresh token is stored in `localStorage` and rotated on every refresh. A 401 response triggers an automatic refresh-and-retry before redirecting to the login screen.
+The login screen exchanges credentials for a bearer token pair via `POST /auth/login`. The access token lives in memory only; the refresh token is stored in `localStorage` and rotated on every refresh, so a refresh token is single-use.
 
-Set `VITE_DEBUG_LOGIN=true` at build time to pre-fill the form with demo credentials for each authority level.
+Data requests go through `apiFetch` in `src/api/client.ts`, and the client it hands the caller reads the stored access token once per request — a token stored after the client was built, by a sign-in or by a refresh, is the one the next request carries. A 401 response triggers one refresh-and-retry; concurrent 401s share that one exchange instead of burning the refresh token twice. When the refresh is refused the stored pair is discarded and the app returns to the login screen. Signing out revokes the refresh token with `POST /auth/logout`.
+
+Set `VITE_DEBUG_LOGIN=true` at build time to pre-fill the form and to list the demo accounts below it. The list covers the accounts a seeded TucanoTestAPI deployment can sign in as: `admin`, the bootstrap system administrator, and `viewer`, the account the seed grants ownership of `checkout.json` and no grant on `payments.json`. Their default passwords are `demo-admin-password` and `viewer-seed-password`; pass `VITE_DEMO_ADMIN_PASSWORD` and `VITE_DEMO_VIEWER_PASSWORD` when a deployment seeds its own. The seed creates no `owner` or `editor` account, and the API exposes no way to create one, so the GUI cannot offer those logins.
 
 ## Container
 

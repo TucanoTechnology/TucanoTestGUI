@@ -1,16 +1,42 @@
 import { vi } from "vitest";
-import { clearTokens, setAccessToken, setApiClient } from "./api/client.js";
+import {
+  clearTokens,
+  getAccessToken,
+  setAccessToken,
+  setApiClient,
+} from "./api/client.js";
 import { createApiClient } from "./api/configure.js";
 
 export interface RecordedRequest {
   url: string;
   method: string;
+  headers: Record<string, string>;
   body: unknown;
 }
 
 export type RequestHandler = (
   request: RecordedRequest,
 ) => Response | Promise<Response>;
+
+/** Header names are lower-cased, the form the wire and `Headers` use. */
+function readHeaders(init?: RequestInit): Record<string, string> {
+  const headers = init?.headers;
+  if (!headers) return {};
+  const entries = headers instanceof Headers
+    ? [...headers.entries()]
+    : Array.isArray(headers)
+      ? headers
+      : Object.entries(headers);
+  return Object.fromEntries(
+    entries.map(([name, value]) => [name.toLowerCase(), String(value)]),
+  );
+}
+
+/** The bearer token a recorded request was sent with, when it carried one. */
+export function bearerToken(request: RecordedRequest): string | null {
+  const header = request.headers["authorization"];
+  return header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : null;
+}
 
 export function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -48,6 +74,7 @@ export function mockApi(handler: RequestHandler): RecordedRequest[] {
       const request: RecordedRequest = {
         url,
         method: (init?.method ?? "GET").toUpperCase(),
+        headers: readHeaders(init),
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       };
       requests.push(request);
@@ -56,7 +83,7 @@ export function mockApi(handler: RequestHandler): RecordedRequest[] {
   );
 
   setAccessToken("test-token");
-  setApiClient(createApiClient({ baseUrl: "/api", token: "test-token" }));
+  setApiClient(createApiClient({ baseUrl: "/api", token: getAccessToken }));
 
   return requests;
 }
