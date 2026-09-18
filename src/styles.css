@@ -265,18 +265,26 @@ textarea {
 }
 
 @media (max-width: 1024px) {
+  /* Below the three-pane width the list and the detail panel stack into one
+     full-width column, so a selection stays readable on a phone without a
+     pointer. */
   .panes {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .pane-left,
-  .pane-right {
+  .pane-left {
     display: none;
   }
 
-  /* The grid above hides the side panes on narrow viewports; the top-bar
-     toggle reveals the left pane as an overlay so the hierarchy stays
-     reachable without a pointer. */
+  .pane-right {
+    border-top: 1px solid var(--color-border);
+    border-left: none;
+  }
+
+  /* The grid above hides the explorer on narrow viewports; the top-bar
+     toggle reveals it as an overlay so the hierarchy stays reachable without
+     a pointer. */
   .topbar__menu-toggle {
     display: block;
   }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../api/client.js";
+import { readApiError, type ApiErrorInfo } from "../api/errors.js";
+import { ApiErrorNotice } from "./ApiErrorNotice.js";
 import { useAuth } from "./AuthProvider.js";
 import { useProjectContext, type EntityType } from "./ProjectContext.js";
 
@@ -15,7 +17,7 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
     useProjectContext();
   const [items, setItems] = useState<EntityItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,17 +53,21 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
         }
         case "case": {
           if (!selectedProjectId) return [];
-          const ids = await apiFetch(() =>
-            client.projects.listProjectTestCases({ id: selectedProjectId }),
+          // A bare identifier that several parents hold is a 409 on
+          // `GET /test_cases/{id}`, and the seeded dataset holds such a case, so
+          // the list comes from the project document instead: the cases its
+          // suites carry plus the ones it holds itself.
+          const project = await apiFetch(() =>
+            client.projects.getProject({ id: selectedProjectId }),
           );
-          return Promise.all(
-            ids.map(async (id) => {
-              const c = await apiFetch(() =>
-                client.testCases.getTestCase({ id }),
-              );
-              return { id: c.testCaseId, name: c.title, meta: c.priority };
-            }),
-          );
+          return [
+            ...(project.testCases ?? []),
+            ...(project.testSuites ?? []).flatMap((s) => s.testCases ?? []),
+          ].map((c) => ({
+            id: c.testCaseId,
+            name: c.title,
+            meta: c.priority,
+          }));
         }
         case "run": {
           if (!selectedProjectId) return [];
@@ -129,10 +135,7 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          const message =
-            (err as { body?: { error?: { message?: string } } })?.body?.error
-              ?.message ?? "Failed to load items";
-          setError(message);
+          setError(readApiError(err, `Failed to load ${entityType}s`));
           setLoading(false);
         }
       });
@@ -162,11 +165,7 @@ export function EntityList({ entityType }: { entityType: EntityType }) {
   }
 
   if (error) {
-    return (
-      <div className="error-display" role="alert">
-        {error}
-      </div>
-    );
+    return <ApiErrorNotice error={error} />;
   }
 
   if (items.length === 0) {
