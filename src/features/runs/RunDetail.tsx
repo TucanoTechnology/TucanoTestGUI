@@ -8,6 +8,14 @@ import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { RunForm, type RunFormValues } from "./RunForm.js";
 import { buildRunUpdateRequest } from "./runSelection.js";
+import { ResultForm, type DefectLinkValues } from "./ResultForm.js";
+import {
+  buildResultRequest,
+  buildResultRows,
+  formatDuration,
+  rerecordBlocker,
+  type ResultSubmission,
+} from "./results.js";
 
 type Mode = "view" | "edit" | "duplicate" | "delete";
 
@@ -33,6 +41,7 @@ export function RunDetail({
   const [actionError, setActionError] = useState<ApiErrorInfo | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [newId, setNewId] = useState("");
+  const [resultCaseId, setResultCaseId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +197,93 @@ export function RunDetail({
   if (!run) return null;
 
   const configuration = run.configurations?.[0];
+  const rows = buildResultRows(run);
+  const activeRow =
+    resultCaseId === null
+      ? null
+      : (rows.find((row) => row.testCaseId === resultCaseId) ?? null);
+
+  const startResult = (caseId: string) => {
+    setActionError(null);
+    setResultCaseId(caseId);
+  };
+
+  const cancelResult = () => {
+    setActionError(null);
+    setResultCaseId(null);
+  };
+
+  const recordResult = async (values: ResultSubmission) => {
+    if (!activeRow) return;
+    const requestBody = buildResultRequest(
+      activeRow.testCaseId,
+      values,
+      activeRow.result,
+    );
+
+    setBusy(true);
+    setActionError(null);
+    try {
+      const recorded = await apiFetch(() =>
+        client.testRuns.recordTestRunResult({ id: runId, requestBody }),
+      );
+      setResultCaseId(null);
+      setReloadToken((token) => token + 1);
+      announce(recorded.message);
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to record test result"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // A link or an unlink changes the result the run records, so the run is read
+  // again rather than the table being guessed at locally.
+  const linkDefect = async (values: DefectLinkValues): Promise<boolean> => {
+    if (!activeRow) return false;
+    setBusy(true);
+    setActionError(null);
+    try {
+      const linked = await apiFetch(() =>
+        client.testRuns.linkResultDefect({
+          id: runId,
+          caseId: activeRow.testCaseId,
+          requestBody: values,
+        }),
+      );
+      setReloadToken((token) => token + 1);
+      announce(linked.message);
+      return true;
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to link defect"));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unlinkDefect = async (linkId: string): Promise<boolean> => {
+    if (!activeRow) return false;
+    setBusy(true);
+    setActionError(null);
+    try {
+      const unlinked = await apiFetch(() =>
+        client.testRuns.unlinkResultDefect({
+          id: runId,
+          caseId: activeRow.testCaseId,
+          linkId,
+        }),
+      );
+      setReloadToken((token) => token + 1);
+      announce(unlinked.message);
+      return true;
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to unlink defect"));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="detail-panel">
@@ -332,23 +428,52 @@ export function RunDetail({
             </div>
           )}
 
-          {run.results && run.results.length > 0 && (
+          {rows.length > 0 && (
             <div className="detail-field">
               <div className="detail-field__label">
-                Results ({run.results.length})
+                Results ({rows.length})
               </div>
-              <ul className="entity-list">
-                {run.results.map((r, i) => (
-                  <li key={i} className="entity-list__item">
-                    <span className="entity-list__name">{r.testCaseId}</span>
-                    <span
-                      className={`badge badge-${r.status?.toLowerCase() ?? "untested"}`}
-                    >
-                      {r.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <table className="data-table">
+                <caption className="sr-only">
+                  Results by test case, with the defects each result links
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Case ID</th>
+                    <th scope="col">Title</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Comment</th>
+                    <th scope="col">Duration</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.testCaseId}>
+                      <td className="data-table__id">{row.testCaseId}</td>
+                      <td>{row.title ?? "—"}</td>
+                      <td>
+                        <span
+                          className={`badge badge-${row.status.toLowerCase()}`}
+                        >
+                          {row.status}
+                        </span>
+                      </td>
+                      <td>{row.result?.notes ?? "—"}</td>
+                      <td>{formatDuration(row.result?.durationMs)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          onClick={() => startResult(row.testCaseId)}
+                        >
+                          {row.result ? "Edit result" : "Record result"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </>
@@ -417,6 +542,25 @@ export function RunDetail({
               {busy ? "Deleting…" : "Delete run"}
             </button>
           </div>
+        </Dialog>
+      )}
+
+      {activeRow && (
+        <Dialog
+          title={activeRow.result ? "Edit result" : "Record result"}
+          onClose={cancelResult}
+        >
+          <ResultForm
+            key={activeRow.testCaseId}
+            row={activeRow}
+            busy={busy}
+            error={actionError}
+            blockReason={rerecordBlocker(activeRow.result)}
+            onSubmit={recordResult}
+            onLinkDefect={linkDefect}
+            onUnlinkDefect={unlinkDefect}
+            onCancel={cancelResult}
+          />
         </Dialog>
       )}
     </div>
