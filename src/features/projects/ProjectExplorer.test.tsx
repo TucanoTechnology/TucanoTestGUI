@@ -317,10 +317,22 @@ describe("ProjectExplorer", () => {
     renderExplorer();
 
     const tree = await screen.findByRole("tree");
-    // The project counts both children: its suite and its directly owned case.
-    // The count span abuts the label, so the accessible name carries no space.
+    // The row splits into a disclosure and a selection control: expanding
+    // reveals the children without moving the selection, and the selection
+    // button's name carries the label, the project key, and the child count:
+    // its suite plus the case the project owns directly.
     fireEvent.click(
-      within(tree).getByRole("button", { name: /^Checkout\s*2$/ }),
+      within(tree).getByRole("button", { name: "Expand Checkout" }),
+    );
+    expect(
+      await within(tree).findByRole("button", {
+        name: "Checkout (checkout), 2 items",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(tree).getByRole("button", {
+        name: "Checkout (checkout), 2 items",
+      }),
     );
 
     const directCase = within(tree).getByRole("button", {
