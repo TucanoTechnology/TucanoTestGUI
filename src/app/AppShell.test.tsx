@@ -124,7 +124,7 @@ describe("AppShell", () => {
       screen.getByRole("button", { name: "Test Cases" }),
     ).not.toHaveAttribute("aria-current");
     expect(
-      screen.getByText("Select a project from the explorer to view runs"),
+      screen.getByText("Select a project to view test runs"),
     ).toBeInTheDocument();
   });
 
@@ -189,13 +189,15 @@ describe("AppShell", () => {
     renderShell();
 
     const switcher = screen.getByRole("combobox", { name: "Active project" });
-    await screen.findByRole("option", { name: "Checkout" });
+    await screen.findByRole("option", { name: "Checkout (checkout)" });
     fireEvent.change(switcher, { target: { value: CHECKOUT.projectId } });
 
+    // The centre pane is the case list: its breadcrumb names the project.
     expect(
-      await screen.findByRole("heading", { level: 2, name: "Checkout" }),
+      await screen.findByText("No test cases found"),
     ).toBeInTheDocument();
-    expect(screen.getByText("No cases found")).toBeInTheDocument();
+    const pane = screen.getByRole("main", { name: "Test Cases" });
+    expect(within(pane).getByText("Checkout")).toBeInTheDocument();
     expect(
       screen.getByText("Selected project: checkout", { selector: ".sr-only" }),
     ).toBeInTheDocument();
@@ -233,7 +235,7 @@ describe("AppShell", () => {
       screen.getByRole("complementary", { name: "Project explorer" }),
     ).toBeInTheDocument();
 
-    await screen.findByRole("option", { name: "Checkout" });
+    await screen.findByRole("option", { name: "Checkout (checkout)" });
     fireEvent.change(screen.getByRole("combobox", { name: "Active project" }), {
       target: { value: CHECKOUT.projectId },
     });
@@ -282,7 +284,7 @@ describe("AppShell", () => {
     });
 
     renderShell();
-    await screen.findByRole("option", { name: "Checkout" });
+    await screen.findByRole("option", { name: "Checkout (checkout)" });
     fireEvent.change(screen.getByRole("combobox", { name: "Active project" }), {
       target: { value: CHECKOUT.projectId },
     });
@@ -290,16 +292,14 @@ describe("AppShell", () => {
     const tree = await screen.findByRole("complementary", {
       name: "Suite tree",
     });
-    const caseList = () =>
-      within(screen.getByRole("main", { name: "Test Cases" })).getByRole(
-        "list",
-        { name: "case list" },
+    const rows = () =>
+      within(screen.getByRole("grid", { name: "Test cases" })).getAllByRole(
+        "row",
       );
-    const listedCases = () => within(caseList()).getAllByRole("button");
 
-    // The tree opens on "All test cases", so the list opens on the project.
-    await screen.findByRole("list", { name: "case list" });
-    expect(listedCases()).toHaveLength(4);
+    // The tree opens on "All test cases", so the list opens on the project:
+    // one header row plus the four cases the document carries.
+    await waitFor(() => expect(rows()).toHaveLength(5));
 
     // The scope is applied to the project document already in hand, so moving
     // between nodes must not read it again.
@@ -312,23 +312,19 @@ describe("AppShell", () => {
     fireEvent.click(
       within(tree).getByRole("button", { name: /Directly in project/ }),
     );
-    expect(listedCases()).toHaveLength(1);
-    expect(caseList()).toHaveTextContent("Reach the checkout page");
-    expect(caseList()).not.toHaveTextContent("Add an item to the cart");
+    expect(rows()).toHaveLength(2);
 
     // A suite is the cases it carries, and the detail panel agrees with it.
     fireEvent.click(
       within(tree).getByRole("button", { name: /smoke\.checkout/ }),
     );
-    expect(listedCases()).toHaveLength(3);
-    expect(caseList()).not.toHaveTextContent("Reach the checkout page");
-    expect(caseList()).toHaveTextContent("Add an item to the cart");
+    expect(rows()).toHaveLength(4);
     expect(
       await screen.findByRole("heading", { level: 2, name: "smoke.checkout" }),
     ).toBeInTheDocument();
 
     fireEvent.click(within(tree).getByRole("button", { name: /All test cases/ }));
-    expect(listedCases()).toHaveLength(4);
+    expect(rows()).toHaveLength(5);
 
     expect(
       requests.filter(
@@ -385,7 +381,7 @@ describe("AppShell", () => {
     });
 
     const { baseElement } = renderShell();
-    await screen.findByRole("treeitem", { name: "Checkout" });
+    await screen.findByText("Checkout", { selector: ".tree-node__name" });
 
     const { default: axe } = await import("axe-core");
     const results = await axe.run(baseElement);

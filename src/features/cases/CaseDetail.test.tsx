@@ -65,6 +65,8 @@ const CASE: TestCase = {
   steps: [FIRST_STEP],
   expectedResult: "The account page loads",
   attachments: [ATTACHMENT],
+  version: 2,
+  lastModified: "2026-09-17T10:00:00Z",
 };
 
 const PROJECT = {
@@ -129,8 +131,28 @@ async function openDetail(props: { caseId: string; projectId?: string }) {
   return view;
 }
 
+/** Tabs own the panels: a section's controls only exist once its tab is open. */
+function openTab(name: "Details" | "Steps" | "Attachments" | "History") {
+  fireEvent.click(screen.getByRole("tab", { name }));
+}
+
 const CASE_ATTACHMENTS = "/api/test_cases/TC-LOGIN-1/attachments";
 const STEP_ATTACHMENTS = "/api/test_cases/TC-LOGIN-1/steps/0/attachments";
+const HISTORY = "/api/test_cases/TC-LOGIN-1/history";
+
+/** The recorded revision the History tab lists and can open. */
+const HISTORY_ENTRY = {
+  version: 1,
+  lastModified: "2026-09-01T09:00:00Z",
+  changedFields: ["title"],
+};
+
+const SNAPSHOT: TestCase = {
+  ...CASE,
+  title: "Sign in with an account",
+  version: 1,
+  steps: [],
+};
 
 /** The stored bytes of an attachment, labelled with the type it was stored under. */
 function fileResponse(mimeType: string) {
@@ -176,6 +198,9 @@ function mockCaseApi(initial: TestCase[] = [CASE]) {
       state.cases = [];
       return jsonResponse(200, { message: "Test case deleted" });
     }
+    if (url === "/api/test_cases/TC-LOGIN-1" && method === "GET") {
+      return jsonResponse(200, state.cases[0] ?? CASE);
+    }
     if (url === "/api/test_cases/TC-LOGIN-1/duplicate" && method === "POST") {
       const options = (body ?? {}) as { newId?: string; newTitle?: string };
       const source = state.cases[0] ?? CASE;
@@ -189,6 +214,12 @@ function mockCaseApi(initial: TestCase[] = [CASE]) {
         message: "Test case duplicated",
         id: copy.testCaseId,
       });
+    }
+    if (url === HISTORY && method === "GET") {
+      return jsonResponse(200, [HISTORY_ENTRY]);
+    }
+    if (url === `${HISTORY}/1` && method === "GET") {
+      return jsonResponse(200, SNAPSHOT);
     }
     if (url === CASE_ATTACHMENTS && method === "POST") {
       const attachment = uploadOf(formData);
@@ -329,42 +360,49 @@ afterEach(() => {
 });
 
 describe("CaseDetail", () => {
-  it("renders the case document resolved through its project", async () => {
-    const requests = mockApi(({ url, method }) => {
-      if (url === "/api/projects/checkout" && method === "GET") {
-        return jsonResponse(200, PROJECT);
-      }
-      throw new Error(`Unexpected request: ${method} ${url}`);
-    });
-
-    const { baseElement } = renderDetail({
+  it("renders the header and Details tab from the project document", async () => {
+    const { requests } = mockCaseApi();
+    const { baseElement } = await openDetail({
       caseId: "TC-LOGIN-1",
       projectId: "checkout",
     });
 
-    await screen.findByRole("heading", {
-      name: "Sign in with a registered account",
-    });
-
-    expect(screen.getByText("Case ID: TC-LOGIN-1")).toBeInTheDocument();
-    expect(screen.getByText("A registered shopper signs in.")).toBeInTheDocument();
-    expect(screen.getByText("Critical")).toBeInTheDocument();
-    expect(screen.getByText("Major")).toBeInTheDocument();
-    expect(screen.getByText("smoke")).toBeInTheDocument();
-    expect(screen.getByText("Open the sign-in page")).toBeInTheDocument();
-    expect(screen.getByText("→ The form is shown")).toBeInTheDocument();
-    expect(screen.getByText("The account page loads")).toBeInTheDocument();
-    expect(screen.getByText("login-notes.txt")).toBeInTheDocument();
-    expect(screen.getByText("1234 bytes · text/plain")).toBeInTheDocument();
+    // Header: id, the parent the project document places it under, and the
+    // title as an editable heading.
+    expect(screen.getByText("TC-LOGIN-1")).toBeInTheDocument();
+    expect(screen.getByText("Smoke")).toBeInTheDocument();
     expect(
-      screen.getByLabelText("Upload attachment to this case"),
+      screen.getByRole("heading", {
+        name: "Sign in with a registered account",
+      }),
     ).toBeInTheDocument();
 
-    // A non-image is listed and offered as a download: nothing is fetched until
-    // the operator asks for it.
-    expect(screen.getByRole("button", { name: "Download login-notes.txt" }))
-      .toBeInTheDocument();
+    // The four panels are tabs, and the whole document is reachable from them.
+    expect(
+      screen.getAllByRole("tab").map((tab) => tab.textContent),
+    ).toEqual(["Details", "Steps", "Attachments", "History"]);
 
+    openTab("Details");
+    expect(
+      screen.getByRole("combobox", { name: /Priority/ }),
+    ).toHaveValue("Critical");
+    expect(
+      screen.getByRole("combobox", { name: /Severity/ }),
+    ).toHaveValue("Major");
+    expect(screen.getByLabelText(/Description/)).toHaveValue(
+      "A registered shopper signs in.",
+    );
+    expect(screen.getByLabelText(/Precondition/)).toHaveValue(
+      "The shopper has an account.",
+    );
+    expect(screen.getByLabelText(/Tags/)).toHaveValue("smoke, auth");
+    expect(screen.getByText("smoke")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Expected Result/)).toHaveValue(
+      "The account page loads",
+    );
+
+    // One read of the project resolves the case; nothing else is fetched
+    // until an interaction asks for it.
     expect(requests.map((request) => request.url)).toEqual([
       "/api/projects/checkout",
     ]);
@@ -410,7 +448,7 @@ describe("CaseDetail", () => {
     );
   });
 
-  it("shows a loading status while the request is in flight", async () => {
+  it("shows a loading state while the request is in flight", async () => {
     mockApi(() => new Promise<Response>(() => {}));
 
     renderDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
@@ -434,32 +472,28 @@ describe("CaseDetail", () => {
     expect(alert).toHaveTextContent("insufficient role");
   });
 
-  it("sends only the changed fields when editing a case", async () => {
+  it("saves an edited title from the header", async () => {
     const { requests } = mockCaseApi();
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
-    const form = await screen.findByRole("form", { name: "Save changes form" });
-    fireEvent.change(within(form).getByLabelText("Title"), {
-      target: { value: "Sign in with a confirmed account" },
+    const heading = screen.getByRole("heading", {
+      name: "Sign in with a registered account",
     });
-    fireEvent.submit(form);
+    heading.textContent = "Sign in with a confirmed account";
+    fireEvent.blur(heading);
 
     await waitFor(() => {
-      expect(screen.queryByRole("form")).not.toBeInTheDocument();
+      expect(
+        requests.filter((request) => request.method === "PUT"),
+      ).toHaveLength(1);
     });
-
-    const puts = requests.filter((request) => request.method === "PUT");
-    expect(puts).toHaveLength(1);
-    expect(puts[0]?.url).toBe("/api/test_cases/TC-LOGIN-1");
-    expect(puts[0]?.body).toEqual({
-      title: "Sign in with a confirmed account",
-    });
+    const [put] = requests.filter((request) => request.method === "PUT");
+    expect(put?.url).toBe("/api/test_cases/TC-LOGIN-1");
+    expect(put?.body).toEqual({ title: "Sign in with a confirmed account" });
     expect(screen.getByTestId("announcement")).toHaveTextContent(
       "Test case updated",
     );
-
     expect(
       await screen.findByRole("heading", {
         name: "Sign in with a confirmed account",
@@ -467,18 +501,65 @@ describe("CaseDetail", () => {
     ).toBeInTheDocument();
   });
 
-  it("closes the edit form without a request when nothing changed", async () => {
+  it("sends only the changed field when a Details field is edited", async () => {
     const { requests } = mockCaseApi();
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    openTab("Details");
 
-    const form = await screen.findByRole("form", { name: "Save changes form" });
-    fireEvent.submit(form);
+    const description = screen.getByLabelText(/Description/);
+    fireEvent.change(description, {
+      target: { value: "A signed-out shopper signs in." },
+    });
+    fireEvent.blur(description);
 
     await waitFor(() => {
-      expect(screen.queryByRole("form")).not.toBeInTheDocument();
+      expect(
+        requests.filter((request) => request.method === "PUT"),
+      ).toHaveLength(1);
     });
+    const [put] = requests.filter((request) => request.method === "PUT");
+    // A field resent unchanged would still spend a revision on the case.
+    expect(put?.body).toEqual({ description: "A signed-out shopper signs in." });
+    expect(
+      await screen.findByLabelText(/Description/),
+    ).toHaveValue("A signed-out shopper signs in.");
+  });
+
+  it("sends the parsed tag list when the tags field loses focus changed", async () => {
+    const { requests } = mockCaseApi();
+
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Details");
+
+    const tags = screen.getByLabelText(/Tags/);
+    fireEvent.change(tags, { target: { value: "smoke, auth, regression" } });
+    fireEvent.blur(tags);
+
+    await waitFor(() => {
+      expect(
+        requests.filter((request) => request.method === "PUT"),
+      ).toHaveLength(1);
+    });
+    const [put] = requests.filter((request) => request.method === "PUT");
+    expect(put?.body).toEqual({ tags: ["smoke", "auth", "regression"] });
+  });
+
+  it("sends nothing when a Details field loses focus unchanged", async () => {
+    const { requests } = mockCaseApi();
+
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Details");
+
+    const description = screen.getByLabelText(/Description/);
+    fireEvent.blur(description);
+
+    const heading = screen.getByRole("heading", {
+      name: "Sign in with a registered account",
+    });
+    fireEvent.blur(heading);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(
       requests.filter((request) => request.method !== "GET"),
     ).toHaveLength(0);
@@ -604,6 +685,7 @@ describe("CaseDetail", () => {
       caseId: "TC-LOGIN-1",
       projectId: "checkout",
     });
+    openTab("Steps");
     fireEvent.click(screen.getByRole("button", { name: "Add step" }));
 
     const form = await screen.findByRole("form", { name: "Add step form" });
@@ -653,6 +735,7 @@ describe("CaseDetail", () => {
     const { requests } = mockCaseApi();
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Steps");
     fireEvent.click(screen.getByRole("button", { name: "Edit step 1" }));
 
     const form = await screen.findByRole("form", { name: "Edit step form" });
@@ -694,6 +777,7 @@ describe("CaseDetail", () => {
     ]);
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Steps");
     expect(
       screen.getByRole("button", { name: "Move step 1 up" }),
     ).toBeDisabled();
@@ -736,6 +820,7 @@ describe("CaseDetail", () => {
     ]);
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Steps");
     fireEvent.click(screen.getByRole("button", { name: "Delete step 2" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Delete step" });
@@ -771,10 +856,32 @@ describe("CaseDetail", () => {
     });
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Steps");
 
     expect(screen.getByText("Steps (0)")).toBeInTheDocument();
     expect(screen.getByText("No steps recorded.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add step" })).toBeEnabled();
+  });
+
+  it("lists a stored attachment with its size and a download control", async () => {
+    const { requests } = mockCaseApi();
+
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Attachments");
+
+    expect(screen.getByText("login-notes.txt")).toBeInTheDocument();
+    expect(screen.getByText("1234 bytes · text/plain")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Download login-notes.txt" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Upload attachment to this case"),
+    ).toBeInTheDocument();
+    // A non-image is listed and offered as a download: nothing is fetched
+    // until the operator asks for it.
+    expect(requests.map((request) => request.url)).toEqual([
+      "/api/projects/checkout",
+    ]);
   });
 
   it("uploads a case attachment as the part the case route expects", async () => {
@@ -784,6 +891,7 @@ describe("CaseDetail", () => {
       caseId: "TC-LOGIN-1",
       projectId: "checkout",
     });
+    openTab("Attachments");
     const file = new File(["evidence"], "evidence.txt", { type: "text/plain" });
     fireEvent.change(screen.getByLabelText("Upload attachment to this case"), {
       target: { files: [file] },
@@ -824,6 +932,7 @@ describe("CaseDetail", () => {
       caseId: "TC-LOGIN-1",
       projectId: "checkout",
     });
+    openTab("Attachments");
 
     const image = await waitFor(() => {
       const preview = container.querySelector("img.attachment__preview");
@@ -851,6 +960,7 @@ describe("CaseDetail", () => {
     const { requests } = mockCaseApi([{ ...CASE, attachments: [manual] }]);
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Attachments");
     fireEvent.click(screen.getByRole("button", { name: "Download manual.pdf" }));
 
     await waitFor(() => {
@@ -876,6 +986,7 @@ describe("CaseDetail", () => {
     mockCaseApi([{ ...CASE, attachments: [ATTACHMENT] }]);
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Attachments");
     fireEvent.click(
       screen.getByRole("button", { name: "Download login-notes.txt" }),
     );
@@ -902,6 +1013,7 @@ describe("CaseDetail", () => {
     const { requests } = mockCaseApi();
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Attachments");
     fireEvent.click(
       screen.getByRole("button", {
         name: "Delete login-notes.txt from this case",
@@ -945,6 +1057,7 @@ describe("CaseDetail", () => {
     });
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Attachments");
     const file = new File(["evidence"], "evidence.txt", { type: "text/plain" });
     fireEvent.change(screen.getByLabelText("Upload attachment to this case"), {
       target: { files: [file] },
@@ -966,6 +1079,7 @@ describe("CaseDetail", () => {
     const { requests } = mockCaseApi();
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Steps");
     const stepSection = screen
       .getByLabelText("Upload attachment to step 1")
       .closest(".attachment-section") as HTMLElement;
@@ -1017,6 +1131,7 @@ describe("CaseDetail", () => {
     ]);
 
     await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Steps");
     expect(screen.getByText("step-notes.pdf")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit step 1" }));
@@ -1042,5 +1157,64 @@ describe("CaseDetail", () => {
         },
       ],
     });
+  });
+
+  it("lists recorded revisions and opens a read-only snapshot", async () => {
+    mockCaseApi();
+
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("History");
+
+    const row = await screen.findByText("v1");
+    expect(row).toBeInTheDocument();
+    // A snapshot's own stamp is displayed formatted, not as the raw ISO string.
+    expect(
+      screen.getByRole("button", { name: "View" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "View" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Revision v1 — Sign in with an account",
+    });
+    expect(dialog).toHaveTextContent("A registered shopper signs in.");
+    expect(dialog).toHaveTextContent("Expected: The account page loads");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("says a case with no qualifying updates has no revisions", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, PROJECT);
+      }
+      if (url === HISTORY && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("History");
+
+    expect(
+      await screen.findByText(
+        /No revisions yet — they arrive with the first qualifying update/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("moves tab focus with the arrow keys", async () => {
+    mockCaseApi();
+
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+
+    const details = screen.getByRole("tab", { name: "Details" });
+    details.focus();
+    fireEvent.keyDown(details, { key: "ArrowRight" });
+
+    const steps = screen.getByRole("tab", { name: "Steps" });
+    expect(steps).toHaveFocus();
+    expect(steps).toHaveAttribute("aria-selected", "true");
+    expect(details).toHaveAttribute("tabindex", "-1");
   });
 });

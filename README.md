@@ -19,6 +19,27 @@ Browser ──► GUI container (nginx, static assets)
 
 Every read and write goes through the documented API. The GUI never reads the storage volume, never talks to a database, and holds no privileged credentials.
 
+## Modules
+
+The shell lays out as a top bar (brand, project switcher, global search, account), an icon nav rail, and three panes — suite tree on the left, the active module's list in the centre, the selected entity's detail on the right.
+
+| Module | Centre pane | Detail |
+| --- | --- | --- |
+| Test cases | `src/features/cases/CaseList.tsx` — table scoped by the tree node, with search, bulk tag/status operations, JSON export and case creation | `CaseDetail.tsx` — inline-editable header plus Details / Steps / Attachments / History tabs |
+| Test runs | `src/features/runs/RunList.tsx` — status-summary badges with configuration and tag filters | `RunDetail.tsx` — Cases tab with inline status recording and the result dialog, and an Import tab for JUnit/JSON |
+| Milestones | `src/features/milestones/MilestoneList.tsx` — five-segment progress bars | `MilestoneDetail.tsx` — edit, duplicate, delete, linked suites/runs |
+| Configurations | `src/features/configurations/ConfigurationList.tsx` | `ConfigurationDetail.tsx` |
+| Reports | `src/features/reports/ReportsView.tsx` — coverage and summary panels with scope filters | — |
+
+Every list and panel renders the same three non-content states from
+`src/components/StateViews.tsx`: `LoadingSkeleton` (a shimmer that respects
+`prefers-reduced-motion`), `EmptyState` with its create action where one fits,
+and `ErrorState` carrying the API's error code with a retry.
+
+Where the API addresses an entity by its listing key rather than a document id
+— runs, milestones and configurations — every control that selects or labels
+one shows the key, because a rename never moves it.
+
 ## Accessibility
 
 The GUI targets **WCAG 2.1 Level AA**. Conformance is enforced in CI: `src/App.test.tsx` runs `axe-core` restricted to the `wcag2a`, `wcag2aa`, `wcag21a` and `wcag21aa` rule tags, and the build fails on any violation.

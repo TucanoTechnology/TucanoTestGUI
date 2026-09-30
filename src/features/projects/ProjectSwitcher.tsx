@@ -55,7 +55,7 @@ export function ProjectSwitcher() {
         <option value="">Select a project…</option>
         {projects.map((project) => (
           <option key={project.projectId} value={project.projectId}>
-            {project.name}
+            {project.name} ({project.projectId})
           </option>
         ))}
       </select>

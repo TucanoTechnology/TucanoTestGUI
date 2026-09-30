@@ -231,7 +231,10 @@ export function MilestoneForm({
                         setRunIds((ids) => toggleId(ids, run.id))
                       }
                     />
-                    <span className="option__name">{run.name}</span>
+                    <span className="option__name">
+                      {run.name}
+                      {run.name !== run.id && ` (${run.id})`}
+                    </span>
                   </label>
                 </li>
               ))}

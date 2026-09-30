@@ -1,5 +1,13 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
+import { useId } from "react";
 import type {
+  CaseHistoryEntry,
   Project,
   TestCase,
   TestCaseUpdateRequest,
@@ -11,77 +19,51 @@ import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
-import { CaseForm, type CaseFormValues } from "./CaseForm.js";
+import { formatTimestamp } from "../../app/format.js";
+import { parseTags } from "../../app/tags.js";
+import {
+  CASE_PRIORITIES,
+  CASE_SEVERITIES,
+  type CasePriority,
+  type CaseSeverity,
+} from "./CaseForm.js";
 import { StepsEditor } from "./StepsEditor.js";
 import { AttachmentSection } from "./AttachmentSection.js";
+import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
-type Mode = "view" | "edit" | "duplicate" | "delete";
+const TABS = ["Details", "Steps", "Attachments", "History"] as const;
+type TabName = (typeof TABS)[number];
+
+/** Where the case lives, so the header can name its parent. */
+interface CaseLocation {
+  testCase: TestCase;
+  parentPath: string;
+}
 
 /**
  * A case identifier is unique inside its parent, not deployment-wide, so
  * `GET /test_cases/{id}` answers `409` when several parents hold the same case
  * (the seeded `TC-LOGIN-1` sits in two projects). A project document embeds
  * every case its suites carry plus the ones it owns itself, so it resolves the
- * case without the ambiguity.
+ * case without the ambiguity — and names the parent it was found under.
  */
 function findCaseInProject(
   project: Project,
   caseId: string,
-): TestCase | undefined {
+): CaseLocation | undefined {
   const direct = (project.testCases ?? []).find(
     (testCase) => testCase.testCaseId === caseId,
   );
-  if (direct) return direct;
+  if (direct) return { testCase: direct, parentPath: "project root" };
 
   for (const suite of project.testSuites ?? []) {
     const inSuite = (suite.testCases ?? []).find(
       (testCase) => testCase.testCaseId === caseId,
     );
-    if (inSuite) return inSuite;
+    if (inSuite) return { testCase: inSuite, parentPath: suite.name };
   }
 
   return undefined;
-}
-
-/**
- * Only the fields the form changed travel: the API replaces every field a
- * request carries, so a value resent unchanged would still spend a revision
- * snapshot on the case. An unchanged priority or severity is left out rather
- * than sent empty, which the field's domain has no room for.
- */
-function buildUpdateRequest(
-  testCase: TestCase,
-  values: CaseFormValues,
-): TestCaseUpdateRequest {
-  const requestBody: TestCaseUpdateRequest = {};
-  const currentTags = testCase.tags ?? [];
-
-  if (values.title !== testCase.title) {
-    requestBody.title = values.title;
-  }
-  if (values.description !== (testCase.description ?? "")) {
-    requestBody.description = values.description;
-  }
-  if (values.preconditions !== (testCase.preconditions ?? "")) {
-    requestBody.preconditions = values.preconditions;
-  }
-  if (values.expectedResult !== (testCase.expectedResult ?? "")) {
-    requestBody.expectedResult = values.expectedResult;
-  }
-  if (values.priority && values.priority !== testCase.priority) {
-    requestBody.priority = values.priority;
-  }
-  if (values.severity && values.severity !== testCase.severity) {
-    requestBody.severity = values.severity;
-  }
-  if (
-    values.tags.length !== currentTags.length ||
-    values.tags.some((tag, index) => tag !== currentTags[index])
-  ) {
-    requestBody.tags = values.tags;
-  }
-
-  return requestBody;
 }
 
 export function CaseDetail({
@@ -96,21 +78,23 @@ export function CaseDetail({
   const fieldId = useId();
   const [snapshot, setSnapshot] = useState<{
     key: string;
-    testCase: TestCase | null;
+    location: CaseLocation | null;
   } | null>(null);
   const [error, setError] = useState<ApiErrorInfo | null>(null);
-  const [mode, setMode] = useState<Mode>("view");
+  const [mode, setMode] = useState<"view" | "duplicate" | "delete">("view");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiErrorInfo | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [newId, setNewId] = useState("");
   const [newTitle, setNewTitle] = useState("");
+  const [activeTab, setActiveTab] = useState<TabName>("Details");
 
   // The loaded case belongs to the target it was read for: a selection change
-  // shows the spinner rather than the previous case, while a re-fetch after a
+  // shows the skeleton rather than the previous case, while a re-fetch after a
   // mutation leaves the case on screen until the fresh one lands.
   const target = `${projectId ?? ""}\u0000${caseId}`;
-  const testCase = snapshot?.key === target ? snapshot.testCase : null;
+  const location = snapshot?.key === target ? snapshot.location : null;
+  const testCase = location?.testCase ?? null;
   const loading = snapshot?.key !== target;
 
   useEffect(() => {
@@ -121,13 +105,18 @@ export function CaseDetail({
       ? apiFetch(() => client.projects.getProject({ id: projectId })).then(
           (project) => findCaseInProject(project, caseId),
         )
-      : apiFetch(() => client.testCases.getTestCase({ id: caseId }));
+      : apiFetch(() => client.testCases.getTestCase({ id: caseId })).then(
+          (resolved) =>
+            resolved
+              ? { testCase: resolved, parentPath: "—" }
+              : undefined,
+        );
 
     request
-      .then((data) => {
+      .then((found) => {
         if (cancelled) return;
-        setSnapshot({ key: target, testCase: data ?? null });
-        if (!data) {
+        setSnapshot({ key: target, location: found ?? null });
+        if (!found) {
           setError({
             code: null,
             message: `Test case ${caseId} is not part of project ${projectId}`,
@@ -136,7 +125,7 @@ export function CaseDetail({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setSnapshot({ key: target, testCase: null });
+        setSnapshot({ key: target, location: null });
         setError(readApiError(err, "Failed to load test case"));
       });
 
@@ -145,45 +134,42 @@ export function CaseDetail({
     };
   }, [client, caseId, projectId, target, reloadToken]);
 
-  const startAction = (next: Mode) => {
-    setActionError(null);
-    setMode(next);
-  };
-
-  const cancelAction = () => {
-    setActionError(null);
-    setMode("view");
-  };
-
-  const updateCase = async (values: CaseFormValues) => {
-    if (!testCase) return;
-    const requestBody = buildUpdateRequest(testCase, values);
-    if (Object.keys(requestBody).length === 0) {
-      setMode("view");
-      return;
-    }
-
-    setBusy(true);
-    setActionError(null);
-    try {
-      const updated = await apiFetch(() =>
-        client.testCases.updateTestCase({ id: caseId, requestBody }),
-      );
-      setMode("view");
-      setReloadToken((token) => token + 1);
-      refreshProjects();
-      announce(updated.message);
-    } catch (err: unknown) {
-      setActionError(readApiError(err, "Failed to update test case"));
-    } finally {
-      setBusy(false);
-    }
-  };
+  useEffect(() => {
+    setActiveTab("Details");
+  }, [caseId, projectId]);
 
   /**
-   * An update replaces the stored steps wholesale, so the editor hands over the
-   * complete array and the case is read back to show what the API now holds.
+   * Only the changed field travels: the API replaces every field a request
+   * carries, so a value resent unchanged would still spend a revision
+   * snapshot on the case.
    */
+  const saveField = useCallback(
+    async (field: TestCaseUpdateRequest) => {
+      if (Object.keys(field).length === 0) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        const updated = await apiFetch(() =>
+          client.testCases.updateTestCase({ id: caseId, requestBody: field }),
+        );
+        setReloadToken((token) => token + 1);
+        refreshProjects();
+        announce(updated.message);
+      } catch (err: unknown) {
+        setActionError(readApiError(err, "Failed to save changes"));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [announce, caseId, client, refreshProjects],
+  );
+
+  const saveTitle = (event: { currentTarget: HTMLElement }) => {
+    const next = (event.currentTarget.textContent ?? "").trim();
+    if (!testCase || next.length === 0 || next === testCase.title) return;
+    void saveField({ title: next });
+  };
+
   const saveSteps = async (steps: TestStep[]): Promise<boolean> => {
     setBusy(true);
     setActionError(null);
@@ -206,9 +192,7 @@ export function CaseDetail({
    * Every attachment mutation re-reads the case: an upload is stored under a
    * name only the API knows, and a delete has to drop its row. It shares `busy`
    * with the step actions because a steps `PUT` sends the whole array — one
-   * built from a document read before an upload would drop that file. The
-   * error travels back to the section that started the action, which renders
-   * it next to the control the operator used.
+   * built from a document read before an upload would drop that file.
    */
   const mutateAttachments = async (
     request: () => Promise<{ message: string }>,
@@ -237,10 +221,6 @@ export function CaseDetail({
       client.testCases.deleteTestCaseAttachment({ id: caseId, filename }),
     );
 
-  /**
-   * Step attachments have no download route, so their section is rendered
-   * without one and offers neither a preview nor a download.
-   */
   const uploadStepAttachment = (stepIndex: number, file: File) =>
     mutateAttachments(() =>
       client.testCases.uploadStepAttachment({
@@ -306,128 +286,226 @@ export function CaseDetail({
     }
   };
 
+  const onTabKeyDown = (event: KeyboardEvent, index: number) => {
+    let next: number | null = null;
+    if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
+    if (event.key === "ArrowLeft") next = (index - 1 + TABS.length) % TABS.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = TABS.length - 1;
+    if (next !== null) {
+      event.preventDefault();
+      setActiveTab(TABS[next]!);
+      document.getElementById(`case-detail-tab-${TABS[next]}`)?.focus();
+    }
+  };
+
   if (loading) {
-    return (
-      <div className="loading" role="status">
-        <div className="loading__spinner" />
-        <span className="sr-only">Loading test case…</span>
-      </div>
-    );
+    return <LoadingSkeleton rows={4} columns={1} />;
   }
 
   if (error) {
-    return <ApiErrorNotice error={error} />;
+    return (
+      <ErrorState
+        code={error.code}
+        message={error.message}
+        onRetry={() => setReloadToken((token) => token + 1)}
+      />
+    );
   }
 
-  if (!testCase) return null;
+  if (!testCase || !location) return null;
+
+  const tagValue = (testCase.tags ?? []).join(", ");
 
   return (
-    <div className="detail-panel">
-      <div className="detail-panel__header">
-        <h2 className="detail-panel__title">{testCase.title}</h2>
-        <p className="detail-panel__subtitle">
-          Case ID: {testCase.testCaseId}
-        </p>
-      </div>
-
-      <div className="detail-actions">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => startAction("edit")}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => startAction("duplicate")}
-        >
-          Duplicate
-        </button>
-        <button
-          type="button"
-          className="btn btn-danger"
-          onClick={() => startAction("delete")}
-        >
-          Delete
-        </button>
-      </div>
-
-      {mode === "edit" ? (
-        <CaseForm
-          submitLabel="Save changes"
-          caseId={testCase.testCaseId}
-          initialValues={{
-            title: testCase.title,
-            expectedResult: testCase.expectedResult ?? "",
-            description: testCase.description ?? "",
-            preconditions: testCase.preconditions ?? "",
-            priority: testCase.priority ?? "",
-            severity: testCase.severity ?? "",
-            tags: testCase.tags ?? [],
+    <div className="case-detail">
+      <div className="case-detail__header">
+        <div className="case-detail__id-row">
+          <span className="case-detail__id">{testCase.testCaseId}</span>
+          <span className="case-detail__parent">{location.parentPath}</span>
+        </div>
+        <h2
+          className="case-detail__title"
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={saveTitle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
           }}
-          busy={busy}
-          error={actionError}
-          onSubmit={updateCase}
-          onCancel={cancelAction}
-        />
-      ) : (
-        <>
-          {testCase.description && (
-            <div className="detail-field">
-              <div className="detail-field__label">Description</div>
-              <div className="detail-field__value">{testCase.description}</div>
-            </div>
-          )}
+        >
+          {testCase.title}
+        </h2>
+        <div className="detail-actions">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              setActionError(null);
+              setMode("duplicate");
+            }}
+          >
+            Duplicate
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => {
+              setActionError(null);
+              setMode("delete");
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
 
-          {testCase.preconditions && (
-            <div className="detail-field">
-              <div className="detail-field__label">Preconditions</div>
-              <div className="detail-field__value">
-                {testCase.preconditions}
-              </div>
-            </div>
-          )}
+      {actionError && (
+        <div className="case-detail__error">
+          <ApiErrorNotice error={actionError} />
+        </div>
+      )}
 
-          {testCase.priority && (
-            <div className="detail-field">
-              <div className="detail-field__label">Priority</div>
-              <span
-                className={`badge ${
-                  testCase.priority === "High" ||
-                  testCase.priority === "Critical"
-                    ? "badge-fail"
-                    : testCase.priority === "Medium"
-                      ? "badge-priority-medium"
-                      : "badge-priority-low"
-                }`}
+      <div className="case-detail__tabs" role="tablist" aria-label="Test case sections">
+        {TABS.map((tab, index) => (
+          <button
+            key={tab}
+            id={`case-detail-tab-${tab}`}
+            role="tab"
+            type="button"
+            tabIndex={activeTab === tab ? 0 : -1}
+            aria-selected={activeTab === tab}
+            aria-controls={`case-detail-panel-${tab}`}
+            className={`tab ${activeTab === tab ? "tab--active" : ""}`}
+            onClick={() => setActiveTab(tab)}
+            onKeyDown={(event) => onTabKeyDown(event, index)}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      <div
+        className="case-detail__content"
+        role="tabpanel"
+        id={`case-detail-panel-${activeTab}`}
+        aria-labelledby={`case-detail-tab-${activeTab}`}
+        tabIndex={0}
+      >
+        {activeTab === "Details" && (
+          <div className="case-detail__grid">
+            <label className="case-detail__field">
+              Priority
+              <select
+                value={testCase.priority ?? ""}
+                disabled={busy}
+                onChange={(event) =>
+                  void saveField({
+                    priority:
+                      (event.target.value as CasePriority) || undefined,
+                  })
+                }
               >
-                {testCase.priority}
-              </span>
-            </div>
-          )}
-
-          {testCase.severity && (
-            <div className="detail-field">
-              <div className="detail-field__label">Severity</div>
-              <div className="detail-field__value">{testCase.severity}</div>
-            </div>
-          )}
-
-          {testCase.tags && testCase.tags.length > 0 && (
-            <div className="detail-field">
-              <div className="detail-field__label">Tags</div>
-              <div className="tag-list">
-                {testCase.tags.map((tag) => (
+                <option value="">Unset</option>
+                {CASE_PRIORITIES.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {priority}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="case-detail__field">
+              Severity
+              <select
+                value={testCase.severity ?? ""}
+                disabled={busy}
+                onChange={(event) =>
+                  void saveField({
+                    severity:
+                      (event.target.value as CaseSeverity) || undefined,
+                  })
+                }
+              >
+                <option value="">Unset</option>
+                {CASE_SEVERITIES.map((severity) => (
+                  <option key={severity} value={severity}>
+                    {severity}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="case-detail__field case-detail__field--wide">
+              Tags (comma-separated)
+              <input
+                type="text"
+                defaultValue={tagValue}
+                disabled={busy}
+                key={`tags-${caseId}-${tagValue}`}
+                onBlur={(event) => {
+                  const tags = parseTags(event.target.value);
+                  const current = testCase.tags ?? [];
+                  const changed =
+                    tags.length !== current.length ||
+                    tags.some((tag, index) => tag !== current[index]);
+                  if (changed) void saveField({ tags });
+                }}
+              />
+              <span className="case-detail__chips">
+                {(testCase.tags ?? []).map((tag) => (
                   <span key={tag} className="tag">
                     {tag}
                   </span>
                 ))}
-              </div>
-            </div>
-          )}
+              </span>
+            </label>
+            <label className="case-detail__field case-detail__field--wide">
+              Precondition
+              <textarea
+                defaultValue={testCase.preconditions ?? ""}
+                disabled={busy}
+                key={`pre-${caseId}-${testCase.preconditions ?? ""}`}
+                onBlur={(event) => {
+                  const next = event.target.value;
+                  if (next !== (testCase.preconditions ?? "")) {
+                    void saveField({ preconditions: next });
+                  }
+                }}
+              />
+            </label>
+            <label className="case-detail__field case-detail__field--wide">
+              Description
+              <textarea
+                defaultValue={testCase.description ?? ""}
+                disabled={busy}
+                key={`desc-${caseId}-${testCase.description ?? ""}`}
+                onBlur={(event) => {
+                  const next = event.target.value;
+                  if (next !== (testCase.description ?? "")) {
+                    void saveField({ description: next });
+                  }
+                }}
+              />
+            </label>
+            <label className="case-detail__field case-detail__field--wide">
+              Expected Result
+              <textarea
+                defaultValue={testCase.expectedResult ?? ""}
+                disabled={busy}
+                key={`exp-${caseId}-${testCase.expectedResult ?? ""}`}
+                onBlur={(event) => {
+                  const next = event.target.value;
+                  if (next !== (testCase.expectedResult ?? "")) {
+                    void saveField({ expectedResult: next });
+                  }
+                }}
+              />
+            </label>
+          </div>
+        )}
 
+        {activeTab === "Steps" && (
           <StepsEditor
             steps={testCase.steps ?? []}
             busy={busy}
@@ -444,16 +522,9 @@ export function CaseDetail({
               />
             )}
           />
+        )}
 
-          {testCase.expectedResult && (
-            <div className="detail-field">
-              <div className="detail-field__label">Expected Result</div>
-              <div className="detail-field__value">
-                {testCase.expectedResult}
-              </div>
-            </div>
-          )}
-
+        {activeTab === "Attachments" && (
           <AttachmentSection
             scope="this case"
             attachments={testCase.attachments ?? []}
@@ -469,11 +540,13 @@ export function CaseDetail({
               )
             }
           />
-        </>
-      )}
+        )}
+
+        {activeTab === "History" && <HistoryTab caseId={caseId} />}
+      </div>
 
       {mode === "duplicate" && (
-        <Dialog title="Duplicate case" onClose={cancelAction}>
+        <Dialog title="Duplicate case" onClose={() => setMode("view")}>
           <form
             className="case-form"
             onSubmit={duplicateCase}
@@ -515,7 +588,7 @@ export function CaseDetail({
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={cancelAction}
+                onClick={() => setMode("view")}
                 disabled={busy}
               >
                 Cancel
@@ -529,7 +602,7 @@ export function CaseDetail({
       )}
 
       {mode === "delete" && (
-        <Dialog title="Delete case" onClose={cancelAction}>
+        <Dialog title="Delete case" onClose={() => setMode("view")}>
           <p className="dialog__body">
             Delete “{testCase.title}” ({testCase.testCaseId})? Every test suite
             that holds it loses it, and the case is gone from the project. This
@@ -542,7 +615,7 @@ export function CaseDetail({
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={cancelAction}
+              onClick={() => setMode("view")}
               disabled={busy}
             >
               Cancel
@@ -559,5 +632,132 @@ export function CaseDetail({
         </Dialog>
       )}
     </div>
+  );
+}
+
+/**
+ * The case's recorded revisions. Snapshots only advance on qualifying updates
+ * (`title`, `steps`, `preconditions`, `expectedResult`), so the list is the
+ * API's, never a count of saves.
+ */
+function HistoryTab({ caseId }: { caseId: string }) {
+  const { client } = useAuth();
+  const [entries, setEntries] = useState<CaseHistoryEntry[] | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [snapshot, setSnapshot] = useState<TestCase | null>(null);
+  const [snapshotError, setSnapshotError] = useState<ApiErrorInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError(null);
+    setEntries(null);
+
+    apiFetch(() => client.testCases.listTestCaseHistory({ id: caseId }))
+      .then((loaded) => {
+        if (!cancelled) setEntries(loaded);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(readApiError(err, "Failed to load case history"));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, caseId]);
+
+  const viewVersion = async (version: number) => {
+    setSnapshotError(null);
+    try {
+      setSnapshot(await apiFetch(() => client.testCases.getTestCaseVersion({ id: caseId, version })));
+    } catch (err: unknown) {
+      setSnapshotError(readApiError(err, "Failed to read the revision"));
+    }
+  };
+
+  if (error) {
+    return (
+      <ErrorState
+        code={error.code}
+        message={error.message}
+        onRetry={() => {
+          setEntries(null);
+          setError(null);
+        }}
+      />
+    );
+  }
+
+  if (entries === null) {
+    return <LoadingSkeleton rows={3} columns={1} />;
+  }
+
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        icon="🕘"
+        message="No revisions yet — they arrive with the first qualifying update."
+      />
+    );
+  }
+
+  return (
+    <>
+      <ul className="history-list">
+        {entries.map((entry) => (
+          <li key={entry.version} className="history-list__row">
+            <span className="history-list__version">v{entry.version}</span>
+            <span className="history-list__when">
+              {formatTimestamp(entry.lastModified)}
+            </span>
+            <span className="history-list__fields">
+              {entry.changedFields.join(", ")}
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => void viewVersion(entry.version)}
+            >
+              View
+            </button>
+          </li>
+        ))}
+      </ul>
+      {snapshotError && <ApiErrorNotice error={snapshotError} />}
+      {snapshot && (
+        <Dialog
+          title={`Revision v${snapshot.version} — ${snapshot.title}`}
+          onClose={() => setSnapshot(null)}
+        >
+          <div className="history-snapshot">
+            {snapshot.description && (
+              <p className="history-snapshot__description">
+                {snapshot.description}
+              </p>
+            )}
+            <ol className="history-snapshot__steps">
+              {(snapshot.steps ?? []).map((step, index) => (
+                <li key={index}>
+                  {typeof step === "string" ? step : step.action}
+                </li>
+              ))}
+            </ol>
+            <p className="history-snapshot__expected">
+              Expected: {snapshot.expectedResult}
+            </p>
+            <div className="dialog__actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setSnapshot(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+    </>
   );
 }

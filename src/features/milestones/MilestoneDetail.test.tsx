@@ -113,7 +113,7 @@ describe("MilestoneDetail", () => {
     const { baseElement } = renderDetail();
 
     await screen.findByRole("heading", { name: "Checkout GA" });
-    expect(screen.getByText("Milestone ID: m1-checkout")).toBeInTheDocument();
+    expect(screen.getByText("Storage key: m1-checkout")).toBeInTheDocument();
     expect(
       screen.getByText("Everything the checkout flow needs to ship."),
     ).toBeInTheDocument();
@@ -121,10 +121,16 @@ describe("MilestoneDetail", () => {
     expect(screen.getByText("2026-09-01")).toBeInTheDocument();
     expect(screen.getByText("Linked Suites (1)")).toBeInTheDocument();
     expect(screen.getByText("Linked Runs (1)")).toBeInTheDocument();
+    // The five buckets render as a stacked bar with a legend, and the bar
+    // itself carries the counts for assistive technology.
+    const bar = screen.getByRole("img", {
+      name: "Passed: 2, Failed: 1, Blocked: 1, Untested: 1, Retest: 1",
+    });
+    expect(bar).toBeInTheDocument();
+    expect(screen.getByText("33.33% passed")).toBeInTheDocument();
     expect(
-      screen.getByText("6 total — 2 passed, 1 failed, 1 blocked, 1 untested, 1 retest"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("33.33% of the total passed")).toBeInTheDocument();
+      bar.querySelectorAll(".progress-bar__segment").length,
+    ).toBe(5);
 
     // Showing a milestone costs its document and its progress, nothing else:
     // the edit options are only read once the form is asked for.

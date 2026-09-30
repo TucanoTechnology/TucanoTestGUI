@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import type { Milestone, MilestoneProgress } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { Dialog } from "../../app/Dialog.js";
+import { toJsonKey } from "../../app/keys.js";
+import { ProgressBar } from "../../components/ProgressBar.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import {
   MilestoneForm,
@@ -16,7 +18,7 @@ import {
   type MilestoneSelectionOptions,
 } from "./milestoneSelection.js";
 
-type Mode = "view" | "edit" | "delete";
+type Mode = "view" | "edit" | "duplicate" | "delete";
 
 export function MilestoneDetail({
   milestoneId,
@@ -27,6 +29,7 @@ export function MilestoneDetail({
 }) {
   const { client } = useAuth();
   const { setSelection, refreshProjects, announce } = useProjectContext();
+  const fieldId = useId();
   const [milestone, setMilestone] = useState<Milestone | null>(null);
   const [progress, setProgress] = useState<MilestoneProgress | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +43,7 @@ export function MilestoneDetail({
   );
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsError, setOptionsError] = useState<ApiErrorInfo | null>(null);
+  const [newId, setNewId] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -155,6 +159,33 @@ export function MilestoneDetail({
     }
   };
 
+  // The copy keeps the source's links and derives the same progress; the key
+  // it is stored under is what addresses it, so the dialog asks for one.
+  const duplicateMilestone = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmed = newId.trim();
+
+    setBusy(true);
+    setActionError(null);
+    try {
+      const duplicated = await apiFetch(() =>
+        client.milestones.duplicateMilestone({
+          id: milestoneId,
+          requestBody: trimmed.length > 0 ? { newId: toJsonKey(trimmed) } : {},
+        }),
+      );
+      setNewId("");
+      setMode("view");
+      refreshProjects();
+      announce(duplicated.message);
+      setSelection({ type: "milestone", id: duplicated.id, projectId });
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to duplicate milestone"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteMilestone = async () => {
     setBusy(true);
     setActionError(null);
@@ -193,7 +224,7 @@ export function MilestoneDetail({
       <div className="detail-panel__header">
         <h2 className="detail-panel__title">{milestone.name}</h2>
         <p className="detail-panel__subtitle">
-          Milestone ID: {milestone.milestoneId}
+          Storage key: {milestone.milestoneId}
         </p>
       </div>
 
@@ -204,6 +235,13 @@ export function MilestoneDetail({
           onClick={() => startAction("edit")}
         >
           Edit
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => startAction("duplicate")}
+        >
+          Duplicate
         </button>
         <button
           type="button"
@@ -274,15 +312,10 @@ export function MilestoneDetail({
 
           {progress && (
             <div className="detail-field">
-              <div className="detail-field__label">Progress</div>
-              <div className="detail-field__value">
-                {progress.totalCases} total — {progress.passed} passed,{" "}
-                {progress.failed} failed, {progress.blocked} blocked,{" "}
-                {progress.untested} untested, {progress.retest} retest
+              <div className="detail-field__label">
+                Progress ({progress.totalCases} cases)
               </div>
-              <div className="detail-field__value">
-                {progress.passPercentage}% of the total passed
-              </div>
+              <ProgressBar progress={progress} withCounts />
             </div>
           )}
 
@@ -321,8 +354,9 @@ export function MilestoneDetail({
       {mode === "delete" && (
         <Dialog title="Delete milestone" onClose={cancelAction}>
           <p className="dialog__body">
-            Delete “{milestone.name}” ({milestone.milestoneId})? The suites and
-            runs it links stay where they are. This cannot be undone.
+            Delete “{milestone.name}” (stored as {milestone.milestoneId})? The
+            suites and runs it links stay where they are. This cannot be
+            undone.
           </p>
 
           {actionError && <ApiErrorNotice error={actionError} />}
@@ -345,6 +379,49 @@ export function MilestoneDetail({
               {busy ? "Deleting…" : "Delete milestone"}
             </button>
           </div>
+        </Dialog>
+      )}
+
+      {mode === "duplicate" && (
+        <Dialog title="Duplicate milestone" onClose={cancelAction}>
+          <form
+            className="case-form"
+            onSubmit={duplicateMilestone}
+            aria-label="Duplicate milestone form"
+          >
+            {actionError && <ApiErrorNotice error={actionError} />}
+
+            <div className="form-field">
+              <label htmlFor={`${fieldId}-new-id`}>New key (optional)</label>
+              <input
+                id={`${fieldId}-new-id`}
+                type="text"
+                value={newId}
+                onChange={(event) => setNewId(event.target.value)}
+                aria-describedby={`${fieldId}-new-id-hint`}
+              />
+              <p className="form-field__hint" id={`${fieldId}-new-id-hint`}>
+                The copy keeps this milestone&apos;s name, dates, status and
+                linked suites and runs. Leave blank to derive the copy&apos;s
+                key from this one; a new key is one name ending in .json, and
+                the suffix is added for you if you leave it off.
+              </p>
+            </div>
+
+            <div className="dialog__actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={cancelAction}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? "Duplicating…" : "Duplicate milestone"}
+              </button>
+            </div>
+          </form>
         </Dialog>
       )}
     </div>

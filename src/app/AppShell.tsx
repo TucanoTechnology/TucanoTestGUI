@@ -6,12 +6,17 @@ import { ProjectSwitcher } from "../features/projects/ProjectSwitcher.js";
 import { ProjectDetail } from "../features/projects/ProjectDetail.js";
 import { SuiteDetail } from "../features/suites/SuiteDetail.js";
 import { DIRECT_SUITE_ID, SuiteTree } from "../features/suites/SuiteTree.js";
+import { CaseList } from "../features/cases/CaseList.js";
 import { CaseDetail } from "../features/cases/CaseDetail.js";
+import { RunList } from "../features/runs/RunList.js";
 import { RunDetail } from "../features/runs/RunDetail.js";
+import { MilestoneList } from "../features/milestones/MilestoneList.js";
 import { MilestoneDetail } from "../features/milestones/MilestoneDetail.js";
+import { ConfigurationList } from "../features/configurations/ConfigurationList.js";
 import { ConfigurationDetail } from "../features/configurations/ConfigurationDetail.js";
 import { ReportsView } from "../features/reports/ReportsView.js";
-import { EntityList } from "./EntityList.js";
+import { GlobalSearch } from "./GlobalSearch.js";
+import { EmptyState } from "../components/StateViews.js";
 
 const NAV_ITEMS = [
   { id: "cases", label: "Test Cases", icon: "📋", entityType: "case" },
@@ -30,8 +35,13 @@ type ModuleId = (typeof NAV_ITEMS)[number]["id"];
 
 function AppShellContent() {
   const { username, logout } = useAuth();
-  const { selectedProjectId, selection, setSelection, announcement } =
-    useProjectContext();
+  const {
+    selectedProjectId,
+    setSelectedProjectId,
+    selection,
+    setSelection,
+    announcement,
+  } = useProjectContext();
   const [activeModule, setActiveModule] = useState<ModuleId>("cases");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -114,6 +124,91 @@ function AppShellContent() {
     setSidebarOpen(false);
   };
 
+  const renderCenter = () => {
+    if (activeModule === "reports") {
+      return <ReportsView />;
+    }
+
+    if (!selectedProjectId) {
+      return (
+        <EmptyState
+          icon="📁"
+          message={`Select a project to view ${NAV_ITEMS.find((i) => i.id === activeModule)?.label.toLowerCase() ?? ""}`}
+        />
+      );
+    }
+
+    switch (activeModule) {
+      case "cases":
+        return (
+          <CaseList
+            projectId={selectedProjectId}
+            suiteFilter={suiteScope}
+            selectedCaseId={selection?.type === "case" ? selection.id : null}
+            onSelectCase={(caseId) =>
+              setSelection({
+                type: "case",
+                id: caseId,
+                projectId: selectedProjectId,
+              })
+            }
+            onCreateRun={() => {
+              setActiveModule("runs");
+              setSelection(null);
+            }}
+          />
+        );
+      case "runs":
+        return (
+          <RunList
+            projectId={selectedProjectId}
+            selectedRunId={selection?.type === "run" ? selection.id : null}
+            onSelectRun={(runId) =>
+              setSelection({
+                type: "run",
+                id: runId,
+                projectId: selectedProjectId,
+              })
+            }
+          />
+        );
+      case "milestones":
+        return (
+          <MilestoneList
+            projectId={selectedProjectId}
+            selectedMilestoneId={
+              selection?.type === "milestone" ? selection.id : null
+            }
+            onSelectMilestone={(milestoneId) =>
+              setSelection({
+                type: "milestone",
+                id: milestoneId,
+                projectId: selectedProjectId,
+              })
+            }
+          />
+        );
+      case "configurations":
+        return (
+          <ConfigurationList
+            projectId={selectedProjectId}
+            selectedConfigId={
+              selection?.type === "configuration" ? selection.id : null
+            }
+            onSelectConfiguration={(configId) =>
+              setSelection({
+                type: "configuration",
+                id: configId,
+                projectId: selectedProjectId,
+              })
+            }
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div
       className={`app-layout ${sidebarOpen ? "app-layout--sidebar-open" : ""}`}
@@ -130,6 +225,28 @@ function AppShellContent() {
         </button>
         <span className="topbar__brand">Tucano Test</span>
         <ProjectSwitcher />
+        <GlobalSearch
+          onPick={(hit) => {
+            setSelectedProjectId(hit.projectId);
+            if (hit.type === "case") setActiveModule("cases");
+            if (hit.type === "run") setActiveModule("runs");
+            if (hit.type === "milestone") setActiveModule("milestones");
+            if (hit.type === "configuration") setActiveModule("configurations");
+            if (hit.type === "suite") {
+              setActiveModule("cases");
+              setSuiteScope(hit.id);
+            }
+            if (hit.type === "project") {
+              setSuiteScope(null);
+              setSidebarOpen(false);
+            }
+            setSelection({
+              type: hit.type,
+              id: hit.id,
+              projectId: hit.projectId,
+            });
+          }}
+        />
         <div className="topbar__spacer" />
         <div className="topbar__user">
           <span className="topbar__username">{username}</span>
@@ -176,14 +293,7 @@ function AppShellContent() {
         </aside>
 
         <main className="pane-center" aria-label={activeItem.label}>
-          {activeItem.entityType ? (
-            <EntityList
-              entityType={activeItem.entityType}
-              caseScope={suiteScope}
-            />
-          ) : (
-            <ReportsView />
-          )}
+          {renderCenter()}
         </main>
 
         <aside className="pane-right" aria-label="Detail panel">

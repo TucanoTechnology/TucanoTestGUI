@@ -236,22 +236,37 @@ export function ProjectExplorer() {
                 role="treeitem"
                 aria-expanded={isExpanded}
               >
-                <button
-                  className={`tree-node ${isActive ? "tree-node--active" : ""}`}
-                  onClick={() => {
-                    toggleExpand(project.projectId);
-                    selectProject(project.projectId);
-                  }}
-                  aria-current={isActive ? "true" : undefined}
-                >
-                  <span className="tree-node__icon" aria-hidden="true">
-                    {isExpanded ? "▾" : "▸"}
-                  </span>
-                  <span className="tree-node__label">{project.name}</span>
-                  {childCount > 0 && (
+                <div className="tree-node-row">
+                  {/* The disclosure and the selection are separate controls:
+                      opening a project's children should not navigate the
+                      detail pane away from whatever was being read. */}
+                  <button
+                    type="button"
+                    className="tree-node__chevron"
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${project.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleExpand(project.projectId);
+                    }}
+                  >
+                    <span aria-hidden="true">{isExpanded ? "▾" : "▸"}</span>
+                  </button>
+                  <button
+                    className={`tree-node ${isActive ? "tree-node--active" : ""}`}
+                    onClick={() => selectProject(project.projectId)}
+                    aria-current={isActive ? "true" : undefined}
+                    aria-label={`${project.name} (${project.projectId}), ${childCount} items`}
+                  >
+                    <span className="tree-node__label">
+                      <span className="tree-node__name">{project.name}</span>
+                      <span className="tree-node__key">
+                        {project.projectId}
+                      </span>
+                    </span>
                     <span className="tree-node__count">{childCount}</span>
-                  )}
-                </button>
+                  </button>
+                </div>
 
                 {isExpanded && childCount > 0 && (
                   <ul role="group">

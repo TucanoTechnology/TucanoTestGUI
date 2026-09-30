@@ -89,8 +89,8 @@ export function RunForm({
           aria-describedby={`${fieldId}-name-hint`}
         />
         <p className="form-field__hint" id={`${fieldId}-name-hint`}>
-          The name also addresses the run, so it cannot be changed without
-          storing a new one.
+          The name is a label: the run stays addressed by the ID it was stored
+          under, so renaming it moves nothing.
         </p>
       </div>
 
@@ -194,7 +194,10 @@ export function RunForm({
                         )
                       }
                     />
-                    <span className="option__name">{option.testCase.title}</span>
+                    <span className="option__name">
+                      {option.testCase.title}
+                      {` (v${option.testCase.version ?? 1})`}
+                    </span>
                     {option.source && (
                       <span className="option__meta">in {option.source}</span>
                     )}

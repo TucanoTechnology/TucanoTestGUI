@@ -170,7 +170,10 @@ describe("SuiteTree", () => {
 
     renderTree();
     expect(
-      await screen.findByText("No suites in this project"),
+      await screen.findByText("No suites yet"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "+ Create suite" }),
     ).toBeInTheDocument();
   });
 
