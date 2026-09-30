@@ -93,3 +93,20 @@ Accessibility assertions are part of the test suite, not a separate optional ste
 
 - Keep `README.md` current with the architecture, accessibility target, prerequisites and commands.
 - Record any accessibility exception, with justification, in both the pull request and the README.
+
+<!-- shared-rules-table:begin -->
+| Area | Rules |
+| --- | --- |
+| API & data contracts | [`AgentRules/coding/api-and-data-contracts.md`](AgentRules/coding/api-and-data-contracts.md) |
+| Branching & git | [`AgentRules/coding/branching-and-git.md`](AgentRules/coding/branching-and-git.md) |
+| Code review | [`AgentRules/coding/code-review.md`](AgentRules/coding/code-review.md) |
+| Dependencies | [`AgentRules/coding/dependencies.md`](AgentRules/coding/dependencies.md) |
+| Principles | [`AgentRules/generic/principles.md`](AgentRules/generic/principles.md) |
+| Ticket template | [`AgentRules/project-management/ticket-template.md`](AgentRules/project-management/ticket-template.md) |
+| Ticket workflow | [`AgentRules/project-management/workflow.md`](AgentRules/project-management/workflow.md) |
+| Security | [`AgentRules/security/security.md`](AgentRules/security/security.md) |
+| Contract tests | [`AgentRules/test/contract.md`](AgentRules/test/contract.md) |
+| Performance tests | [`AgentRules/test/performance.md`](AgentRules/test/performance.md) |
+| Browser & end-to-end tests | [`AgentRules/test/ui.md`](AgentRules/test/ui.md) |
+| Unit tests | [`AgentRules/test/unit.md`](AgentRules/test/unit.md) |
+<!-- shared-rules-table:end -->
