@@ -113,10 +113,15 @@ export function CaseList({
     // Two reads build the pane: the project document answers the list, and
     // the last-results report answers the column no per-case route can. The
     // report is not allowed to fail the list — a degraded column reads the
-    // same way a failed bulk count does — so it settles independently.
+    // same way a failed bulk count does — so its rejection is converted at
+    // creation: even when the project read fails first, no rejected promise
+    // is left unhandled.
     const project = apiFetch(() => client.projects.getProject({ id: projectId }));
     const results = apiFetch(() =>
       client.reports.getLastResultsReport({ projectId }),
+    ).then(
+      (report) => report,
+      () => null,
     );
 
     project
@@ -124,14 +129,14 @@ export function CaseList({
         if (cancelled) return;
         setRows(buildRows(loaded));
         setProjectName(loaded.name ?? loaded.projectId);
-        try {
-          const report = await results;
-          if (cancelled) return;
+        const report = await results;
+        if (cancelled) return;
+        if (report) {
           setLastResults(
             new Map(report.cases.map((entry) => [entry.testCaseId, entry])),
           );
-        } catch {
-          if (!cancelled) setLastResultsFailed(true);
+        } else {
+          setLastResultsFailed(true);
         }
         setLoading(false);
       })

@@ -2102,7 +2102,7 @@ textarea {
   }
 }
 
-/* Last-results column (TucanoTestAPI#457) */
+/* Last-results column (issue 457 on the API) */
 .case-table__uncovered {
   color: var(--color-text-secondary);
 }
