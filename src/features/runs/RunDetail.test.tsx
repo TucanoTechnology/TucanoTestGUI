@@ -306,6 +306,11 @@ async function openDetail(store: ApiStore) {
   return { view, requests };
 }
 
+/** The detail panel splits into tabs; a section's controls exist once open. */
+function openRunTab(name: "Cases" | "Import") {
+  fireEvent.click(screen.getByRole("tab", { name }));
+}
+
 async function openEdit() {
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
   return screen.findByRole("form", { name: "Save changes form" });
@@ -365,14 +370,24 @@ describe("RunDetail", () => {
     const { view, requests } = await openDetail(store);
 
     expect(screen.getByText("Run ID: nightly.json")).toBeInTheDocument();
-    expect(screen.getByText("1750000000")).toBeInTheDocument();
+    // The stored epoch seconds are shown as a readable date, never raw (#162).
+    expect(
+      screen.getByText(
+        new Date(1750000000 * 1000).toLocaleString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("nightly")).toBeInTheDocument();
     // The run's own copy of the configuration names it, without a second read.
     expect(screen.getByText("Configuration")).toBeInTheDocument();
     expect(screen.getByText("chrome-linux")).toBeInTheDocument();
     expect(screen.getByText("Projects (1)")).toBeInTheDocument();
     expect(screen.getByText("Suites (1)")).toBeInTheDocument();
-    expect(screen.getByText("Test Cases (1)")).toBeInTheDocument();
     expect(screen.getByText("Results (1)")).toBeInTheDocument();
     expect(screen.getByText("passed")).toBeInTheDocument();
 
@@ -669,12 +684,16 @@ describe("RunDetail", () => {
 
     expect(screen.getByText("Results (2)")).toBeInTheDocument();
     // The first case carries its recorded result…
-    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Status for TC-LOGIN-1" }),
+    ).toHaveValue("Failed");
     expect(screen.getByText("lock message missing")).toBeInTheDocument();
     expect(screen.getByText("800 ms")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit result" })).toBeInTheDocument();
     // …and the second is untested, with nothing recorded to edit.
-    expect(screen.getByText("Untested")).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Status for TC-LOGIN-2" }),
+    ).toHaveValue("Untested");
     expect(
       screen.getByRole("button", { name: "Record result" }),
     ).toBeInTheDocument();
@@ -684,6 +703,58 @@ describe("RunDetail", () => {
     expect(requests.map((request) => request.url)).toEqual([
       "/api/test_runs/nightly.json",
     ]);
+  });
+
+  it("records a status inline from the results table, preserving the fields", async () => {
+    const store = resultStore();
+    await openDetail(store);
+
+    // The recorded row exposes a dropdown rather than a badge…
+    const select = screen.getByRole("combobox", {
+      name: "Status for TC-LOGIN-1",
+    });
+    fireEvent.change(select, { target: { value: "Blocked" } });
+
+    await waitFor(() => {
+      expect(store.resultPosts).toEqual([
+        {
+          testCaseId: "TC-LOGIN-1",
+          status: "Blocked",
+          notes: "lock message missing",
+          durationMs: 800,
+          // The stored timestamp travels back, so an inline status change
+          // cannot quietly re-date the result.
+          timestamp: "1789655960",
+        },
+      ]);
+    });
+    // …and the re-read shows the new status where the old one stood.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Status for TC-LOGIN-1" }),
+      ).toHaveValue("Blocked");
+    });
+  });
+
+  it("keeps a status outside the recorded five visible and dialog-only", async () => {
+    mockApi(
+      checkoutApi(
+        emptyStore({
+          ...RUN,
+          results: [
+            { ...RECORDED_RESULT, status: "passed", defectLinks: [], attachments: [] },
+          ],
+        }),
+      ),
+    );
+    renderDetail();
+
+    await screen.findByRole("heading", { name: "Nightly run" });
+    // A hand-stored value is rendered as it stands; no select misrepresents it.
+    expect(screen.getByText("passed")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("combobox", { name: "Status for TC-LOGIN-1" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a result whose case the run no longer holds", async () => {
@@ -749,7 +820,11 @@ describe("RunDetail", () => {
       "Test result recorded in run",
     );
     // The run is read again, so the table reads the recorded result back.
-    await screen.findByText("Passed");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("combobox", { name: "Status for TC-LOGIN-2" }),
+      ).toHaveValue("Passed");
+    });
   });
 
   it("pre-fills the form and resends every field when a result is edited", async () => {
@@ -1014,6 +1089,7 @@ describe("RunDetail", () => {
   it("imports a JSON results file and states what the import wrote", async () => {
     const store = resultStore();
     const { requests } = await openDetail(store);
+    openRunTab("Import");
 
     pickFile(
       "Import JSON results",
@@ -1064,6 +1140,7 @@ describe("RunDetail", () => {
   it("posts a JUnit report to the XML route as the report stands", async () => {
     const store = resultStore();
     await openDetail(store);
+    openRunTab("Import");
 
     const report =
       '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -1096,6 +1173,7 @@ describe("RunDetail", () => {
   it("refuses a picked file that is not JSON without reaching the API", async () => {
     const store = resultStore();
     const { requests } = await openDetail(store);
+    openRunTab("Import");
 
     pickFile(
       "Import JSON results",
@@ -1115,6 +1193,7 @@ describe("RunDetail", () => {
   it("states the API refusal in place of the summary it replaced", async () => {
     const store = resultStore();
     await openDetail(store);
+    openRunTab("Import");
 
     pickFile(
       "Import JSON results",
@@ -1144,6 +1223,7 @@ describe("RunDetail", () => {
   it("has no accessibility violations with an import summary on screen", async () => {
     const store = resultStore();
     const { view } = await openDetail(store);
+    openRunTab("Import");
 
     pickFile(
       "Import JSON results",
@@ -1163,6 +1243,7 @@ describe("RunDetail", () => {
   it("keeps the summary on screen while the run is read again", async () => {
     const store = resultStore();
     const { requests } = await openDetail(store);
+    openRunTab("Import");
     // The read an import triggers is held open, so the panel is inspected at
     // the moment a real API would still be answering it.
     const release = holdRunRead(store);

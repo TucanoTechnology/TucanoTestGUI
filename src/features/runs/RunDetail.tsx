@@ -11,16 +11,19 @@ import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { toJsonKey } from "../../app/keys.js";
+import { formatTimestamp } from "../../app/format.js";
 import { RunForm, type RunFormValues } from "./RunForm.js";
 import { buildRunUpdateRequest } from "./runSelection.js";
 import { ResultForm, type DefectLinkValues } from "./ResultForm.js";
 import { ImportSection } from "./ImportSection.js";
 import { describeImportSummary, type ImportRequest } from "./importResults.js";
 import {
+  RESULT_STATUSES,
   buildResultRequest,
   buildResultRows,
   formatDuration,
   rerecordBlocker,
+  type ResultStatus,
   type ResultSubmission,
 } from "./results.js";
 
@@ -49,6 +52,9 @@ export function RunDetail({
   const [reloadToken, setReloadToken] = useState(0);
   const [newId, setNewId] = useState("");
   const [resultCaseId, setResultCaseId] = useState<string | null>(null);
+  // The detail panel shows either the results table or the import form; the
+  // run's own fields stay above both.
+  const [activeTab, setActiveTab] = useState<"cases" | "import">("cases");
   // The run the document on screen was read with. A reload reads the same run
   // again to pick up what an action changed, and the panel stays on screen
   // while it does, so the state the sections own survives the read. A run that
@@ -250,6 +256,43 @@ export function RunDetail({
     }
   };
 
+  // An inline status change from the results table keeps everything the
+  // stored result holds beyond the status — its comment, duration, defects and
+  // timestamp travel back with the request, because the record route replaces
+  // the whole result.
+  const setRowStatus = async (
+    testCaseId: string,
+    status: ResultStatus,
+  ): Promise<void> => {
+    const row = buildResultRows(run).find(
+      (r) => r.testCaseId === testCaseId,
+    );
+    setBusy(true);
+    setActionError(null);
+    try {
+      const recorded = await apiFetch(() =>
+        client.testRuns.recordTestRunResult({
+          id: runId,
+          requestBody: buildResultRequest(
+            testCaseId,
+            {
+              status,
+              notes: row?.result?.notes ?? "",
+              durationMs: row?.result?.durationMs,
+            },
+            row?.result,
+          ),
+        }),
+      );
+      setReloadToken((token) => token + 1);
+      announce(recorded.message);
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to record test result"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // A link or an unlink changes the result the run records, so the run is read
   // again rather than the table being guessed at locally.
   const linkDefect = async (values: DefectLinkValues): Promise<boolean> => {
@@ -392,128 +435,194 @@ export function RunDetail({
         )
       ) : (
         <>
-          {run.timestamp && (
-            <div className="detail-field">
-              <div className="detail-field__label">Timestamp</div>
-              <div className="detail-field__value">{run.timestamp}</div>
-            </div>
-          )}
-
-          {run.tags && run.tags.length > 0 && (
-            <div className="detail-field">
-              <div className="detail-field__label">Tags</div>
-              <div className="tag-list">
-                {run.tags.map((tag) => (
-                  <span key={tag} className="tag">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="detail-field">
-            <div className="detail-field__label">Configuration</div>
-            <div className="detail-field__value">
-              {configuration ? configuration.name : "None"}
-            </div>
+          <div className="case-detail__tabs" role="tablist" aria-label="Run sections">
+            <button
+              type="button"
+              role="tab"
+              id={`run-tab-cases`}
+              aria-selected={activeTab === "cases"}
+              aria-controls="run-panel-cases"
+              tabIndex={activeTab === "cases" ? 0 : -1}
+              className={`tab ${activeTab === "cases" ? "tab--active" : ""}`}
+              onClick={() => setActiveTab("cases")}
+            >
+              Cases
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id={`run-tab-import`}
+              aria-selected={activeTab === "import"}
+              aria-controls="run-panel-import"
+              tabIndex={activeTab === "import" ? 0 : -1}
+              className={`tab ${activeTab === "import" ? "tab--active" : ""}`}
+              onClick={() => setActiveTab("import")}
+            >
+              Import
+            </button>
           </div>
 
-          {run.projects && run.projects.length > 0 && (
-            <div className="detail-field">
-              <div className="detail-field__label">
-                Projects ({run.projects.length})
+          {activeTab === "cases" && (
+            <div role="tabpanel" id="run-panel-cases" aria-labelledby="run-tab-cases">
+              {run.timestamp && (
+                <div className="detail-field">
+                  <div className="detail-field__label">Timestamp</div>
+                  <div className="detail-field__value">
+                    {formatTimestamp(run.timestamp)}
+                  </div>
+                </div>
+              )}
+
+              {run.tags && run.tags.length > 0 && (
+                <div className="detail-field">
+                  <div className="detail-field__label">Tags</div>
+                  <div className="tag-list">
+                    {run.tags.map((tag) => (
+                      <span key={tag} className="tag">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="detail-field">
+                <div className="detail-field__label">Configuration</div>
+                <div className="detail-field__value">
+                  {configuration ? configuration.name : "None"}
+                </div>
               </div>
-              <ul className="entity-list">
-                {run.projects.map((p) => (
-                  <li key={p.projectId} className="entity-list__item">
-                    <span className="entity-list__name">{p.name}</span>
-                  </li>
-                ))}
-              </ul>
+
+              {run.projects && run.projects.length > 0 && (
+                <div className="detail-field">
+                  <div className="detail-field__label">
+                    Projects ({run.projects.length})
+                  </div>
+                  <ul className="entity-list">
+                    {run.projects.map((p) => (
+                      <li key={p.projectId} className="entity-list__item">
+                        <span className="entity-list__name">{p.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {run.testSuites && run.testSuites.length > 0 && (
+                <div className="detail-field">
+                  <div className="detail-field__label">
+                    Suites ({run.testSuites.length})
+                  </div>
+                  <ul className="entity-list">
+                    {run.testSuites.map((s) => (
+                      <li key={s.suiteId} className="entity-list__item">
+                        <span className="entity-list__name">{s.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {rows.length > 0 && (
+                <div className="detail-field">
+                  <div className="detail-field__label">
+                    Results ({rows.length})
+                  </div>
+                  <table className="data-table">
+                    <caption className="sr-only">
+                      Results by test case. Choose a status to record it for
+                      the case; open a result to edit its comment, duration and
+                      defects.
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Case ID</th>
+                        <th scope="col">Title</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Comment</th>
+                        <th scope="col">Duration</th>
+                        <th scope="col">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => {
+                        // The record route replaces the whole result, so a
+                        // result that holds links or attachments cannot be
+                        // re-recorded from the table without discarding them.
+                        const blocked =
+                          row.result !== undefined &&
+                          rerecordBlocker(row.result) !== null;
+                        return (
+                          <tr key={row.testCaseId}>
+                            <td className="data-table__id">{row.testCaseId}</td>
+                            <td>{row.title ?? "—"}</td>
+                            <td>
+                              {blocked ||
+                              !(RESULT_STATUSES as readonly string[]).includes(
+                                row.status,
+                              ) ? (
+                                // A status outside the recorded five — storage
+                                // a hand-edit reaches — is shown as it stands,
+                                // and only the dialog can change it. A result
+                                // holding defects or attachments is the same:
+                                // a table record would discard them.
+                                <span
+                                  className={`status-badge status-badge--${row.status.toLowerCase()}`}
+                                  title={
+                                    blocked
+                                      ? rerecordBlocker(row.result) ?? undefined
+                                      : undefined
+                                  }
+                                >
+                                  {row.status}
+                                </span>
+                              ) : (
+                                <select
+                                  className="status-select"
+                                  aria-label={`Status for ${row.testCaseId}`}
+                                  value={row.status}
+                                  disabled={busy}
+                                  onChange={(event) => {
+                                    void setRowStatus(
+                                      row.testCaseId,
+                                      event.target.value as ResultStatus,
+                                    );
+                                  }}
+                                >
+                                  {RESULT_STATUSES.map((status) => (
+                                    <option key={status} value={status}>
+                                      {status}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </td>
+                            <td>{row.result?.notes ?? "—"}</td>
+                            <td>{formatDuration(row.result?.durationMs)}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => startResult(row.testCaseId)}
+                              >
+                                {row.result ? "Edit result" : "Record result"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
-          {run.testSuites && run.testSuites.length > 0 && (
-            <div className="detail-field">
-              <div className="detail-field__label">
-                Suites ({run.testSuites.length})
-              </div>
-              <ul className="entity-list">
-                {run.testSuites.map((s) => (
-                  <li key={s.suiteId} className="entity-list__item">
-                    <span className="entity-list__name">{s.name}</span>
-                  </li>
-                ))}
-              </ul>
+          {activeTab === "import" && (
+            <div role="tabpanel" id="run-panel-import" aria-labelledby="run-tab-import">
+              <ImportSection busy={busy} onImport={importResults} />
             </div>
           )}
-
-          {run.testCases && run.testCases.length > 0 && (
-            <div className="detail-field">
-              <div className="detail-field__label">
-                Test Cases ({run.testCases.length})
-              </div>
-              <ul className="entity-list">
-                {run.testCases.map((testCase) => (
-                  <li key={testCase.testCaseId} className="entity-list__item">
-                    <span className="entity-list__name">{testCase.title}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {rows.length > 0 && (
-            <div className="detail-field">
-              <div className="detail-field__label">
-                Results ({rows.length})
-              </div>
-              <table className="data-table">
-                <caption className="sr-only">
-                  Results by test case, with the defects each result links
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Case ID</th>
-                    <th scope="col">Title</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Comment</th>
-                    <th scope="col">Duration</th>
-                    <th scope="col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.testCaseId}>
-                      <td className="data-table__id">{row.testCaseId}</td>
-                      <td>{row.title ?? "—"}</td>
-                      <td>
-                        <span
-                          className={`badge badge-${row.status.toLowerCase()}`}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                      <td>{row.result?.notes ?? "—"}</td>
-                      <td>{formatDuration(row.result?.durationMs)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          onClick={() => startResult(row.testCaseId)}
-                        >
-                          {row.result ? "Edit result" : "Record result"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <ImportSection busy={busy} onImport={importResults} />
         </>
       )}
 

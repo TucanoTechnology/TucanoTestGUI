@@ -8,9 +8,9 @@ import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
-import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { Dialog } from "../../app/Dialog.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
+import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
 /**
  * Selection sentinel for the "Directly in project" node: the cases the project
@@ -244,11 +244,13 @@ export function SuiteTree({
       </div>
 
       {loading ? (
-        <div className="loading" role="status">
-          <span className="sr-only">Loading suites…</span>
-        </div>
+        <LoadingSkeleton rows={5} columns={1} />
       ) : error ? (
-        <ApiErrorNotice error={error} />
+        <ErrorState
+          code={error.code}
+          message={error.message}
+          onRetry={refreshProjects}
+        />
       ) : (
         <ul className="suite-tree__list" role="tree">
           <li role="treeitem">
@@ -298,9 +300,23 @@ export function SuiteTree({
 
           {filteredSuites.length === 0 && (
             <li className="suite-tree__empty" role="treeitem">
-              {needle === ""
-                ? "No suites in this project"
-                : `No suites match “${filter.trim()}”`}
+              {needle === "" ? (
+                <EmptyState
+                  icon="📁"
+                  message="No suites yet"
+                  action={
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={openCreate}
+                    >
+                      + Create suite
+                    </button>
+                  }
+                />
+              ) : (
+                `No suites match “${filter.trim()}”`
+              )}
             </li>
           )}
         </ul>
