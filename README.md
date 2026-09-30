@@ -25,7 +25,7 @@ The shell lays out as a top bar (brand, project switcher, global search, account
 
 | Module | Centre pane | Detail |
 | --- | --- | --- |
-| Test cases | `src/features/cases/CaseList.tsx` — table scoped by the tree node, with search, bulk tag/status operations, JSON export and case creation | `CaseDetail.tsx` — inline-editable header plus Details / Steps / Attachments / History tabs |
+| Test cases | `src/features/cases/CaseList.tsx` — table scoped by the tree node, with search, bulk tag/status operations, JSON export and case creation; the Last Results column reads `GET /reports/last-results` | `CaseDetail.tsx` — inline-editable header plus Details / Steps / Attachments / History tabs |
 | Test runs | `src/features/runs/RunList.tsx` — status-summary badges with configuration and tag filters | `RunDetail.tsx` — Cases tab with inline status recording and the result dialog, and an Import tab for JUnit/JSON |
 | Milestones | `src/features/milestones/MilestoneList.tsx` — five-segment progress bars | `MilestoneDetail.tsx` — edit, duplicate, delete, linked suites/runs |
 | Configurations | `src/features/configurations/ConfigurationList.tsx` | `ConfigurationDetail.tsx` |

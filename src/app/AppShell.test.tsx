@@ -274,6 +274,9 @@ describe("AppShell", () => {
       if (url === "/api/projects/checkout" && method === "GET") {
         return jsonResponse(200, CHECKOUT_TREE);
       }
+      if (url === "/api/reports/last-results?projectId=checkout" && method === "GET") {
+        return jsonResponse(200, { cases: [] });
+      }
       if (url === "/api/test_suites/smoke.checkout.json" && method === "GET") {
         return jsonResponse(200, {
           suiteId: "smoke.checkout.json",

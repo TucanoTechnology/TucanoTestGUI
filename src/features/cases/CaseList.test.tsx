@@ -125,6 +125,21 @@ function mockListApi() {
     if (url === "/api/projects/checkout/test_runs" && method === "GET") {
       return jsonResponse(200, ["nightly.json"]);
     }
+    if (url === "/api/reports/last-results?projectId=checkout" && method === "GET") {
+      return jsonResponse(200, {
+        projectId: "checkout",
+        cases: [
+          {
+            testCaseId: "TC-CART-1",
+            // The bulk-status test reads this route again after recording;
+            // answer from the run store so the column reflects the new status.
+            status: state.run.results[0]!.status,
+            runId: "nightly.json",
+            timestamp: "1757800000",
+          },
+        ],
+      });
+    }
     if (url === "/api/test_runs/nightly.json" && method === "GET") {
       return jsonResponse(200, state.run);
     }
@@ -155,6 +170,11 @@ function mockListApi() {
 
 const rows = () => screen.getAllByRole("row");
 
+/** Wait for the populated table (mirrors the assertions every test starts from). */
+async function openDetailWait() {
+  await waitFor(() => expect(rows()).toHaveLength(3));
+}
+
 afterEach(() => {
   resetTestApi();
 });
@@ -183,6 +203,15 @@ describe("CaseList", () => {
     expect(screen.getByText("(v3)")).toBeInTheDocument();
     // A project-level case states its root parent.
     expect(screen.getByText("project root")).toBeInTheDocument();
+    // The Last Results column reads the report: TC-CART-1 failed in the
+    // nightly run, and the case no run covered is absent — an em dash, never
+    // a fabricated Untested.
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("grid", { name: "Test cases" })).getAllByText(
+        "—",
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
 
     // Selecting a row reports the case to the shell.
     fireEvent.click(screen.getByText("Add an item to the cart"));
@@ -381,6 +410,76 @@ describe("CaseList", () => {
     expect(alert).toHaveTextContent("not_found");
     expect(alert).toHaveTextContent("no project");
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("names the run and moment behind each badge in the tooltip", async () => {
+    mockListApi();
+    renderList();
+    await openDetailWait();
+
+    const badge = screen.getByText("Failed");
+    expect(badge).toHaveAttribute(
+      "title",
+      expect.stringMatching(/^Last recorded in nightly\.json at /),
+    );
+  });
+
+  it("falls back to priority when the report fails, never painting cases as untested", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, {
+          ...PROJECT,
+          testSuites: [
+            {
+              suiteId: "smoke.checkout",
+              name: "Smoke",
+              testCases: [{ ...CART, priority: "Critical" }],
+            },
+          ],
+        });
+      }
+      if (url === "/api/reports/last-results?projectId=checkout" && method === "GET") {
+        return jsonResponse(500, {
+          error: { code: "internal", message: "report offline" },
+        });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+    const { baseElement } = renderList();
+    await waitFor(() => expect(rows()).toHaveLength(3));
+
+    // The row degrades to the priority badge with an honest title; no case is
+    // shown as if nothing had ever been recorded.
+    const fallback = screen.getByText("Critical");
+    expect(fallback).toHaveAttribute(
+      "title",
+      "Priority — last results could not be loaded",
+    );
+    void baseElement;
+  });
+
+  it("re-reads the report after a bulk status change", async () => {
+    const { state } = mockListApi();
+    renderList();
+    await waitFor(() => expect(rows()).toHaveLength(3));
+
+    fireEvent.click(screen.getByLabelText("Select TC-CART-1"));
+    await screen.findByRole("toolbar", { name: "Bulk case operations" });
+    fireEvent.change(screen.getByLabelText("Run to record against"), {
+      target: { value: "nightly.json" },
+    });
+    fireEvent.change(screen.getByLabelText("Status to record"), {
+      target: { value: "Passed" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Record status" }));
+
+    await waitFor(() => expect(state.resultPosts).toHaveLength(1));
+    // The second report read picks up the recorded status: the store flips
+    // TC-CART-1 to Passed when the record POST lands, and the report answers
+    // from the same store.
+    await waitFor(() =>
+      expect(screen.getByText("Passed")).toBeInTheDocument(),
+    );
   });
 
   it("has no accessibility violations on the populated table", async () => {

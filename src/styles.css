@@ -2101,3 +2101,13 @@ textarea {
     width: 120px;
   }
 }
+
+/* Last-results column (TucanoTestAPI#457) */
+.case-table__uncovered {
+  color: var(--color-text-secondary);
+}
+
+.case-table__skeleton {
+  max-width: 72px;
+  flex: none;
+}

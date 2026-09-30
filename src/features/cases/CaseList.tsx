@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import type { Project, TestCase } from "../../api/generated/index.js";
+import type {
+  LastCaseResult,
+  Project,
+  TestCase,
+} from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
@@ -73,6 +77,14 @@ export function CaseList({
   const { projectsVersion, refreshProjects, announce } = useProjectContext();
   const [rows, setRows] = useState<CaseRow[]>([]);
   const [projectName, setProjectName] = useState(projectId);
+  // The latest recorded result per case, read once with the project document
+  // (GET /reports/last-results, TucanoTestAPI#457). Null while loading; a
+  // failed read leaves the column on its fallback rather than lying about
+  // every case as untested.
+  const [lastResults, setLastResults] = useState<Map<string, LastCaseResult> | null>(
+    null,
+  );
+  const [lastResultsFailed, setLastResultsFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiErrorInfo | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -95,12 +107,32 @@ export function CaseList({
     setLoading(true);
     setError(null);
     setChecked(new Set());
+    setLastResults(null);
+    setLastResultsFailed(false);
 
-    apiFetch(() => client.projects.getProject({ id: projectId }))
-      .then((project) => {
+    // Two reads build the pane: the project document answers the list, and
+    // the last-results report answers the column no per-case route can. The
+    // report is not allowed to fail the list — a degraded column reads the
+    // same way a failed bulk count does — so it settles independently.
+    const project = apiFetch(() => client.projects.getProject({ id: projectId }));
+    const results = apiFetch(() =>
+      client.reports.getLastResultsReport({ projectId }),
+    );
+
+    project
+      .then(async (loaded) => {
         if (cancelled) return;
-        setRows(buildRows(project));
-        setProjectName(project.name ?? project.projectId);
+        setRows(buildRows(loaded));
+        setProjectName(loaded.name ?? loaded.projectId);
+        try {
+          const report = await results;
+          if (cancelled) return;
+          setLastResults(
+            new Map(report.cases.map((entry) => [entry.testCaseId, entry])),
+          );
+        } catch {
+          if (!cancelled) setLastResultsFailed(true);
+        }
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -257,6 +289,8 @@ export function CaseList({
           failed.push(caseId);
         }
       }
+      // The column shows recorded results, so the report is read back.
+      refreshProjects();
       const outcome = `Recorded ${bulkStatus} for ${done} of ${checked.size} cases in ${bulkRunId}`;
       setBulkResult(
         failed.length > 0
@@ -553,15 +587,39 @@ export function CaseList({
                     </span>
                   </td>
                   <td className="case-table__td">
-                    {testCase.priority ? (
-                      <span
-                        className={`status-badge status-badge--priority status-badge--${testCase.priority.toLowerCase()}`}
-                        title="Priority — the last recorded result is reported by the run and report views"
-                      >
-                        {testCase.priority}
-                      </span>
+                    {lastResults ? (
+                      lastResults.get(testCase.testCaseId) ? (
+                        (() => {
+                          const last = lastResults.get(testCase.testCaseId)!;
+                          return (
+                            <span
+                              className={`status-badge status-badge--${last.status.toLowerCase()}`}
+                              title={`Last recorded in ${last.runId} at ${formatTimestamp(last.timestamp)}`}
+                            >
+                              {last.status}
+                            </span>
+                          );
+                        })()
+                      ) : (
+                        <span className="case-table__uncovered" title="No run in scope has recorded a result for this case">
+                          —
+                        </span>
+                      )
+                    ) : lastResultsFailed ? (
+                      // The report failed: fall back to priority rather than
+                      // painting every case as if nothing had been recorded.
+                      testCase.priority ? (
+                        <span
+                          className={`status-badge status-badge--priority status-badge--${testCase.priority.toLowerCase()}`}
+                          title="Priority — last results could not be loaded"
+                        >
+                          {testCase.priority}
+                        </span>
+                      ) : (
+                        "—"
+                      )
                     ) : (
-                      "—"
+                      <span className="skeleton-cell case-table__skeleton" />
                     )}
                   </td>
                   <td className="case-table__td case-table__td--date">
