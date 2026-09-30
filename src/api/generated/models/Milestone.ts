@@ -9,7 +9,13 @@ export type Milestone = {
   startDate?: string;
   targetDate?: string;
   status?: string;
+  /**
+   * A document may list at most 512 of these references; a longer array is refused with `400 invalid_request`.
+   */
   testSuiteIds?: Array<string>;
+  /**
+   * A document may list at most 512 of these references; a longer array is refused with `400 invalid_request`.
+   */
   testRunIds?: Array<string>;
 };
 

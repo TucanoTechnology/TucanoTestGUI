@@ -8,7 +8,7 @@ import type { TestSuite } from './TestSuite';
  */
 export type ProjectUpdateRequest = {
   /**
-   * Optional identifier; the stored document keeps its own when omitted.
+   * Optional. A value that restates the addressed identifier or the stored one is accepted; an unusable value is `invalid_id` and a usable value naming another document is `invalid_request`, because an identifier is immutable — rename by deleting and recreating the document.
    */
   projectId?: string;
   name?: string;

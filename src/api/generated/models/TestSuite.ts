@@ -4,7 +4,7 @@
 /* eslint-disable */
 import type { TestCase } from './TestCase';
 /**
- * A test suite document. The stored marker keeps `testCases` empty; reads fill it with the cases the suite folder holds.
+ * A test suite document. The stored marker keeps `testCases` empty; reads fill it with the cases the suite folder holds, or with their wire identifiers when the read is given `?children=ids` (#415).
  */
 export type TestSuite = {
   suiteId: string;

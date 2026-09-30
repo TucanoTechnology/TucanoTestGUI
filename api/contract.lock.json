@@ -1,10 +1,10 @@
 {
   "repository": "TucanoTechnology/TucanoTestAPI",
   "path": "openapi.json",
-  "ref": "dea31a66216e6da1d342d276df02dcf0b9123580",
-  "sha256": "9172da970642acd92b3ef7c4c5033dde41cb769c792ba857a76b5c293a46e14c",
+  "ref": "1e5fabcbda577d7885d3581907b40870babf7185",
+  "sha256": "5c56841d3a4a443e957fcf288654ca1d8f048e5e1b71e65b49f51a61baf387eb",
   "openapi": "3.0.3",
-  "operationCount": 73,
+  "operationCount": 92,
   "generator": {
     "name": "openapi-typescript-codegen",
     "version": "0.31.0"

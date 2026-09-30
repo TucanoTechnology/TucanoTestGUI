@@ -37,21 +37,28 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
   /**
    * Update a test case
-   * Test case identifiers are addressed verbatim, so an unusable one is a `404` and never an `invalid_id`. A change to `title`, `steps`, `preconditions` or `expectedResult` records an immutable `revisions/v{version}.json` snapshot of the previous document and starts a new version; any other update leaves `version` and `lastModified` untouched. `version` and `lastModified` are always API-managed, so a value the body supplies is ignored.
+   * Test case identifiers are addressed verbatim, so an unusable one is a `404` and never an `invalid_id`. A change to `title`, `steps`, `preconditions` or `expectedResult` records an immutable `revisions/v{version}.json` snapshot of the previous document and starts a new version; any other update leaves `version` and `lastModified` untouched. `version` and `lastModified` are always API-managed, so a value the body supplies is ignored. The body's `testCaseId` is a document field on this route rather than an address, so it is not checked against the path identifier.
    * @returns MessageResponse Updated
    * @throws ApiError
    */
   public updateTestCase({
     id,
     requestBody,
+    ifMatch,
   }: {
     id: string,
     requestBody: TestCaseUpdateRequest,
+    /**
+     * Optional optimistic-concurrency precondition: the `ETag` value last read for this document. A `PUT` carrying it is applied only if the stored document still digests to it; otherwise the request is refused `412` — code `conflict` — carrying the CURRENT digest, so the client can re-read in one round trip. Absent or empty, the update follows the legacy last-writer-wins path.
+     */
+    ifMatch?: string,
   }): CancelablePromise<MessageResponse> {
     return this.httpRequest.request({
       method: 'PUT',
@@ -59,15 +66,21 @@ export class TestCasesService {
       path: {
         'id': id,
       },
+      headers: {
+        'If-Match': ifMatch,
+      },
       body: requestBody,
       mediaType: 'application/json',
       errors: {
-        400: `\`invalid_request\`: the body was rejected — an unknown or missing field, an identifier the body supplies that is not a single \`.json\` component, or a name-only payload that omits what creation needs.`,
+        400: `\`invalid_request\`: the body was rejected — an unknown or missing field, a field whose type does not match the schema, a \`projectId\` on \`POST /projects\` that is not a single path segment ending in \`.json\`, or a name-only payload that omits what creation needs; or a \`name\` that would need more than the 255 bytes one stored name may hold, refused here rather than failing as a storage error when the project is written.`,
         401: `\`missing_token\`, \`invalid_token\` or \`token_expired\`: the \`Authorization\` header was absent or carried a token this deployment does not accept. The response carries the \`WWW-Authenticate\` challenge.`,
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
-        413: `Every request is capped at 50 MiB by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        412: `The \`If-Match\` digest no longer describes the stored document: it was modified between the read and this update. The response carries the CURRENT digest in \`ETag\` — re-read, re-apply, retry with the new value. The published code is \`conflict\`; the status is \`412\`, distinguishing the precondition failure from a create-time \`409\` clash.`,
+        413: `Every request is capped at \`TUCANO_MAX_BODY_BYTES\` (default 50 MiB) by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -93,12 +106,14 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
   /**
    * Duplicate test case
-   * Unknown fields in the body are ignored.
+   * A path identifier is addressed verbatim, so an unusable one is a `404` rather than a `400`; a body `newId` the store cannot file answers `invalid_id`, and because a case identifier carries no `.json` suffix a bare `newId` is usable as it stands. Unknown fields in the body are ignored.
    * @returns CreateResponse Duplicated
    * @throws ApiError
    */
@@ -118,12 +133,14 @@ export class TestCasesService {
       body: requestBody,
       mediaType: 'application/json',
       errors: {
-        400: `\`invalid_request\`: the body was rejected — an unknown or missing field, an identifier the body supplies that is not a single \`.json\` component, or a name-only payload that omits what creation needs.`,
+        400: `\`invalid_id\`: an identifier must be a single path component ending in \`.json\` and no longer than the 255 bytes one stored component may hold. Test cases are addressed verbatim and answer \`404\` instead, and the duplicate routes differ as their own descriptions record.`,
         401: `\`missing_token\`, \`invalid_token\` or \`token_expired\`: the \`Authorization\` header was absent or carried a token this deployment does not accept. The response carries the \`WWW-Authenticate\` challenge.`,
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
-        413: `Every request is capped at 50 MiB by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        413: `Every request is capped at \`TUCANO_MAX_BODY_BYTES\` (default 50 MiB) by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -149,19 +166,21 @@ export class TestCasesService {
       formData: formData,
       mediaType: 'multipart/form-data',
       errors: {
-        400: `The upload route's 400s. \`invalid_multipart\` when the multipart body cannot be parsed and \`missing_file\` when no part carries a filename, both as the error envelope; but the multipart extractor rejects a request that is not valid \`multipart/form-data\` before the handler runs, and that answer is plain text — \`Invalid \\\`boundary\\\` for \\\`multipart/form-data\\\` request\` — not the envelope.`,
+        400: `The upload route's 400s. \`invalid_request\` when the name the file would be stored under, \`<suffix>-<original name>\`, would exceed the 255 bytes one stored component may hold, and nothing is recorded or written for it; \`invalid_multipart\` when the multipart body cannot be parsed and \`missing_file\` when no part carries a filename, both as the error envelope; but the multipart extractor rejects a request that is not valid \`multipart/form-data\` before the handler runs, and that answer is plain text — \`Invalid \\\`boundary\\\` for \\\`multipart/form-data\\\` request\` — not the envelope.`,
         401: `\`missing_token\`, \`invalid_token\` or \`token_expired\`: the \`Authorization\` header was absent or carried a token this deployment does not accept. The response carries the \`WWW-Authenticate\` challenge.`,
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
-        413: `Every request is capped at 50 MiB by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        413: `Every request is capped at \`TUCANO_MAX_BODY_BYTES\` (default 50 MiB) by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
   /**
    * Download attachment
-   * A bare identifier that several parents hold is a conflict; address the case through its parent-scoped route instead.
-   * @returns binary File content
+   * A bare identifier that several parents hold is a conflict; address the case through its parent-scoped route instead. The body is always `application/octet-stream` — the media type recorded in the document is metadata and never replays onto the wire — so a client that decodes by response content type still receives bytes.
+   * @returns binary File content, served as `application/octet-stream` and named by `Content-Disposition`
    * @throws ApiError
    */
   public downloadTestCaseAttachment({
@@ -169,6 +188,9 @@ export class TestCasesService {
     filename,
   }: {
     id: string,
+    /**
+     * Name of a stored attachment file, `<suffix>-<original name>` — the `filename` the upload route answers and the `Attachment` metadata carries, not the `originalName` the client sent. A value that addresses no stored file is reported as `not_found`: a name that is absent, that is not a single plain path component (`.` and `..` among them), or that names a directory.
+     */
     filename: string,
   }): CancelablePromise<Blob> {
     return this.httpRequest.request({
@@ -183,6 +205,8 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -197,6 +221,9 @@ export class TestCasesService {
     filename,
   }: {
     id: string,
+    /**
+     * Name of a stored attachment file, `<suffix>-<original name>` — the `filename` the upload route answers and the `Attachment` metadata carries, not the `originalName` the client sent. A value that addresses no stored file is reported as `not_found`: a name that is absent, that is not a single plain path component (`.` and `..` among them), or that names a directory.
+     */
     filename: string,
   }): CancelablePromise<MessageResponse> {
     return this.httpRequest.request({
@@ -211,6 +238,8 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -243,6 +272,8 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -274,12 +305,54 @@ export class TestCasesService {
       formData: formData,
       mediaType: 'multipart/form-data',
       errors: {
-        400: `The step upload route's 400s. \`invalid_request\` when the step index is unusable, \`invalid_multipart\` when the multipart body cannot be parsed and \`missing_file\` when no part carries a filename, all as the error envelope; but the multipart extractor rejects a request that is not valid \`multipart/form-data\` before the handler runs, and that answer is plain text.`,
+        400: `The step upload route's 400s. \`invalid_request\` when the step index is unusable or when the name the file would be stored under, \`<suffix>-<original name>\`, would exceed the 255 bytes one stored component may hold, \`invalid_multipart\` when the multipart body cannot be parsed and \`missing_file\` when no part carries a filename, all as the error envelope; but the multipart extractor rejects a request that is not valid \`multipart/form-data\` before the handler runs, and that answer is plain text.`,
         401: `\`missing_token\`, \`invalid_token\` or \`token_expired\`: the \`Authorization\` header was absent or carried a token this deployment does not accept. The response carries the \`WWW-Authenticate\` challenge.`,
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
-        413: `Every request is capped at 50 MiB by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        413: `Every request is capped at \`TUCANO_MAX_BODY_BYTES\` (default 50 MiB) by the router, before the handler runs: the answer is plain text — \`length limit exceeded\` — never the error envelope. Because the router cap and the attachment cap are the same size, the \`payload_too_large\` envelope the API can still produce is unreachable for attachments, and this plain-text 413 is the only observable one.`,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
+      },
+    });
+  }
+  /**
+   * Download step attachment
+   * The body is always `application/octet-stream` — the media type recorded in the document is metadata and never replays onto the wire — so a client that decodes by response content type still receives bytes. An unattached filename answers `404`, and so does a step index that names no structured step. A bare identifier that several parents hold is a conflict, and a case addressed by an unusable identifier answers `404`, never `400`.
+   * @returns binary File content, served as `application/octet-stream` and named by `Content-Disposition`
+   * @throws ApiError
+   */
+  public downloadStepAttachment({
+    id,
+    stepIndex,
+    filename,
+  }: {
+    id: string,
+    /**
+     * A value that is not a non-negative integer is reported as `invalid_request`.
+     */
+    stepIndex: number,
+    /**
+     * Name of a stored attachment file, `<suffix>-<original name>` — the `filename` the upload route answers and the `Attachment` metadata carries, not the `originalName` the client sent. A value that addresses no stored file is reported as `not_found`: a name that is absent, that is not a single plain path component (`.` and `..` among them), or that names a directory.
+     */
+    filename: string,
+  }): CancelablePromise<Blob> {
+    return this.httpRequest.request({
+      method: 'GET',
+      url: '/test_cases/{id}/steps/{step_index}/attachments/{filename}',
+      path: {
+        'id': id,
+        'step_index': stepIndex,
+        'filename': filename,
+      },
+      errors: {
+        400: `\`invalid_request\`: the step index is not a non-negative integer, is beyond the end of the case's \`steps\` array, or names a plain string step rather than a structured one.`,
+        401: `\`missing_token\`, \`invalid_token\` or \`token_expired\`: the \`Authorization\` header was absent or carried a token this deployment does not accept. The response carries the \`WWW-Authenticate\` challenge.`,
+        403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
+        404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -299,6 +372,9 @@ export class TestCasesService {
      * A value that is not a non-negative integer is reported as `invalid_request`.
      */
     stepIndex: number,
+    /**
+     * Name of a stored attachment file, `<suffix>-<original name>` — the `filename` the upload route answers and the `Attachment` metadata carries, not the `originalName` the client sent. A value that addresses no stored file is reported as `not_found`: a name that is absent, that is not a single plain path component (`.` and `..` among them), or that names a directory.
+     */
     filename: string,
   }): CancelablePromise<MessageResponse> {
     return this.httpRequest.request({
@@ -315,6 +391,8 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -340,6 +418,8 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -372,6 +452,8 @@ export class TestCasesService {
         403: `\`forbidden\`: the caller is authenticated but does not hold the role this operation needs on every project it reaches through. A caller that can reach nothing the operation touches is answered the same way, so the two are not distinguished. The projects a request reaches are resolved and checked before the resource itself is loaded, so this answer can precede the \`404\` a missing resource would draw; a deployment that does not enforce authentication skips the check and answers the ordinary \`404\` instead.`,
         404: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
         409: `Structured error envelope: \`{"error": {"code": ..., "message": ...}}\``,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }

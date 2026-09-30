@@ -18,10 +18,16 @@ export type TestRun = {
   timestamp: string;
   name?: string;
   /**
-   * The projects this run covers. An update replaces the whole array, so the role is checked against the projects it will carry rather than the ones it drops: creating or updating needs `editor` in every project named, and reading needs `viewer` in every project the stored array carries. A listing keeps only the runs whose projects the caller can reach and that name at least one, so a run that names none is readable by any authenticated caller yet appears in no listing.
+   * The projects this run covers. An update replaces the whole array, so the role is checked against the projects it will carry rather than the ones it drops: creating or updating needs `editor` in every project named, and reading needs `viewer` in every project the stored array carries. A listing keeps only the runs whose projects the caller can reach and that name at least one, so a run that names none is readable by any authenticated caller yet appears in no listing. A run may carry at most 512 of these references; a longer array is refused with `400 invalid_request`.
    */
   projects?: Array<Project>;
+  /**
+   * A document may list at most 512 of these references; a longer array is refused with `400 invalid_request`.
+   */
   testSuites?: Array<TestSuite>;
+  /**
+   * A document may list at most 512 of these references; a longer array is refused with `400 invalid_request`.
+   */
   testCases?: Array<TestCase>;
   results?: Array<TestCaseResult>;
   tags?: Array<string>;

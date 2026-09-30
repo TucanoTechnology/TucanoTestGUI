@@ -8,7 +8,7 @@ import type { TestSuite } from './TestSuite';
  */
 export type ProjectCreateRequest = {
   /**
-   * Optional identifier; derived from `name` as `<name>.json` when omitted. A supplied value that is not a single path segment ending in `.json` is rejected.
+   * Optional identifier; derived from `name` as `<name>.json` when omitted. A supplied value must be a single path segment ending in `.json` — anything else is `invalid_request` — and when usable it becomes the new project's identity and address.
    */
   projectId?: string;
   name: string;

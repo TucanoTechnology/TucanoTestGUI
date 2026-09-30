@@ -19,6 +19,10 @@ export class ServiceService {
       method: 'GET',
       url: '/health',
       responseHeader: 'X-Request-Id',
+      errors: {
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
+      },
     });
   }
   /**
@@ -31,6 +35,10 @@ export class ServiceService {
       method: 'GET',
       url: '/openapi.json',
       responseHeader: 'X-Request-Id',
+      errors: {
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
+      },
     });
   }
   /**
@@ -43,6 +51,26 @@ export class ServiceService {
       method: 'GET',
       url: '/api-docs',
       responseHeader: 'X-Request-Id',
+      errors: {
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
+      },
+    });
+  }
+  /**
+   * Request counters
+   * What the deployment has served since the process started, in the Prometheus text exposition format (`text/plain; version=0.0.4`): one counter per HTTP method, matched route and response status class, plus a counter for requests no route answered. The counters belong to the process that renders them — a deployment with several replicas scrapes each — and no label names a caller, a project or an identifier, so a series never carries stored content. It is unguarded for the same reason `/health` is: the caller that has to ask how the process is doing is often the one that cannot authenticate.
+   * @returns string Counters in the Prometheus text exposition format
+   * @throws ApiError
+   */
+  public getMetrics(): CancelablePromise<string> {
+    return this.httpRequest.request({
+      method: 'GET',
+      url: '/metrics',
+      errors: {
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
+      },
     });
   }
   /**
@@ -56,7 +84,8 @@ export class ServiceService {
       method: 'GET',
       url: '/ready',
       errors: {
-        503: `\`not_ready\`: the store behind a live process cannot take writes — the data directory is missing, is not writable, or its advisory lock cannot be taken. The message names which of the three failed and never a path, a raw filesystem error or any stored content. Only \`GET /ready\` answers this; \`GET /diagnostics\` reports the same probe as \`200\`.`,
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
       },
     });
   }
@@ -70,6 +99,10 @@ export class ServiceService {
     return this.httpRequest.request({
       method: 'GET',
       url: '/diagnostics',
+      errors: {
+        503: `\`service_unavailable\`: the request arrived while \`TUCANO_MAX_CONCURRENCY\` (default 128; an explicit \`0\` removes the cap) others were already in flight. The server refuses rather than queues, and the answer carries \`Retry-After\`.`,
+        504: `\`request_timeout\`: the request outlived \`TUCANO_REQUEST_TIMEOUT_MS\` (default 300000 ms; an explicit \`0\` disables the deadline) and the server stopped waiting for it. A write already handed to the storage layer finishes atomically regardless of the cutoff, so a \`504\` answers 'unknown', never 'half done'.`,
+      },
     });
   }
 }

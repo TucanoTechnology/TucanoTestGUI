@@ -803,15 +803,19 @@ describe("CaseDetail", () => {
       ],
     });
 
+    // The re-read after the PUT lands asynchronously; wait for the order the
+    // stored document now carries rather than racing the refetch.
     const list = await screen.findByRole("list", { name: "Test steps" });
-    expect(
-      within(list)
-        .getAllByRole("listitem")
-        .map((item) => item.textContent),
-    ).toEqual([
-      expect.stringContaining("Enter the credentials"),
-      expect.stringContaining("Open the sign-in page"),
-    ]);
+    await waitFor(() => {
+      expect(
+        within(list)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent),
+      ).toEqual([
+        expect.stringContaining("Enter the credentials"),
+        expect.stringContaining("Open the sign-in page"),
+      ]);
+    });
   });
 
   it("deletes a step after confirmation", async () => {
