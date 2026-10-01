@@ -121,3 +121,14 @@ test.describe("accessibility", () => {
     });
   });
 });
+
+  test("dark theme has no accessibility violations", async ({ page }) => {
+    await signIn(page);
+    await pickProject(page);
+    
+    // Switch to dark theme
+    await page.getByRole("button", { name: /switch to dark theme/i }).click();
+    await page.waitForTimeout(100);
+    
+    await expectAccessible(page, "dark theme case list");
+  });
