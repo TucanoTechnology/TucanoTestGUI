@@ -297,6 +297,19 @@ function AppShellContent() {
               projectId={selectedProjectId}
               selectedSuiteId={suiteScope}
               onSelectSuite={selectSuite}
+              onSelectCase={(suiteId, caseId) => {
+                // One click lands the case: scope the list to its suite,
+                // select the case, and make sure the centre module showing
+                // cases is the one on screen (#178).
+                setActiveModule("cases");
+                setSuiteScope(suiteId);
+                setSelection({
+                  type: "case",
+                  id: caseId,
+                  projectId: selectedProjectId ?? undefined,
+                });
+                setSidebarOpen(false);
+              }}
             />
           ) : (
             <ProjectExplorer />
