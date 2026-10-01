@@ -102,6 +102,27 @@ describe("AppShell", () => {
     expect(await screen.findByText("No projects found")).toBeInTheDocument();
   });
 
+  it("offers the skip link as the first keyboard stop", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    const { baseElement } = renderShell();
+    await screen.findByText("No projects found");
+
+    const skip = screen.getByRole("link", { name: "Skip to content" });
+    // First focusable in DOM order, and its target is the main pane.
+    const focusables = baseElement.querySelectorAll(
+      'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    expect(focusables[0]).toBe(skip);
+    expect(document.getElementById("main-content")).not.toBeNull();
+    expect(skip.getAttribute("href")).toBe("#main-content");
+  });
+
   it("switches the active module from the nav rail", async () => {
     mockApi(({ url, method }) => {
       if (url === "/api/projects" && method === "GET") {

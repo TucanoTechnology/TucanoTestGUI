@@ -124,6 +124,12 @@ function AppShellContent() {
     setSidebarOpen(false);
   };
 
+  const focusMain = () => {
+    // The anchor's default jump moves the scroll; focus has to follow for the
+    // next Tab to continue inside the content rather than from the top again.
+    document.getElementById("main-content")?.focus();
+  };
+
   const renderCenter = () => {
     if (activeModule === "reports") {
       return <ReportsView />;
@@ -213,6 +219,11 @@ function AppShellContent() {
     <div
       className={`app-layout ${sidebarOpen ? "app-layout--sidebar-open" : ""}`}
     >
+      {/* First stop on the keyboard: jump past the bar, rail and explorer
+          into the working pane. Hidden until focus, per WCAG 2.4.1. */}
+      <a className="skip-link" href="#main-content" onClick={() => focusMain()}>
+        Skip to content
+      </a>
       <header className="topbar">
         <button
           type="button"
@@ -292,7 +303,12 @@ function AppShellContent() {
           )}
         </aside>
 
-        <main className="pane-center" aria-label={activeItem.label}>
+        <main
+          id="main-content"
+          className="pane-center"
+          tabIndex={-1}
+          aria-label={activeItem.label}
+        >
           {renderCenter()}
         </main>
 
