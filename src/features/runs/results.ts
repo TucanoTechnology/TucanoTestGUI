@@ -134,3 +134,21 @@ export function buildResultRequest(
   }
   return request;
 }
+
+/**
+ * The case "Pass & next" opens after the one at `fromIndex` (#184): the
+ * nearest later row still awaiting execution — `Untested` or `Retest` — and,
+ * when everything behind is settled, simply the next row, so a run whose
+ * tester revisits failures in order still walks one case at a time. `null`
+ * means the run holds nothing further and the form should close.
+ */
+export function nextPendingRow(
+  rows: ResultRow[],
+  fromIndex: number,
+): ResultRow | null {
+  const after = rows.slice(fromIndex + 1);
+  const pending = after.find(
+    (row) => row.status === "Untested" || row.status === "Retest",
+  );
+  return pending ?? after[0] ?? null;
+}

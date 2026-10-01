@@ -25,6 +25,7 @@ import {
   buildResultRequest,
   buildResultRows,
   formatDuration,
+  nextPendingRow,
   type ResultStatus,
   type ResultSubmission,
 } from "./results.js";
@@ -298,7 +299,7 @@ export function RunDetail({
     );
   };
 
-  const recordResult = async (values: ResultSubmission) => {
+  const recordResult = async (values: ResultSubmission, advance = false) => {
     if (!activeRow) return;
     const requestBody = buildResultRequest(
       activeRow.testCaseId,
@@ -312,13 +313,39 @@ export function RunDetail({
       const recorded = await apiFetch(() =>
         client.testRuns.recordTestRunResult({ id: runId, requestBody }),
       );
-      setResultCaseId(null);
       const stored = echoedResult(recorded);
       if (stored) {
         applyStoredResult(stored);
       } else {
         setReloadToken((token) => token + 1);
       }
+      if (advance && stored) {
+        // The run state has not re-rendered yet, so the next row is computed
+        // from what the table would show: the current listing with this
+        // case's freshly echoed result painted in (#184).
+        const index = rows.findIndex(
+          (row) => row.testCaseId === activeRow.testCaseId,
+        );
+        const painted = rows.map((row) =>
+          row.testCaseId === stored.testCaseId
+            ? { ...row, result: stored, status: stored.status }
+            : row,
+        );
+        const next = nextPendingRow(painted, index);
+        if (next) {
+          setResultCaseId(next.testCaseId);
+          announce(
+            `Recorded ${stored.status} for ${activeRow.testCaseId}. Now recording ${next.testCaseId}${next.title ? ` — ${next.title}` : ""}.`,
+          );
+          return;
+        }
+        announce(
+          `Recorded ${stored.status} for ${activeRow.testCaseId}. That was the last case awaiting execution.`,
+        );
+        setResultCaseId(null);
+        return;
+      }
+      setResultCaseId(null);
       announce(recorded.message);
     } catch (err: unknown) {
       setActionError(readApiError(err, "Failed to record test result"));

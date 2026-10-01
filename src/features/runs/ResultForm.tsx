@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type { DefectLink } from "../../api/generated/index.js";
 import type { ApiErrorInfo } from "../../api/errors.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
@@ -35,7 +35,9 @@ interface ResultFormProps {
   defectsError?: ApiErrorInfo | null;
   busy?: boolean;
   error?: ApiErrorInfo | null;
-  onSubmit: (values: ResultSubmission) => void;
+  /** `advance` is the "Pass & next" flag: the parent moves to the next case
+   * instead of closing, once the record lands (#184). */
+  onSubmit: (values: ResultSubmission, advance: boolean) => void;
   /** Resolves `true` once the defect is linked, so the form can clear itself. */
   onLinkDefect: (values: DefectLinkValues) => Promise<boolean>;
   onUnlinkDefect: (linkId: string) => Promise<boolean>;
@@ -69,6 +71,19 @@ export function ResultForm({
   const [defectId, setDefectId] = useState("");
   const [defectUrl, setDefectUrl] = useState("");
 
+  // Set by the Pass & next button just before it submits, read by
+  // handleSubmit: the flag rides the same validation, so the duration rules
+  // never differ between the two ways out (#184).
+  const advanceOnSubmit = useRef(false);
+
+  // The form's first field takes focus when it opens — including when "Pass
+  // & next" remounts it on the following case, which is the whole point of
+  // the transition (#184, matching the shell's focus discipline).
+  const statusRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    statusRef.current?.focus();
+  }, []);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const parsed = parseDurationSeconds(duration);
@@ -77,7 +92,18 @@ export function ResultForm({
       return;
     }
     setDurationError(null);
-    onSubmit({ status, notes, durationMs: parsed.durationMs });
+    // Pass & next records a pass whatever the form carries: the button is
+    // the tester saying "it works, move on", so the status is the promise,
+    // not the (possibly stale) select value (#184).
+    onSubmit(
+      {
+        status: advanceOnSubmit.current ? "Passed" : status,
+        notes,
+        durationMs: parsed.durationMs,
+      },
+      advanceOnSubmit.current,
+    );
+    advanceOnSubmit.current = false;
   };
 
   const handleLink = async (event: FormEvent<HTMLFormElement>) => {
@@ -114,6 +140,7 @@ export function ResultForm({
         <div className="form-field">
           <label htmlFor={`${fieldId}-status`}>Status</label>
           <select
+            ref={statusRef}
             id={`${fieldId}-status`}
             value={status}
             onChange={(event) => setStatus(event.target.value as ResultStatus)}
@@ -185,6 +212,18 @@ export function ResultForm({
             disabled={busy}
           >
             {busy ? `${submitLabel}…` : submitLabel}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy}
+            title="Record Passed and open the next case awaiting execution"
+            onClick={(event) => {
+              advanceOnSubmit.current = true;
+              event.currentTarget.closest("form")?.requestSubmit();
+            }}
+          >
+            Pass &amp; next
           </button>
         </div>
       </form>
