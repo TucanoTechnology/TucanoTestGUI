@@ -412,3 +412,83 @@ describe("AppShell", () => {
     expect(results.violations).toEqual([]);
   });
 });
+
+  it("switches the left panel navigator when the active module changes (#195)", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, [CHECKOUT.projectId]);
+      }
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, {
+          ...CHECKOUT,
+          testSuites: [
+            {
+              suiteId: "suite-login",
+              name: "Login",
+              testCases: [{ testCaseId: "case-signin", title: "Signs in" }],
+            },
+          ],
+        });
+      }
+      if (url === "/api/projects/checkout/test_cases" && method === "GET") {
+        return jsonResponse(200, []);
+      }
+      if (url === "/api/test_suites/suite-login" && method === "GET") {
+        return jsonResponse(200, { suiteId: "suite-login", name: "Login" });
+      }
+      if (url === "/api/projects/checkout/test_runs" && method === "GET") {
+        return jsonResponse(200, ["run-1"]);
+      }
+      if (url === "/api/projects/checkout/milestones" && method === "GET") {
+        return jsonResponse(200, ["milestone-1"]);
+      }
+      if (url === "/api/projects/checkout/configurations" && method === "GET") {
+        return jsonResponse(200, ["config-1"]);
+      }
+      if (url === "/api/test_runs/run-1" && method === "GET") {
+        return jsonResponse(200, { testRunId: "run-1", name: "Run 1" });
+      }
+      if (url === "/api/milestones/milestone-1" && method === "GET") {
+        return jsonResponse(200, { milestoneId: "milestone-1", name: "Milestone 1" });
+      }
+      if (url === "/api/configurations/config-1" && method === "GET") {
+        return jsonResponse(200, { configId: "config-1", name: "Config 1" });
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderShell();
+    await screen.findByRole("option", { name: "Checkout (checkout)" });
+
+    // Select the project to activate the left panel
+    fireEvent.change(screen.getByRole("combobox", { name: "Active project" }), {
+      target: { value: CHECKOUT.projectId },
+    });
+
+    // Cases module shows the suite tree
+    await screen.findByRole("complementary", { name: "Suite tree" });
+
+    // Switch to Runs - left panel should show "Runs"
+    fireEvent.click(screen.getByRole("button", { name: "Test Runs" }));
+    await waitFor(() => {
+      expect(screen.getByRole("complementary", { name: "Runs" })).toBeInTheDocument();
+    });
+
+    // Switch to Milestones - left panel should show "Milestones"
+    fireEvent.click(screen.getByRole("button", { name: "Milestones" }));
+    await waitFor(() => {
+      expect(screen.getByRole("complementary", { name: "Milestones" })).toBeInTheDocument();
+    });
+
+    // Switch to Configurations - left panel should show "Configurations"
+    fireEvent.click(screen.getByRole("button", { name: "Configurations" }));
+    await waitFor(() => {
+      expect(screen.getByRole("complementary", { name: "Configurations" })).toBeInTheDocument();
+    });
+
+    // Switch back to Cases - left panel should show "Suite tree" again
+    fireEvent.click(screen.getByRole("button", { name: "Test Cases" }));
+    await waitFor(() => {
+      expect(screen.getByRole("complementary", { name: "Suite tree" })).toBeInTheDocument();
+    });
+  });
