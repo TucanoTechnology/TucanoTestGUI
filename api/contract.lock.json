@@ -1,8 +1,8 @@
 {
   "repository": "TucanoTechnology/TucanoTestAPI",
   "path": "openapi.json",
-  "ref": "1e5fabcbda577d7885d3581907b40870babf7185",
-  "sha256": "5c56841d3a4a443e957fcf288654ca1d8f048e5e1b71e65b49f51a61baf387eb",
+  "ref": "a9c456818d0de05d27f231e457e694920fa01b17",
+  "sha256": "8657c23fa136fe184050963bcbdccf46b7a7a84e64d65150f2ea29e3055f1407",
   "openapi": "3.0.3",
   "operationCount": 92,
   "generator": {

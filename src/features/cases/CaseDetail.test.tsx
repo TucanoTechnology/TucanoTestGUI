@@ -180,7 +180,7 @@ function uploadOf(formData?: FormData) {
  * test mutates, so the re-fetch after a mutation reads back what was stored.
  */
 function mockCaseApi(initial: TestCase[] = [CASE]) {
-  const state = { cases: initial };
+  const state = { cases: initial, echo: false };
 
   const requests = mockApi(({ url, method, body, formData }) => {
     if (url === "/api/projects/checkout" && method === "GET") {
@@ -192,7 +192,13 @@ function mockCaseApi(initial: TestCase[] = [CASE]) {
           ? ({ ...testCase, ...(body as Partial<TestCase>) } as TestCase)
           : testCase,
       );
-      return jsonResponse(200, { message: "Test case updated" });
+      // #459: the stored document rides back when the deployment echoes.
+      return jsonResponse(
+        200,
+        state.echo
+          ? { message: "Test case updated", document: state.cases[0] }
+          : { message: "Test case updated" },
+      );
     }
     if (url === "/api/test_cases/TC-LOGIN-1" && method === "DELETE") {
       state.cases = [];
@@ -1161,6 +1167,58 @@ describe("CaseDetail", () => {
         },
       ],
     });
+  });
+
+  it("paints the echoed document without re-reading the project", async () => {
+    const store = mockCaseApi();
+    // #459: upgrade the PUT to the echoing shape.
+    store.state.echo = true;
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+
+    const heading = screen.getByRole("heading", {
+      name: "Sign in with a registered account",
+    });
+    heading.textContent = "Sign in with a confirmed account";
+    fireEvent.blur(heading);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", {
+          name: "Sign in with a confirmed account",
+        }),
+      ).toBeInTheDocument();
+    });
+    // One project read (the open); the echo replaced the re-read.
+    expect(
+      store.requests.filter(
+        (request) =>
+          request.url === "/api/projects/checkout" && request.method === "GET",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("shows the case's own defect links in the Details tab", async () => {
+    mockCaseApi([
+      {
+        ...CASE,
+        defectLinks: [
+          {
+            linkId: "link-1",
+            defectId: "OPS-1",
+            defectUrl: "https://acme.atlassian.net/browse/OPS-1",
+            trackerType: "jira",
+            linkedAt: "1789655960",
+          },
+        ],
+      },
+    ]);
+
+    await openDetail({ caseId: "TC-LOGIN-1", projectId: "checkout" });
+    openTab("Details");
+
+    expect(await screen.findByText("Defects (1)")).toBeInTheDocument();
+    expect(screen.getByText("OPS-1")).toBeInTheDocument();
+    expect(screen.getByText("jira")).toBeInTheDocument();
   });
 
   it("lists recorded revisions and opens a read-only snapshot", async () => {

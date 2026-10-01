@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import type {
+  DefectLink,
   ImportSummary,
+  TestCaseResult,
   TestConfiguration,
   TestRun,
 } from "../../api/generated/index.js";
@@ -11,6 +13,7 @@ import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { toJsonKey } from "../../app/keys.js";
+import { echoedDocument, echoedResult } from "../../app/echo.js";
 import { formatTimestamp } from "../../app/format.js";
 import { RunForm, type RunFormValues } from "./RunForm.js";
 import { buildRunUpdateRequest } from "./runSelection.js";
@@ -22,7 +25,6 @@ import {
   buildResultRequest,
   buildResultRows,
   formatDuration,
-  rerecordBlocker,
   type ResultStatus,
   type ResultSubmission,
 } from "./results.js";
@@ -52,6 +54,10 @@ export function RunDetail({
   const [reloadToken, setReloadToken] = useState(0);
   const [newId, setNewId] = useState("");
   const [resultCaseId, setResultCaseId] = useState<string | null>(null);
+  // #460: the defect links belong to the case behind the result, fetched from
+  // the defect route — the run document no longer carries them.
+  const [caseDefects, setCaseDefects] = useState<DefectLink[] | null>(null);
+  const [defectsError, setDefectsError] = useState<ApiErrorInfo | null>(null);
   // The detail panel shows either the results table or the import form; the
   // run's own fields stay above both.
   const [activeTab, setActiveTab] = useState<"cases" | "import">("cases");
@@ -83,6 +89,40 @@ export function RunDetail({
       cancelled = true;
     };
   }, [client, runId, reloadToken]);
+
+  const loadDefects = async (caseId: string): Promise<void> => {
+    setCaseDefects(null);
+    setDefectsError(null);
+    try {
+      const listed = await apiFetch(() =>
+        client.testRuns.listResultDefects({ id: runId, caseId }),
+      );
+      setCaseDefects(listed.defects);
+    } catch (err: unknown) {
+      setDefectsError(readApiError(err, "Failed to load the defect links"));
+    }
+  };
+
+  useEffect(() => {
+    if (resultCaseId === null) return;
+    let cancelled = false;
+    setCaseDefects(null);
+    setDefectsError(null);
+    apiFetch(() =>
+      client.testRuns.listResultDefects({ id: runId, caseId: resultCaseId }),
+    )
+      .then((listed) => {
+        if (!cancelled) setCaseDefects(listed.defects);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setDefectsError(readApiError(err, "Failed to load the defect links"));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, runId, resultCaseId]);
 
   const startAction = (next: Mode) => {
     setActionError(null);
@@ -147,7 +187,14 @@ export function RunDetail({
         client.testRuns.updateTestRun({ id: runId, requestBody }),
       );
       setMode("view");
-      setReloadToken((token) => token + 1);
+      // The stored run rides back in the echo (#459) — a run document is
+      // fully self-describing, so painting it skips the re-read entirely.
+      const echoed = echoedDocument<TestRun>(updated);
+      if (echoed) {
+        setRun(echoed);
+      } else {
+        setReloadToken((token) => token + 1);
+      }
       refreshProjects();
       announce(updated.message);
     } catch (err: unknown) {
@@ -232,6 +279,25 @@ export function RunDetail({
     setResultCaseId(null);
   };
 
+  // Painting an echoed result into the run state, in place: #459 means the
+  // record route answers with the stored result, so the table can update
+  // without reading the (much larger) run document back.
+  const applyStoredResult = (stored: TestCaseResult): void => {
+    setRun((previous) =>
+      previous
+        ? {
+            ...previous,
+            results: [
+              ...(previous.results ?? []).filter(
+                (result) => result.testCaseId !== stored.testCaseId,
+              ),
+              stored,
+            ],
+          }
+        : previous,
+    );
+  };
+
   const recordResult = async (values: ResultSubmission) => {
     if (!activeRow) return;
     const requestBody = buildResultRequest(
@@ -247,7 +313,12 @@ export function RunDetail({
         client.testRuns.recordTestRunResult({ id: runId, requestBody }),
       );
       setResultCaseId(null);
-      setReloadToken((token) => token + 1);
+      const stored = echoedResult(recorded);
+      if (stored) {
+        applyStoredResult(stored);
+      } else {
+        setReloadToken((token) => token + 1);
+      }
       announce(recorded.message);
     } catch (err: unknown) {
       setActionError(readApiError(err, "Failed to record test result"));
@@ -284,7 +355,12 @@ export function RunDetail({
           ),
         }),
       );
-      setReloadToken((token) => token + 1);
+      const stored = echoedResult(recorded);
+      if (stored) {
+        applyStoredResult(stored);
+      } else {
+        setReloadToken((token) => token + 1);
+      }
       announce(recorded.message);
     } catch (err: unknown) {
       setActionError(readApiError(err, "Failed to record test result"));
@@ -293,7 +369,8 @@ export function RunDetail({
     }
   };
 
-  // A link or an unlink changes the result the run records, so the run is read
+  // A link or an unlink writes the case document, never the run (#460), so
+  // the defect list — not the run — is what comes back changed., so the run is read
   // again rather than the table being guessed at locally.
   const linkDefect = async (values: DefectLinkValues): Promise<boolean> => {
     if (!activeRow) return false;
@@ -307,7 +384,8 @@ export function RunDetail({
           requestBody: values,
         }),
       );
-      setReloadToken((token) => token + 1);
+      // The link landed on the case document; only the case's list changes.
+      await loadDefects(activeRow.testCaseId);
       announce(linked.message);
       return true;
     } catch (err: unknown) {
@@ -330,7 +408,7 @@ export function RunDetail({
           linkId,
         }),
       );
-      setReloadToken((token) => token + 1);
+      await loadDefects(activeRow.testCaseId);
       announce(unlinked.message);
       return true;
     } catch (err: unknown) {
@@ -546,36 +624,23 @@ export function RunDetail({
                     </thead>
                     <tbody>
                       {rows.map((row) => {
-                        // The record route replaces the whole result, so a
-                        // result that holds links or attachments cannot be
-                        // re-recorded from the table without discarding them.
-                        const blocked =
-                          row.result !== undefined &&
-                          rerecordBlocker(row.result) !== null;
                         return (
                           <tr key={row.testCaseId}>
                             <td className="data-table__id">{row.testCaseId}</td>
                             <td>{row.title ?? "—"}</td>
                             <td>
-                              {blocked ||
-                              !(RESULT_STATUSES as readonly string[]).includes(
-                                row.status,
-                              ) ? (
-                                // A status outside the recorded five — storage
-                                // a hand-edit reaches — is shown as it stands,
-                                // and only the dialog can change it. A result
-                                // holding defects or attachments is the same:
-                                // a table record would discard them.
-                                <span
-                                  className={`status-badge status-badge--${row.status.toLowerCase()}`}
-                                  title={
-                                    blocked
-                                      ? rerecordBlocker(row.result) ?? undefined
-                                      : undefined
-                                  }
-                                >
-                                  {row.status}
-                                </span>
+                              {
+                                !(RESULT_STATUSES as readonly string[]).includes(
+                                  row.status,
+                                ) ? (
+                                  // A status outside the recorded five — storage
+                                  // a hand-edit reaches — is shown as it stands,
+                                  // and only the dialog can change it.
+                                  <span
+                                    className={`status-badge status-badge--${row.status.toLowerCase()}`}
+                                  >
+                                    {row.status}
+                                  </span>
                               ) : (
                                 <select
                                   className="status-select"
@@ -703,9 +768,10 @@ export function RunDetail({
           <ResultForm
             key={activeRow.testCaseId}
             row={activeRow}
+            defects={caseDefects}
+            defectsError={defectsError}
             busy={busy}
             error={actionError}
-            blockReason={rerecordBlocker(activeRow.result)}
             onSubmit={recordResult}
             onLinkDefect={linkDefect}
             onUnlinkDefect={unlinkDefect}

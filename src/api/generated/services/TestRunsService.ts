@@ -46,7 +46,7 @@ export class TestRunsService {
   }
   /**
    * Update a test run
-   * @returns MessageResponse Updated
+   * @returns MessageResponse Updated. `document` carries the run document as stored.
    * @throws ApiError
    */
   public updateTestRun({
@@ -218,7 +218,7 @@ export class TestRunsService {
   /**
    * Record test case execution result in run
    * Records the result of a case the run holds, updating any result the run already recorded for that case as `TestResultRequest` describes.
-   * @returns MessageResponse Recorded
+   * @returns MessageResponse Recorded. `result` carries the stored result: merged fields, the timestamp the API filled.
    * @throws ApiError
    */
   public recordTestRunResult({
@@ -251,7 +251,7 @@ export class TestRunsService {
   /**
    * Replace a test case execution result in run
    * Replaces the result the run stores for the case the path names. The body is the shape `POST /test_runs/{id}/results` accepts, with the case already given by the path: `testCaseId` may be omitted, and a body that carries it must agree with `case_id` rather than point the replacement elsewhere. Everything a body can describe is rewritten exactly as a recording rewrites it — `status` and `timestamp` always, `notes` and `durationMs` only when the body supplies them, where an explicit `null` clears the stored value — while the stored `attachments` and `defectLinks` are kept, because no request speaks for them and dropping them would lose the failures already linked to the case. Unlike a recording, a replacement never creates: a run that stores no result for the case, or no result at all, answers `404`, as does a run that does not exist.
-   * @returns MessageResponse Replaced
+   * @returns MessageResponse Replaced. `result` carries the stored result after the replacement.
    * @throws ApiError
    */
   public replaceTestRunResult({
@@ -317,7 +317,7 @@ export class TestRunsService {
   }
   /**
    * List the defects linked to a run result
-   * Returns the defect links recorded on the result a run holds for `case_id`. An unusable run identifier answers `invalid_id`, and a run that does not exist or records no result for that case answers `404`, so an empty list means the result exists but has no linked defect.
+   * Returns the defect links recorded on the case behind this result (#460). The list belongs to the case, not the result: every run recording the case answers identically, and an empty list means the case carries no link. A run that records no result for the case, or a case no project the run reaches holds, is a 404; a case two of the run's own projects hold is a 409. An unusable run or case identifier is `invalid_id`.
    * @returns any Defect links recorded on one run result
    * @throws ApiError
    */
@@ -350,7 +350,7 @@ export class TestRunsService {
   }
   /**
    * Link a defect to a run result
-   * Records a defect link on the result a run holds for `case_id`. The API derives the link identifier and the linked-at timestamp, so a body carrying either is rejected rather than silently ignored. `defectUrl` must be an issue URL the named `trackerType` would use: `jira` a `<org>.atlassian.net/browse/<KEY>` URL, `github` a `github.com/<owner>/<repo>/issues/<number>` URL, `gitlab` a `gitlab.com/<group>/<project>/-/issues/<number>` URL, and `custom` any well-formed `https://` URL. A `defectId` the result already links answers `409` rather than adding a second link.
+   * Records a defect link on the case behind this result, storing it on the case document (#460). The API derives the link id and the link instant. The caller needs `editor` on every project the run reaches and on the case's own project — a run cannot open defects onto a case its caller may not write. Linking a `defectId` the case already carries is a 409; a result that does not exist is a 404.
    * @returns CreateResponse Defect link recorded
    * @throws ApiError
    */
@@ -386,7 +386,7 @@ export class TestRunsService {
   }
   /**
    * Unlink a defect from a run result
-   * Removes the defect link a result carries under `link_id`. The identifier is the one the link route returned and is an opaque string, not a stored document name, so it is not validated as one. An unknown run or result, or a result that does not carry that link, answers `404`.
+   * Removes from the case's list the defect link carried under `link_id` (#460). The identifier is the one the link route issued. The same `editor`-both-sides rule as linking applies; a link the case does not carry is a 404.
    * @returns MessageResponse Unlinked
    * @throws ApiError
    */

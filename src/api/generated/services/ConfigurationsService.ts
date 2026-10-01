@@ -38,7 +38,7 @@ export class ConfigurationsService {
   }
   /**
    * Update a configuration
-   * @returns MessageResponse Updated
+   * @returns MessageResponse Updated. `document` carries the configuration as stored.
    * @throws ApiError
    */
   public updateConfiguration({

@@ -15,7 +15,6 @@ import {
   RESULT_STATUSES,
   buildResultRequest,
   buildResultRows,
-  rerecordBlocker,
   type ResultStatus,
 } from "../runs/results.js";
 import { CaseForm, type CaseFormValues } from "./CaseForm.js";
@@ -310,10 +309,6 @@ export function CaseList({
       for (const caseId of checked) {
         const row = resultRows.find((r) => r.testCaseId === caseId);
         if (!row) {
-          failed.push(caseId);
-          continue;
-        }
-        if (row.result && rerecordBlocker(row.result)) {
           failed.push(caseId);
           continue;
         }

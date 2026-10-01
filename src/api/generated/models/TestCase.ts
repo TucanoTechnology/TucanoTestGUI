@@ -3,6 +3,7 @@
 /* tslint:disable */
 /* eslint-disable */
 import type { Attachment } from './Attachment';
+import type { DefectLink } from './DefectLink';
 import type { TestStep } from './TestStep';
 export type TestCase = {
   testCaseId: string;
@@ -25,5 +26,9 @@ export type TestCase = {
    * When the current version was written, in ISO-8601 UTC. The API stamps it on creation and on every qualifying update; a client-supplied value is ignored.
    */
   lastModified?: string;
+  /**
+   * The defects linked to this case (#460). The case owns the list: every run recording this case surfaces the same defects, and no result recording can touch them. Written only by the defect routes — a create or update body that names the field is refused.
+   */
+  defectLinks?: Array<DefectLink>;
 };
 

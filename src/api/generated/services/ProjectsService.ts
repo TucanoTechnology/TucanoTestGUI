@@ -115,7 +115,7 @@ export class ProjectsService {
   }
   /**
    * Update a project
-   * @returns MessageResponse Updated
+   * @returns MessageResponse Updated. `document` carries the project as stored.
    * @throws ApiError
    */
   public updateProject({

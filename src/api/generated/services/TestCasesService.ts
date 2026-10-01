@@ -45,7 +45,7 @@ export class TestCasesService {
   /**
    * Update a test case
    * Test case identifiers are addressed verbatim, so an unusable one is a `404` and never an `invalid_id`. A change to `title`, `steps`, `preconditions` or `expectedResult` records an immutable `revisions/v{version}.json` snapshot of the previous document and starts a new version; any other update leaves `version` and `lastModified` untouched. `version` and `lastModified` are always API-managed, so a value the body supplies is ignored. The body's `testCaseId` is a document field on this route rather than an address, so it is not checked against the path identifier.
-   * @returns MessageResponse Updated
+   * @returns MessageResponse Updated. `document` carries the case as stored — including the `version` and `lastModified` a qualifying update advances.
    * @throws ApiError
    */
   public updateTestCase({

@@ -26,10 +26,15 @@ const TRACKER_TYPES: DefectLink["trackerType"][] = [
 
 interface ResultFormProps {
   row: ResultRow;
+  /**
+   * The case's defect links (#460), fetched by the parent from the defect
+   * route: the list belongs to the case, not to this run's result, so the
+   * run document no longer carries it. `null` while it loads.
+   */
+  defects: DefectLink[] | null;
+  defectsError?: ApiErrorInfo | null;
   busy?: boolean;
   error?: ApiErrorInfo | null;
-  /** Why the recorded result cannot be recorded again, or `null` when it can. */
-  blockReason?: string | null;
   onSubmit: (values: ResultSubmission) => void;
   /** Resolves `true` once the defect is linked, so the form can clear itself. */
   onLinkDefect: (values: DefectLinkValues) => Promise<boolean>;
@@ -39,9 +44,10 @@ interface ResultFormProps {
 
 export function ResultForm({
   row,
+  defects,
+  defectsError = null,
   busy = false,
   error = null,
-  blockReason = null,
   onSubmit,
   onLinkDefect,
   onUnlinkDefect,
@@ -62,13 +68,9 @@ export function ResultForm({
     useState<DefectLink["trackerType"]>("jira");
   const [defectId, setDefectId] = useState("");
   const [defectUrl, setDefectUrl] = useState("");
-  const defects = existing?.defectLinks ?? [];
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // The save button is disabled while the guard stands, but a form can be
-    // submitted without it, and recording again would discard what it holds.
-    if (blockReason !== null) return;
     const parsed = parseDurationSeconds(duration);
     if (parsed.error !== null) {
       setDurationError(parsed.error);
@@ -168,12 +170,6 @@ export function ResultForm({
           )}
         </div>
 
-        {blockReason !== null && (
-          <p className="form-field__hint" id={`${fieldId}-blocked`}>
-            {blockReason}
-          </p>
-        )}
-
         <div className="dialog__actions">
           <button
             type="button"
@@ -186,8 +182,7 @@ export function ResultForm({
           <button
             type="submit"
             className="btn btn-primary"
-            disabled={busy || blockReason !== null}
-            aria-describedby={blockReason === null ? undefined : `${fieldId}-blocked`}
+            disabled={busy}
           >
             {busy ? `${submitLabel}…` : submitLabel}
           </button>
@@ -197,11 +192,17 @@ export function ResultForm({
       {existing && (
         <section className="detail-field" aria-labelledby={`${fieldId}-defects`}>
           <h3 className="detail-field__label" id={`${fieldId}-defects`}>
-            Linked defects ({defects.length})
+            Linked defects{defects === null ? "" : ` (${defects.length})`}
           </h3>
-          {defects.length > 0 && (
+          {defectsError && <ApiErrorNotice error={defectsError} />}
+          {defects === null && (
+            <p className="form-field__hint" role="status">
+              Loading the case&apos;s defect links…
+            </p>
+          )}
+          {defects !== null && defects.length > 0 && (
             <ul className="entity-list">
-              {defects.map((defect) => (
+              {defects!.map((defect) => (
                 <li key={defect.linkId} className="entity-list__item">
                   <span className="entity-list__name">{defect.defectId}</span>
                   <span className="entity-list__meta">{defect.trackerType}</span>

@@ -25,8 +25,8 @@ The shell lays out as a top bar (brand, project switcher, global search, account
 
 | Module | Centre pane | Detail |
 | --- | --- | --- |
-| Test cases | `src/features/cases/CaseList.tsx` — table scoped by the tree node, with search, bulk tag/status operations, JSON export and case creation; the Last Results column reads `GET /reports/last-results` | `CaseDetail.tsx` — inline-editable header plus Details / Steps / Attachments / History tabs |
-| Test runs | `src/features/runs/RunList.tsx` — status-summary badges with configuration and tag filters | `RunDetail.tsx` — Cases tab with inline status recording and the result dialog, and an Import tab for JUnit/JSON |
+| Test cases | `src/features/cases/CaseList.tsx` — table scoped by the tree node, with search, bulk tag/status operations, JSON export and case creation; the Last Results column reads `GET /reports/last-results` | `CaseDetail.tsx` — inline-editable header plus Details / Steps / Attachments / History tabs; Details shows the case's read-only defect list |
+| Test runs | `src/features/runs/RunList.tsx` — status-summary badges with configuration and tag filters | `RunDetail.tsx` — Cases tab with inline status recording (the record echoes the stored result, painted in place) and the result dialog — where the case's own defect links are fetched from the defects route (TucanoTestAPI#460) — and an Import tab for JUnit/JSON |
 | Milestones | `src/features/milestones/MilestoneList.tsx` — five-segment progress bars | `MilestoneDetail.tsx` — edit, duplicate, delete, linked suites/runs |
 | Configurations | `src/features/configurations/ConfigurationList.tsx` | `ConfigurationDetail.tsx` |
 | Reports | `src/features/reports/ReportsView.tsx` — coverage and summary panels with scope filters | — |
