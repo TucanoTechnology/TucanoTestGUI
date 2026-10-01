@@ -7,3 +7,8 @@ coverage/
 !.env.example
 .DS_Store
 *.log
+
+# Playwright output (screenshots, traces, HTML report)
+playwright-report/
+test-results/
+e2e/.auth/

@@ -42,7 +42,10 @@ one shows the key, because a rename never moves it.
 
 ## Accessibility
 
-The GUI targets **WCAG 2.1 Level AA**. Conformance is enforced in CI: `src/App.test.tsx` runs `axe-core` restricted to the `wcag2a`, `wcag2aa`, `wcag21a` and `wcag21aa` rule tags, and the build fails on any violation.
+The GUI targets **WCAG 2.1 Level AA**. Conformance is enforced in CI at two levels:
+
+- **Unit** — each component's vitest file runs `axe-core` (tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`) against the rendered DOM, and `src/styles.test.ts` computes WCAG 1.4.3 ratios for every token pairing the stylesheet relies on, so a palette edit that breaks contrast fails `npm test`.
+- **Browser** — `npm run test:e2e` (Playwright + `@axe-core/playwright`, CI job `e2e`) sweeps every page, tab and dialog of the real production bundle and fails on any violation, **including `color-contrast`**, which jsdom cannot evaluate. The run is hermetic: the built bundle is served by `scripts/e2e-static.mjs` against `scripts/e2e-api.mjs`, backed by `e2e/fixtures.json` recorded from a seeded deployment by `scripts/capture-e2e-fixtures.mjs`. The same job verifies the keyboard journeys: skip link, Tab-reachable nav rail, arrow-key tabs and dialog dismissal.
 
 Baseline requirements:
 
@@ -55,7 +58,7 @@ Baseline requirements:
 
 Automated testing catches roughly a third of accessibility defects. Manual keyboard and screen reader checks are still required before release.
 
-> **Known gap:** `axe-core` cannot evaluate the colour-contrast rule under jsdom because there is no canvas, so contrast is not checked by `npm test` at all and still needs browser-based verification before release.
+> The unit-level axe calls still disable `color-contrast` (jsdom has no renderer); that is what the browser job exists to cover. The remaining known limit is that the e2e palette check judges the recorded light theme — a future dark theme (see #170's action list) must extend both contrast tables.
 
 ## Design tokens
 
@@ -80,6 +83,7 @@ component styles landing in the design-system tickets that follow. See
 npm ci
 npm run dev        # development server on http://localhost:5173
 npm test           # unit and accessibility tests
+npm run test:e2e   # browser accessibility (axe incl. contrast) + keyboard suite
 npm run typecheck  # TypeScript only
 npm run build      # production bundle
 ```
