@@ -40,7 +40,12 @@ describe("design tokens", () => {
   it("no colour literal outside :root", () => {
     const rootMatch = css.match(/:root\s*\{[^}]+\}/s);
     const rootBlock = rootMatch ? rootMatch[0] : "";
-    const outsideRoot = css.replace(rootBlock, "");
+    // Comments carry issue citations like `#173`, which are hex literals to a
+    // naive scan and never to a renderer; strip comment blocks before asking
+    // what colours the rules themselves declare.
+    const outsideRoot = css
+      .replace(rootBlock, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
     const hexLiterals = outsideRoot.match(/#[0-9a-fA-F]{3,8}\b/g);
     const rgbaLiterals = outsideRoot.match(/rgba?\(/g);
     expect(hexLiterals ?? []).toEqual([]);

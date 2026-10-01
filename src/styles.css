@@ -2141,3 +2141,20 @@ textarea {
 .skip-link:focus-visible {
   transform: none;
 }
+
+/* Row windowing (#173): past the threshold the list scrolls in its own
+   region and rows carry the fixed height the math assumes. */
+.case-list__scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.case-list__scroll--virtual {
+  overflow-y: auto;
+  contain: content;
+}
+
+.case-list__scroll--virtual .case-table__row {
+  height: 48px;
+  overflow: hidden;
+}
