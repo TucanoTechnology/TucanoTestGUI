@@ -1,0 +1,1097 @@
+{
+ "/projects": {
+  "status": 200,
+  "body": [
+   "checkout.json",
+   "payments.json"
+  ]
+ },
+ "/projects/checkout.json": {
+  "status": 200,
+  "body": {
+   "description": "Checkout demo project",
+   "name": "checkout",
+   "projectId": "checkout.json",
+   "tags": [
+    "checkout",
+    "regression"
+   ],
+   "testCases": [
+    {
+     "attachments": [
+      {
+       "filename": "1790811986754141131-orders-payload.txt",
+       "mimeType": "text/plain",
+       "originalName": "orders-payload.txt",
+       "size": 415,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Every order of the account is listed with its status",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Open the order history",
+       "attachments": [
+        {
+         "filename": "1790811986757144721-step-2.txt",
+         "mimeType": "text/plain",
+         "originalName": "step-2.txt",
+         "size": 375
+        }
+       ],
+       "expectedResult": "The orders are listed newest first"
+      }
+     ],
+     "testCaseId": "TC-ORDERS-1",
+     "title": "List the orders of an account",
+     "version": 2
+    },
+    {
+     "attachments": [
+      {
+       "filename": "1790811986751054858-checkout-page.txt",
+       "mimeType": "text/plain",
+       "originalName": "checkout-page.txt",
+       "size": 432,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Checkout page renders",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Open the checkout page",
+       "expectedResult": "The checkout form is shown"
+      }
+     ],
+     "testCaseId": "TC-PROJECT-1",
+     "title": "Reach the checkout page",
+     "version": 2
+    }
+   ],
+   "testSuites": [
+    {
+     "name": "portable.checkout",
+     "suiteId": "portable.checkout.json",
+     "testCases": []
+    },
+    {
+     "name": "regression.checkout",
+     "suiteId": "regression.checkout.json",
+     "testCases": []
+    },
+    {
+     "name": "smoke.checkout",
+     "suiteId": "smoke.checkout.json",
+     "testCases": [
+      {
+       "attachments": [
+        {
+         "filename": "1790811986738655405-cart-state.txt",
+         "mimeType": "text/plain",
+         "originalName": "cart-state.txt",
+         "size": 286,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Cart shows one item",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Add an item to the cart",
+         "attachments": [
+          {
+           "filename": "1790811986741793084-step-2.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-2.txt",
+           "size": 375
+          }
+         ],
+         "expectedResult": "The cart badge shows 1"
+        }
+       ],
+       "testCaseId": "TC-CART-1",
+       "title": "Add an item to the cart",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986760008091-catalog-snapshot.txt",
+         "mimeType": "text/plain",
+         "originalName": "catalog-snapshot.txt",
+         "size": 514,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Each page holds the page size asked for",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Request page 1 of the catalog",
+         "expectedResult": "Three items are returned"
+        }
+       ],
+       "testCaseId": "TC-CATALOG-1",
+       "title": "Browse the catalog page by page",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986722195824-login-flow.txt",
+         "mimeType": "text/plain",
+         "originalName": "login-flow.txt",
+         "size": 161,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Session is established",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Open the sign-in form",
+         "attachments": [
+          {
+           "filename": "1790811986725442274-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The form is shown"
+        },
+        {
+         "action": "Submit a valid account",
+         "expectedResult": "The dashboard is shown"
+        }
+       ],
+       "tags": [
+        "auth"
+       ],
+       "testCaseId": "TC-LOGIN-1",
+       "title": "Sign in with a valid account",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986728466873-lock-message.txt",
+         "mimeType": "text/plain",
+         "originalName": "lock-message.txt",
+         "size": 469,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Sign-in is refused with a message",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Open the sign-in form",
+         "attachments": [
+          {
+           "filename": "1790811986731528891-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The form is shown"
+        },
+        {
+         "action": "Submit a locked account",
+         "attachments": [
+          {
+           "filename": "1790811986734998074-step-2.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-2.txt",
+           "size": 375
+          }
+         ],
+         "expectedResult": "A lock message is shown"
+        }
+       ],
+       "tags": [
+        "auth"
+       ],
+       "testCaseId": "TC-LOGIN-2",
+       "title": "Sign in with a locked account",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986762591882-search-response.txt",
+         "mimeType": "text/plain",
+         "originalName": "search-response.txt",
+         "size": 429,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "The matching items come back best match first",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Search for an item",
+         "attachments": [
+          {
+           "filename": "1790811986764418960-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The matching items are ranked by score"
+        }
+       ],
+       "testCaseId": "TC-SEARCH-1",
+       "title": "Search the catalog for an item",
+       "version": 2
+      }
+     ]
+    },
+    {
+     "name": "smoke.checkout",
+     "suiteId": "smoke.checkout-copy-1790811986861665758.json",
+     "testCases": []
+    }
+   ]
+  }
+ },
+ "/reports/last-results?projectId=checkout.json": {
+  "status": 200,
+  "body": {
+   "projectId": "checkout.json",
+   "cases": [
+    {
+     "testCaseId": "TC-CART-1",
+     "status": "Retest",
+     "runId": "nightly.json",
+     "timestamp": "1790811986"
+    },
+    {
+     "testCaseId": "TC-LOGIN-1",
+     "status": "Passed",
+     "runId": "nightly.json",
+     "timestamp": "1790811986"
+    },
+    {
+     "testCaseId": "TC-LOGIN-2",
+     "status": "Failed",
+     "runId": "nightly.json",
+     "timestamp": "1790811986"
+    },
+    {
+     "testCaseId": "TC-PROJECT-1",
+     "status": "Blocked",
+     "runId": "nightly.json",
+     "timestamp": "1790811986"
+    }
+   ]
+  }
+ },
+ "/projects/checkout.json/test_runs": {
+  "status": 200,
+  "body": [
+   "nightly-import.json",
+   "nightly.json"
+  ]
+ },
+ "/test_runs/nightly-import.json": {
+  "status": 200,
+  "body": {
+   "caseVersions": {
+    "TC-CART-1": 2,
+    "TC-LOGIN-1": 2
+   },
+   "name": "nightly-import",
+   "projects": [
+    {
+     "name": "checkout",
+     "projectId": "checkout.json",
+     "testSuites": []
+    }
+   ],
+   "results": [
+    {
+     "status": "Passed",
+     "testCaseId": "TC-LOGIN-1",
+     "timestamp": "1790811986"
+    },
+    {
+     "notes": "item missing",
+     "status": "Failed",
+     "testCaseId": "TC-CART-1",
+     "timestamp": "1790811986"
+    }
+   ],
+   "tags": [
+    "nightly"
+   ],
+   "testCases": [
+    {
+     "attachments": [
+      {
+       "filename": "1790811986722195824-login-flow.txt",
+       "mimeType": "text/plain",
+       "originalName": "login-flow.txt",
+       "size": 161,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Session is established",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Open the sign-in form",
+       "attachments": [
+        {
+         "filename": "1790811986725442274-step-1.txt",
+         "mimeType": "text/plain",
+         "originalName": "step-1.txt",
+         "size": 134
+        }
+       ],
+       "expectedResult": "The form is shown"
+      },
+      {
+       "action": "Submit a valid account",
+       "expectedResult": "The dashboard is shown"
+      }
+     ],
+     "tags": [
+      "auth"
+     ],
+     "testCaseId": "TC-LOGIN-1",
+     "title": "Sign in with a valid account",
+     "version": 2
+    },
+    {
+     "attachments": [
+      {
+       "filename": "1790811986738655405-cart-state.txt",
+       "mimeType": "text/plain",
+       "originalName": "cart-state.txt",
+       "size": 286,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Cart shows one item",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Add an item to the cart",
+       "attachments": [
+        {
+         "filename": "1790811986741793084-step-2.txt",
+         "mimeType": "text/plain",
+         "originalName": "step-2.txt",
+         "size": 375
+        }
+       ],
+       "expectedResult": "The cart badge shows 1"
+      }
+     ],
+     "testCaseId": "TC-CART-1",
+     "title": "Add an item to the cart",
+     "version": 2
+    }
+   ],
+   "testRunId": "nightly-import.json",
+   "timestamp": "1790811986"
+  }
+ },
+ "/test_runs/nightly.json": {
+  "status": 200,
+  "body": {
+   "caseVersions": {
+    "TC-CART-1": 2,
+    "TC-LOGIN-1": 2,
+    "TC-LOGIN-2": 2,
+    "TC-PROJECT-1": 2
+   },
+   "configurations": [
+    {
+     "configId": "chrome-linux.json",
+     "name": "chrome-linux"
+    }
+   ],
+   "name": "nightly",
+   "projects": [
+    {
+     "name": "checkout",
+     "projectId": "checkout.json",
+     "testSuites": []
+    }
+   ],
+   "results": [
+    {
+     "durationMs": 1200,
+     "notes": "signed in",
+     "status": "Passed",
+     "testCaseId": "TC-LOGIN-1",
+     "timestamp": "1790811986"
+    },
+    {
+     "defectLinks": [
+      {
+       "defectId": "BUG-101",
+       "defectUrl": "https://acme.atlassian.net/browse/BUG-101",
+       "linkId": "link-1790811986814881394",
+       "linkedAt": "1790811986",
+       "status": "Open",
+       "title": "Lock message missing",
+       "trackerType": "jira"
+      },
+      {
+       "defectId": "42",
+       "defectUrl": "https://gitlab.com/acme/checkout/-/issues/42",
+       "linkId": "link-1790811986824552588",
+       "linkedAt": "1790811986",
+       "trackerType": "gitlab"
+      },
+      {
+       "defectId": "OPS-7",
+       "defectUrl": "https://tracker.example/OPS-7",
+       "linkId": "link-1790811986829255399",
+       "linkedAt": "1790811986",
+       "trackerType": "custom"
+      }
+     ],
+     "durationMs": 800,
+     "notes": "lock message missing",
+     "status": "Failed",
+     "testCaseId": "TC-LOGIN-2",
+     "timestamp": "1790811986"
+    },
+    {
+     "status": "Blocked",
+     "testCaseId": "TC-PROJECT-1",
+     "timestamp": "1790811986"
+    },
+    {
+     "status": "Retest",
+     "testCaseId": "TC-CART-1",
+     "timestamp": "1790811986"
+    }
+   ],
+   "tags": [
+    "nightly"
+   ],
+   "testCases": [
+    {
+     "attachments": [
+      {
+       "filename": "1790811986722195824-login-flow.txt",
+       "mimeType": "text/plain",
+       "originalName": "login-flow.txt",
+       "size": 161,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Session is established",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Open the sign-in form",
+       "attachments": [
+        {
+         "filename": "1790811986725442274-step-1.txt",
+         "mimeType": "text/plain",
+         "originalName": "step-1.txt",
+         "size": 134
+        }
+       ],
+       "expectedResult": "The form is shown"
+      },
+      {
+       "action": "Submit a valid account",
+       "expectedResult": "The dashboard is shown"
+      }
+     ],
+     "tags": [
+      "auth"
+     ],
+     "testCaseId": "TC-LOGIN-1",
+     "title": "Sign in with a valid account",
+     "version": 2
+    },
+    {
+     "attachments": [
+      {
+       "filename": "1790811986751054858-checkout-page.txt",
+       "mimeType": "text/plain",
+       "originalName": "checkout-page.txt",
+       "size": 432,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Checkout page renders",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Open the checkout page",
+       "expectedResult": "The checkout form is shown"
+      }
+     ],
+     "testCaseId": "TC-PROJECT-1",
+     "title": "Reach the checkout page",
+     "version": 2
+    }
+   ],
+   "testRunId": "nightly.json",
+   "testSuites": [
+    {
+     "name": "smoke.checkout",
+     "suiteId": "smoke.checkout.json",
+     "testCases": [
+      {
+       "attachments": [
+        {
+         "filename": "1790811986738655405-cart-state.txt",
+         "mimeType": "text/plain",
+         "originalName": "cart-state.txt",
+         "size": 286,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Cart shows one item",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Add an item to the cart",
+         "attachments": [
+          {
+           "filename": "1790811986741793084-step-2.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-2.txt",
+           "size": 375
+          }
+         ],
+         "expectedResult": "The cart badge shows 1"
+        }
+       ],
+       "testCaseId": "TC-CART-1",
+       "title": "Add an item to the cart",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986722195824-login-flow.txt",
+         "mimeType": "text/plain",
+         "originalName": "login-flow.txt",
+         "size": 161,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Session is established",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Open the sign-in form",
+         "attachments": [
+          {
+           "filename": "1790811986725442274-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The form is shown"
+        },
+        {
+         "action": "Submit a valid account",
+         "expectedResult": "The dashboard is shown"
+        }
+       ],
+       "tags": [
+        "auth"
+       ],
+       "testCaseId": "TC-LOGIN-1",
+       "title": "Sign in with a valid account",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986728466873-lock-message.txt",
+         "mimeType": "text/plain",
+         "originalName": "lock-message.txt",
+         "size": 469,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Sign-in is refused with a message",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Open the sign-in form",
+         "attachments": [
+          {
+           "filename": "1790811986731528891-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The form is shown"
+        },
+        {
+         "action": "Submit a locked account",
+         "attachments": [
+          {
+           "filename": "1790811986734998074-step-2.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-2.txt",
+           "size": 375
+          }
+         ],
+         "expectedResult": "A lock message is shown"
+        }
+       ],
+       "tags": [
+        "auth"
+       ],
+       "testCaseId": "TC-LOGIN-2",
+       "title": "Sign in with a locked account",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986744713990-move-trace.txt",
+         "mimeType": "text/plain",
+         "originalName": "move-trace.txt",
+         "size": 1009,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Cart still shows the item after signing in",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Add an item, sign in, return to the cart",
+         "attachments": [
+          {
+           "filename": "1790811986747797498-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The cart still holds the item"
+        }
+       ],
+       "testCaseId": "TC-MOVE-1",
+       "title": "Keep an item in the cart across sign-in",
+       "version": 2
+      }
+     ]
+    }
+   ],
+   "timestamp": "1757800000"
+  }
+ },
+ "/projects/checkout.json/milestones": {
+  "status": 200,
+  "body": [
+   "v1.0.json"
+  ]
+ },
+ "/milestones/v1.0.json": {
+  "status": 200,
+  "body": {
+   "milestoneId": "v1.0.json",
+   "name": "v1.0",
+   "status": "open",
+   "testRunIds": [
+    "nightly.json"
+   ]
+  }
+ },
+ "/milestones/v1.0.json/progress": {
+  "status": 200,
+  "body": {
+   "milestoneId": "v1.0.json",
+   "totalCases": 5,
+   "passed": 1,
+   "failed": 1,
+   "blocked": 1,
+   "untested": 1,
+   "retest": 1,
+   "passPercentage": 20
+  }
+ },
+ "/projects/checkout.json/configurations": {
+  "status": 200,
+  "body": [
+   "chrome-linux.json"
+  ]
+ },
+ "/configurations/chrome-linux.json": {
+  "status": 200,
+  "body": {
+   "configId": "chrome-linux.json",
+   "name": "chrome-linux"
+  }
+ },
+ "/test_cases/TC-CART-1/history": {
+  "status": 200,
+  "body": [
+   {
+    "changedFields": [
+     "steps"
+    ],
+    "lastModified": "2026-09-30T23:46:26Z",
+    "version": 1
+   }
+  ]
+ },
+ "/test_suites/portable.checkout.json": {
+  "status": 409,
+  "body": {
+   "error": {
+    "code": "conflict",
+    "message": "This identifier is used by 2 parents (project checkout.json, project payments.json); address the intended one through POST /projects/{id}/test_suites, or the matching /{suite_id} delete",
+    "requestId": "d45fb25481d4a17d"
+   }
+  }
+ },
+ "/reports/coverage?projectId=checkout.json": {
+  "status": 200,
+  "body": {
+   "projectId": "checkout.json",
+   "totalCases": 7,
+   "suites": [
+    {
+     "suiteId": "portable.checkout.json",
+     "name": "portable.checkout",
+     "caseCount": 0
+    },
+    {
+     "suiteId": "regression.checkout.json",
+     "name": "regression.checkout",
+     "caseCount": 0
+    },
+    {
+     "suiteId": "smoke.checkout.json",
+     "name": "smoke.checkout",
+     "caseCount": 5
+    },
+    {
+     "suiteId": "smoke.checkout-copy-1790811986861665758.json",
+     "name": "smoke.checkout",
+     "caseCount": 0
+    }
+   ]
+  }
+ },
+ "/reports/summary?projectId=checkout.json": {
+  "status": 200,
+  "body": {
+   "total": 6,
+   "passed": 2,
+   "failed": 2,
+   "blocked": 1,
+   "untested": 0,
+   "passPercentage": 33.33333333333333,
+   "totalDurationMs": 2000
+  }
+ },
+ "/projects/payments.json": {
+  "status": 200,
+  "body": {
+   "name": "payments",
+   "projectId": "payments.json",
+   "testCases": [
+    {
+     "attachments": [
+      {
+       "filename": "1790811986760008091-catalog-snapshot.txt",
+       "mimeType": "text/plain",
+       "originalName": "catalog-snapshot.txt",
+       "size": 514,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Each page holds the page size asked for",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Request page 1 of the catalog",
+       "expectedResult": "Three items are returned"
+      }
+     ],
+     "testCaseId": "TC-CATALOG-1",
+     "title": "Browse the catalog page by page",
+     "version": 2
+    },
+    {
+     "attachments": [
+      {
+       "filename": "1790811986722195824-login-flow.txt",
+       "mimeType": "text/plain",
+       "originalName": "login-flow.txt",
+       "size": 161,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Session is established",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Open the sign-in form",
+       "attachments": [
+        {
+         "filename": "1790811986725442274-step-1.txt",
+         "mimeType": "text/plain",
+         "originalName": "step-1.txt",
+         "size": 134
+        }
+       ],
+       "expectedResult": "The form is shown"
+      },
+      {
+       "action": "Submit a valid account",
+       "expectedResult": "The dashboard is shown"
+      }
+     ],
+     "tags": [
+      "auth"
+     ],
+     "testCaseId": "TC-LOGIN-1",
+     "title": "Sign in with a valid account",
+     "version": 2
+    },
+    {
+     "attachments": [
+      {
+       "filename": "1790811986754141131-orders-payload.txt",
+       "mimeType": "text/plain",
+       "originalName": "orders-payload.txt",
+       "size": 415,
+       "uploadedAt": "2026-09-30T23:46:26Z"
+      }
+     ],
+     "expectedResult": "Every order of the account is listed with its status",
+     "lastModified": "2026-09-30T23:46:26Z",
+     "steps": [
+      {
+       "action": "Open the order history",
+       "attachments": [
+        {
+         "filename": "1790811986757144721-step-2.txt",
+         "mimeType": "text/plain",
+         "originalName": "step-2.txt",
+         "size": 375
+        }
+       ],
+       "expectedResult": "The orders are listed newest first"
+      }
+     ],
+     "testCaseId": "TC-ORDERS-1",
+     "title": "List the orders of an account",
+     "version": 2
+    }
+   ],
+   "testSuites": [
+    {
+     "name": "portable.checkout",
+     "suiteId": "portable.checkout.json",
+     "testCases": []
+    },
+    {
+     "name": "smoke.payments",
+     "suiteId": "smoke.payments.json",
+     "testCases": [
+      {
+       "attachments": [
+        {
+         "filename": "1790811986744713990-move-trace.txt",
+         "mimeType": "text/plain",
+         "originalName": "move-trace.txt",
+         "size": 1009,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "Cart still shows the item after signing in",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Add an item, sign in, return to the cart",
+         "attachments": [
+          {
+           "filename": "1790811986747797498-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The cart still holds the item"
+        }
+       ],
+       "testCaseId": "TC-MOVE-1",
+       "title": "Keep an item in the cart across sign-in",
+       "version": 2
+      },
+      {
+       "attachments": [
+        {
+         "filename": "1790811986762591882-search-response.txt",
+         "mimeType": "text/plain",
+         "originalName": "search-response.txt",
+         "size": 429,
+         "uploadedAt": "2026-09-30T23:46:26Z"
+        }
+       ],
+       "expectedResult": "The matching items come back best match first",
+       "lastModified": "2026-09-30T23:46:26Z",
+       "steps": [
+        {
+         "action": "Search for an item",
+         "attachments": [
+          {
+           "filename": "1790811986764418960-step-1.txt",
+           "mimeType": "text/plain",
+           "originalName": "step-1.txt",
+           "size": 134
+          }
+         ],
+         "expectedResult": "The matching items are ranked by score"
+        }
+       ],
+       "testCaseId": "TC-SEARCH-1",
+       "title": "Search the catalog for an item",
+       "version": 2
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "/reports/last-results?projectId=payments.json": {
+  "status": 200,
+  "body": {
+   "projectId": "payments.json",
+   "cases": []
+  }
+ },
+ "/projects/payments.json/test_runs": {
+  "status": 200,
+  "body": []
+ },
+ "/projects/payments.json/milestones": {
+  "status": 200,
+  "body": []
+ },
+ "/projects/payments.json/configurations": {
+  "status": 200,
+  "body": [
+   "firefox-linux.json"
+  ]
+ },
+ "/configurations/firefox-linux.json": {
+  "status": 200,
+  "body": {
+   "browser": "firefox",
+   "configId": "firefox-linux.json",
+   "name": "firefox-linux",
+   "os": "linux"
+  }
+ },
+ "/test_cases/TC-MOVE-1/history": {
+  "status": 200,
+  "body": [
+   {
+    "changedFields": [
+     "steps"
+    ],
+    "lastModified": "2026-09-30T23:46:26Z",
+    "version": 1
+   }
+  ]
+ },
+ "/reports/coverage?projectId=payments.json": {
+  "status": 200,
+  "body": {
+   "projectId": "payments.json",
+   "totalCases": 5,
+   "suites": [
+    {
+     "suiteId": "portable.checkout.json",
+     "name": "portable.checkout",
+     "caseCount": 0
+    },
+    {
+     "suiteId": "smoke.payments.json",
+     "name": "smoke.payments",
+     "caseCount": 2
+    }
+   ]
+  }
+ },
+ "/reports/summary?projectId=payments.json": {
+  "status": 200,
+  "body": {
+   "total": 0,
+   "passed": 0,
+   "failed": 0,
+   "blocked": 0,
+   "untested": 0,
+   "passPercentage": 0,
+   "totalDurationMs": 0
+  }
+ },
+ "/reports/coverage": {
+  "status": 200,
+  "body": {
+   "totalCases": 12,
+   "suites": [
+    {
+     "suiteId": "portable.checkout.json",
+     "name": "portable.checkout",
+     "caseCount": 0
+    },
+    {
+     "suiteId": "regression.checkout.json",
+     "name": "regression.checkout",
+     "caseCount": 0
+    },
+    {
+     "suiteId": "smoke.checkout.json",
+     "name": "smoke.checkout",
+     "caseCount": 5
+    },
+    {
+     "suiteId": "smoke.checkout-copy-1790811986861665758.json",
+     "name": "smoke.checkout",
+     "caseCount": 0
+    },
+    {
+     "suiteId": "portable.checkout.json",
+     "name": "portable.checkout",
+     "caseCount": 0
+    },
+    {
+     "suiteId": "smoke.payments.json",
+     "name": "smoke.payments",
+     "caseCount": 2
+    }
+   ]
+  }
+ },
+ "/reports/summary": {
+  "status": 200,
+  "body": {
+   "total": 6,
+   "passed": 2,
+   "failed": 2,
+   "blocked": 1,
+   "untested": 0,
+   "passPercentage": 33.33333333333333,
+   "totalDurationMs": 2000
+  }
+ }
+}
