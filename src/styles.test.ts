@@ -55,6 +55,120 @@ describe("design tokens", () => {
     expect(css).toMatch(/\.sr-only\s*\{/);
     expect(css).toMatch(/\.truncate\s*\{/);
   });
+
+  /**
+   * The contrast table (#170, #172).
+   *
+   * WCAG 2.1 SC 1.4.3 asks for 4.5:1, and this application paints almost all
+   * of its text at 11–13px — always the ordinary-text bar, never the 3:1
+   * large-text exemption. jsdom cannot render, so the unit-level axe calls
+   * skip `color-contrast` and the browser job (#123) is the runtime gate;
+   * this test is the build-time one: it reads the token VALUES out of `:root`
+   * and fails the moment a token edit breaks a pairing any rule depends on.
+   * The pairs are the backgrounds each text token is actually drawn on in
+   * this stylesheet, including every tinted semantic surface a badge or
+   * notice can land on.
+   */
+  const ROOT_BLOCK = css.match(/:root\s*\{[^}]+\}/s)?.[0] ?? "";
+  const tokenValues = new Map<string, string>();
+  for (const match of ROOT_BLOCK.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+    tokenValues.set(match[1]!, match[2]!.trim());
+  }
+
+  function hexToRgb(hex: string): [number, number, number] {
+    const value = hex.replace("#", "");
+    const expanded =
+      value.length === 3
+        ? value
+            .split("")
+            .map((char) => char + char)
+            .join("")
+        : value;
+    const num = Number.parseInt(expanded, 16);
+    if (!/^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(hex) || Number.isNaN(num)) {
+      throw new Error(`not a hex colour: ${hex}`);
+    }
+    return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+  }
+
+  function relativeLuminance(hex: string): number {
+    const channels = hexToRgb(hex).map((byte) => byte / 255);
+    const linear = channels.map((c) =>
+      c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+    );
+    return (
+      0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!
+    );
+  }
+
+  function contrastRatio(fgHex: string, bgHex: string): number {
+    const first = relativeLuminance(fgHex);
+    const second = relativeLuminance(bgHex);
+    const lighter = Math.max(first, second);
+    const darker = Math.min(first, second);
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  const TEXT_TOKENS = [
+    "--color-text",
+    "--color-text-secondary",
+    "--color-text-muted",
+  ];
+  const SURFACE_TOKENS = [
+    "--color-bg",
+    "--color-surface",
+    "--color-surface-hover",
+    "--color-surface-active",
+    "--color-primary-light",
+    "--color-success-light",
+    "--color-danger-light",
+    "--color-warning-light",
+    "--color-info-light",
+  ];
+
+  it("keeps every text token at 4.5:1 on every surface it is drawn on", () => {
+    for (const text of TEXT_TOKENS) {
+      for (const surface of SURFACE_TOKENS) {
+        const fg = tokenValues.get(text);
+        const bg = tokenValues.get(surface);
+        expect(fg, `${text} is undeclared`).toBeTruthy();
+        expect(bg, `${surface} is undeclared`).toBeTruthy();
+        const ratio = contrastRatio(fg!, bg!);
+        expect(
+          ratio,
+          `${text} (${fg}) on ${surface} (${bg}) is ${ratio.toFixed(2)}:1, below 4.5:1`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("keeps the semantic badge and control pairings at 4.5:1", () => {
+    const pairs: [string, string][] = [
+      ["--color-text-success", "--color-success-light"],
+      ["--color-text-danger", "--color-danger-light"],
+      ["--color-text-warning", "--color-warning-light"],
+      ["--color-text-info", "--color-info-light"],
+      // error copy outside a tinted notice sits on plain surfaces
+      ["--color-text-danger", "--color-surface"],
+      ["--color-text-warning", "--color-surface"],
+      ["--color-text-info", "--color-surface"],
+      // buttons and chips: the inverted and the tinted pairs
+      ["--color-primary-text", "--color-primary"],
+      ["--color-primary", "--color-surface"],
+      ["--color-primary-hover", "--color-primary-light"],
+    ];
+    for (const [fgToken, bgToken] of pairs) {
+      const fg = tokenValues.get(fgToken);
+      const bg = tokenValues.get(bgToken);
+      expect(fg, `${fgToken} is undeclared`).toBeTruthy();
+      expect(bg, `${bgToken} is undeclared`).toBeTruthy();
+      const ratio = contrastRatio(fg!, bg!);
+      expect(
+        ratio,
+        `${fgToken} (${fg}) on ${bgToken} (${bg}) is ${ratio.toFixed(2)}:1, below 4.5:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
 });
 
 /* ---------------------------------------------------------------------------

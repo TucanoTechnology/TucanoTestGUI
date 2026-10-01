@@ -7,8 +7,8 @@
   --color-border: #dee2e6;
   --color-border-light: #e9ecef;
   --color-text: #212529;
-  --color-text-secondary: #6c757d;
-  --color-text-muted: #adb5bd;
+  --color-text-secondary: #5f6771;
+  --color-text-muted: #5b6470;
 
   /* Colors — brand */
   --color-primary: #2563eb;
@@ -25,6 +25,16 @@
   --color-danger-light: #fee2e2;
   --color-info: #0891b2;
   --color-info-light: #cffafe;
+  /* Colors — text drawn over the light semantic backgrounds.
+     The semantic tokens above are the saturated UI colours (borders, fills,
+     non-text state); a small text of those hues fails 4.5:1 on its own tint,
+     so every rule that paints text on a *-light background uses these
+     deepened pairings. The pairing table in styles.test.ts enforces it. */
+  --color-text-success: #166534;
+  --color-text-danger: #b91c1c;
+  --color-text-warning: #92400e;
+  --color-text-info: #155e75;
+
   --color-backdrop: rgba(15, 23, 42, 0.45);
 
   /* Spacing — 4px base */
@@ -210,7 +220,7 @@ textarea {
 
 .project-switcher__error {
   font-size: var(--font-size-xs);
-  color: var(--color-danger);
+  color: var(--color-text-danger);
 }
 
 .navrail {
@@ -554,7 +564,7 @@ textarea {
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   background: var(--color-danger-light);
-  color: var(--color-danger);
+  color: var(--color-text-danger);
   border: 1px solid var(--color-danger-light);
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
@@ -586,23 +596,23 @@ textarea {
 
 .badge-passed {
   background: var(--color-success-light);
-  color: var(--color-success);
+  color: var(--color-text-success);
 }
 
 .badge-failed,
 .badge-fail {
   background: var(--color-danger-light);
-  color: var(--color-danger);
+  color: var(--color-text-danger);
 }
 
 .badge-blocked {
   background: var(--color-warning-light);
-  color: var(--color-warning);
+  color: var(--color-text-warning);
 }
 
 .badge-retest {
   background: var(--color-info-light);
-  color: var(--color-info);
+  color: var(--color-text-info);
 }
 
 .badge-untested {
@@ -612,12 +622,12 @@ textarea {
 
 .badge-priority-medium {
   background: var(--color-warning-light);
-  color: var(--color-warning);
+  color: var(--color-text-warning);
 }
 
 .badge-priority-low {
   background: var(--color-info-light);
-  color: var(--color-info);
+  color: var(--color-text-info);
 }
 
 .tag-list {
@@ -1616,17 +1626,17 @@ textarea {
 
 .status-badge--passed {
   background: var(--color-success-light);
-  color: var(--color-success);
+  color: var(--color-text-success);
 }
 
 .status-badge--failed {
   background: var(--color-danger-light);
-  color: var(--color-danger);
+  color: var(--color-text-danger);
 }
 
 .status-badge--blocked {
   background: var(--color-warning-light);
-  color: var(--color-warning);
+  color: var(--color-text-warning);
 }
 
 .status-badge--untested {
@@ -1636,7 +1646,7 @@ textarea {
 
 .status-badge--retest {
   background: var(--color-info-light);
-  color: var(--color-info);
+  color: var(--color-text-info);
 }
 
 .status-badge--priority {
@@ -1647,12 +1657,12 @@ textarea {
 .status-badge--priority.status-badge--high,
 .status-badge--priority.status-badge--critical {
   background: var(--color-danger-light);
-  color: var(--color-danger);
+  color: var(--color-text-danger);
 }
 
 .status-badge--priority.status-badge--medium {
   background: var(--color-warning-light);
-  color: var(--color-warning);
+  color: var(--color-text-warning);
 }
 
 .status-select {
