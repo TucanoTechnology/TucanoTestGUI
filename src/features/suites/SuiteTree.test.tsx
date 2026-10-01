@@ -43,6 +43,7 @@ function AnnouncementProbe() {
 
 function renderTree(selectedSuiteId: string | null = null) {
   const onSelectSuite = vi.fn();
+  const onSelectCase = vi.fn();
   const view = render(
     <AuthProvider>
       <ProjectProvider>
@@ -53,13 +54,14 @@ function renderTree(selectedSuiteId: string | null = null) {
             projectId={PROJECT.projectId}
             selectedSuiteId={selectedSuiteId}
             onSelectSuite={onSelectSuite}
+            onSelectCase={onSelectCase}
           />
           <AnnouncementProbe />
         </aside>
       </ProjectProvider>
     </AuthProvider>,
   );
-  return { ...view, onSelectSuite };
+  return { ...view, onSelectSuite, onSelectCase };
 }
 
 afterEach(() => {
@@ -175,6 +177,28 @@ describe("SuiteTree", () => {
     expect(
       screen.getByRole("button", { name: "+ Create suite" }),
     ).toBeInTheDocument();
+  });
+
+
+  it("a case leaf is a button that scopes the suite and picks the case (#178)", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, PROJECT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    const { onSelectSuite, onSelectCase } = renderTree();
+
+    // Suites expand on click; the leaf lives inside the expanded group.
+    fireEvent.click(await screen.findByRole("button", { name: /Login/ }));
+    const leaf = await screen.findByRole("treeitem", { name: "Signs in" });
+    expect(leaf.tagName).toBe("BUTTON");
+    fireEvent.click(leaf);
+
+    expect(onSelectSuite).toHaveBeenLastCalledWith("suite-login");
+    void onSelectSuite;
+    expect(onSelectCase).toHaveBeenCalledWith("suite-login", "case-signin");
   });
 
   it("shows the API error envelope when the project cannot be read", async () => {

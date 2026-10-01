@@ -22,6 +22,12 @@ interface SuiteTreeProps {
   projectId: string;
   selectedSuiteId: string | null;
   onSelectSuite: (suiteId: string | null) => void;
+  /**
+   * A leaf is a case: choosing it scopes the centre list to the suite and
+   * selects the case (#178). The tree used to render leaves as inert labels,
+   * which read as broken UI.
+   */
+  onSelectCase: (suiteId: string, caseId: string) => void;
 }
 
 function countSuiteCases(suite: TestSuite): number {
@@ -42,6 +48,7 @@ interface SuiteTreeNodeProps {
   selected: boolean;
   onToggle: (suiteId: string) => void;
   onSelect: (suiteId: string) => void;
+  onSelectCase: (suiteId: string, caseId: string) => void;
 }
 
 function SuiteTreeNode({
@@ -50,6 +57,7 @@ function SuiteTreeNode({
   selected,
   onToggle,
   onSelect,
+  onSelectCase,
 }: SuiteTreeNodeProps) {
   const cases = suite.testCases ?? [];
   const hasCases = cases.length > 0;
@@ -76,13 +84,20 @@ function SuiteTreeNode({
       {hasCases && expanded && (
         <ul role="group">
           {cases.map((testCase) => (
-            <li key={testCase.testCaseId} role="treeitem">
-              <span className="suite-tree__node suite-tree__node--leaf">
+            <li key={testCase.testCaseId} role="none">
+              <button
+                type="button"
+                role="treeitem"
+                className="suite-tree__node suite-tree__node--leaf"
+                onClick={() => {
+                  onSelectCase(suite.suiteId, testCase.testCaseId);
+                }}
+              >
                 <span className="suite-tree__icon" aria-hidden="true">
                   📄
                 </span>
                 <span className="suite-tree__label">{testCase.title}</span>
-              </span>
+              </button>
             </li>
           ))}
         </ul>
@@ -101,6 +116,7 @@ export function SuiteTree({
   projectId,
   selectedSuiteId,
   onSelectSuite,
+  onSelectCase,
 }: SuiteTreeProps) {
   const { client } = useAuth();
   const { projectsVersion, refreshProjects, announce } = useProjectContext();
@@ -295,6 +311,7 @@ export function SuiteTree({
               selected={selectedSuiteId === suite.suiteId}
               onToggle={toggleSuite}
               onSelect={onSelectSuite}
+              onSelectCase={onSelectCase}
             />
           ))}
 
