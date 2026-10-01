@@ -95,6 +95,50 @@ describe("SuiteTree", () => {
     ]);
   });
 
+  it("the toolbar Move/Copy names the selected suite and opens placement (#181)", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, PROJECT);
+      }
+      if (url === "/api/projects" && method === "GET") {
+        return jsonResponse(200, ["checkout"]);
+      }
+      if (url === "/api/projects/checkout/test_suites" && method === "GET") {
+        return jsonResponse(200, ["suite-login"]);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderTree("suite-login");
+
+    const place = await screen.findByRole("button", {
+      name: "Move or copy the selected suite",
+    });
+    expect(place).toBeEnabled();
+    fireEvent.click(place);
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Move or copy suite-login",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("disables the toolbar Move/Copy while no suite is selected (#181)", async () => {
+    mockApi(({ url, method }) => {
+      if (url === "/api/projects/checkout" && method === "GET") {
+        return jsonResponse(200, PROJECT);
+      }
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    renderTree(null);
+
+    const place = await screen.findByRole("button", {
+      name: "Move or copy the selected suite",
+    });
+    expect(place).toBeDisabled();
+  });
+
   it("reports the selected suite and clears the selection for pinned nodes", async () => {
     mockApi(({ url, method }) => {
       if (url === "/api/projects/checkout" && method === "GET") {

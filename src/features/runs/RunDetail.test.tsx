@@ -498,7 +498,9 @@ describe("RunDetail", () => {
     expect(screen.getByText("passed")).toBeInTheDocument();
 
     // The run read plus the #182 membership inventories of its home project;
-    // the run's own configuration is not re-read, the snapshot names it.
+    // the run's own configuration is not re-read, the snapshot names it. The
+    // inventories are async: gate on their arrival, not on render luck.
+    await waitFor(() => expect(requests).toHaveLength(6));
     expect(requests.map((request) => request.url)).toEqual([
       "/api/test_runs/nightly.json",
       "/api/projects/checkout.json/test_cases",
@@ -562,6 +564,7 @@ describe("RunDetail", () => {
     const { requests } = await openDetail(store);
     // The run read plus the three listings and the configuration documents
     // the link control offers. The table itself still costs no extra read.
+    await waitFor(() => expect(requests).toHaveLength(6));
     expect(requests.map((request) => request.url)).toEqual([
       "/api/test_runs/nightly.json",
       "/api/projects/checkout.json/test_cases",
@@ -582,6 +585,7 @@ describe("RunDetail", () => {
       within(form).getByRole("option", { name: "Chrome on Linux" }),
     ).toBeInTheDocument();
     // The edit form re-reads the configurations for its own select.
+    await waitFor(() => expect(requests).toHaveLength(9));
     expect(requests.map((request) => request.url).slice(6)).toEqual([
       "/api/projects/checkout.json/configurations",
       "/api/configurations/chrome-linux.json",
@@ -823,6 +827,7 @@ describe("RunDetail", () => {
 
     // The table is built from the run document; the only other reads are
     // the #182 inventories the membership controls offer.
+    await waitFor(() => expect(requests).toHaveLength(6));
     expect(requests.map((request) => request.url)).toEqual([
       "/api/test_runs/nightly.json",
       "/api/projects/checkout.json/test_cases",

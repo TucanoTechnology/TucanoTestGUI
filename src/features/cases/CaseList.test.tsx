@@ -109,6 +109,13 @@ function mockListApi() {
   };
 
   const requests = mockApi(({ url, method, body }) => {
+    // #181: the placement dialog's own reads.
+    if (url === "/api/projects" && method === "GET") {
+      return jsonResponse(200, ["checkout"]);
+    }
+    if (url === "/api/projects/checkout/test_suites" && method === "GET") {
+      return jsonResponse(200, ["smoke.checkout"]);
+    }
     if (url === "/api/projects/checkout" && method === "GET") {
       const direct = state.cases.filter(
         (testCase) => testCase.testCaseId === "TC-PROJECT-1",
@@ -215,6 +222,30 @@ describe("CaseList", () => {
 
     // Selecting a row reports the case to the shell.
     fireEvent.click(screen.getByText("Add an item to the cart"));
+  });
+
+  it("the row action opens the placement dialog for that case (#181)", async () => {
+    mockListApi();
+    renderList();
+    await waitFor(() => expect(rows()).toHaveLength(3));
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Move or copy TC-CART-1" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Move or copy TC-CART-1",
+    });
+    // Copy is the offered default, and the row click did NOT also select.
+    expect(
+      within(dialog).getByLabelText(/Copy — leave the original in place/),
+    ).toBeChecked();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Move or copy TC-CART-1" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("names the suite node in the breadcrumb when scoped", async () => {

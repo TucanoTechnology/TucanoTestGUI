@@ -11,6 +11,10 @@ import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 import {
+  PlacementDialog,
+  type PlacementTarget,
+} from "../../app/PlacementDialog.js";
+import {
   ChevronDownIcon,
   ChevronRightIcon,
   FileIcon,
@@ -132,6 +136,7 @@ export function SuiteTree({
   const [filter, setFilter] = useState("");
   const [expandedSuites, setExpandedSuites] = useState<Set<string>>(new Set());
   const [creating, setCreating] = useState(false);
+  const [placement, setPlacement] = useState<PlacementTarget | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<ApiErrorInfo | null>(null);
 
@@ -239,6 +244,31 @@ export function SuiteTree({
         >
           +
         </button>
+        {/* #181: the suite action rides the pane toolbar, not the tree rows.
+            A button inside a treeitem breaks the ARIA tree's one-focusable-
+            per-node rule — the keyboard sweep would be the first to trip —
+            so the selected node names the target and the toolbar acts. */}
+        <button
+          type="button"
+          className="btn btn-ghost"
+          aria-label="Move or copy the selected suite"
+          disabled={selectedSuiteId === null}
+          title={
+            selectedSuiteId === null
+              ? "Select a suite first"
+              : `Move or copy ${selectedSuiteId}`
+          }
+          onClick={() =>
+            selectedSuiteId &&
+            setPlacement({
+              kind: "suite",
+              resourceId: selectedSuiteId,
+              label: selectedSuiteId,
+            })
+          }
+        >
+          Move/Copy
+        </button>
       </div>
 
       {creating && (
@@ -343,6 +373,12 @@ export function SuiteTree({
             </li>
           )}
         </ul>
+      )}
+      {placement && (
+        <PlacementDialog
+          target={placement}
+          onClose={() => setPlacement(null)}
+        />
       )}
     </div>
   );
