@@ -2339,3 +2339,47 @@ textarea {
   color: var(--color-text);
   font-weight: var(--font-weight-medium);
 }
+/* Dark theme tokens — will be appended to :root[data-theme="dark"] */
+:root[data-theme="dark"] {
+  /* Colors — neutral (dark surfaces, light text) */
+  --color-bg: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-hover: #334155;
+  --color-surface-active: #475569;
+  --color-border: #334155;
+  --color-border-light: #475569;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+
+  /* Colors — brand (lighter primary for dark backgrounds) */
+  --color-primary: #3b82f6;
+  --color-primary-hover: #60a5fa;
+  --color-primary-light: #1e3a8a;
+  --color-primary-text: #ffffff;
+
+  /* Colors — semantic (adjusted for dark) */
+  --color-success: #22c55e;
+  --color-success-light: #14532d;
+  --color-warning: #f59e0b;
+  --color-warning-light: #78350f;
+  --color-danger: #ef4444;
+  --color-danger-light: #7f1d1d;
+  --color-info: #06b6d4;
+  --color-info-light: #164e63;
+
+  /* Text on semantic backgrounds (deepened for dark) */
+  --color-text-success: #86efac;
+  --color-text-danger: #fca5a5;
+  --color-text-warning: #fcd34d;
+  --color-text-info: #67e8f9;
+
+  --color-backdrop: rgba(0, 0, 0, 0.7);
+
+  /* Shadows — inverted for dark (lighter borders, not shadows) */
+  --shadow-rest: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 8px rgba(0, 0, 0, 0.2);
+  --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
