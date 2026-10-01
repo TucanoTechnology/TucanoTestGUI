@@ -10,6 +10,12 @@ import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FileIcon,
+  FolderIcon,
+} from "../../components/Icon.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
 /**
@@ -75,7 +81,7 @@ function SuiteTreeNode({
         }}
       >
         <span className="suite-tree__icon" aria-hidden="true">
-          {hasCases ? (expanded ? "▾" : "▸") : "📁"}
+          {hasCases ? (expanded ? <ChevronDownIcon /> : <ChevronRightIcon />) : <FolderIcon />}
         </span>
         <span className="suite-tree__label">{suite.name}</span>
         <span className="suite-tree__count">{cases.length}</span>
@@ -94,7 +100,7 @@ function SuiteTreeNode({
                 }}
               >
                 <span className="suite-tree__icon" aria-hidden="true">
-                  📄
+                  <FileIcon />
                 </span>
                 <span className="suite-tree__label">{testCase.title}</span>
               </button>
@@ -278,7 +284,7 @@ export function SuiteTree({
               onClick={() => onSelectSuite(null)}
             >
               <span className="suite-tree__icon" aria-hidden="true">
-                📁
+                <FolderIcon />
               </span>
               <span className="suite-tree__label">All test cases</span>
               <span className="suite-tree__count">{totalCaseCount}</span>
@@ -296,7 +302,7 @@ export function SuiteTree({
               onClick={() => onSelectSuite(DIRECT_SUITE_ID)}
             >
               <span className="suite-tree__icon" aria-hidden="true">
-                📄
+                <FileIcon />
               </span>
               <span className="suite-tree__label">Directly in project</span>
               <span className="suite-tree__count">{directCaseCount}</span>
@@ -319,7 +325,7 @@ export function SuiteTree({
             <li className="suite-tree__empty" role="treeitem">
               {needle === "" ? (
                 <EmptyState
-                  icon="📁"
+                  icon={<FolderIcon />}
                   message="No suites yet"
                   action={
                     <button

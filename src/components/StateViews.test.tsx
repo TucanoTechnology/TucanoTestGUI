@@ -1,12 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { EmptyState, ErrorState, LoadingSkeleton } from "./StateViews.js";
+import { ClipboardIcon } from "./Icon.js";
 
 describe("EmptyState", () => {
   it("shows the message and an optional action", () => {
     render(
       <EmptyState
-        icon="📋"
+        icon={<ClipboardIcon />}
         message="No test cases found"
         action={
           <button className="btn btn-primary" onClick={() => {}}>
@@ -17,8 +18,11 @@ describe("EmptyState", () => {
     );
     expect(screen.getByText("No test cases found")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "+ Create" })).toBeInTheDocument();
-    // The icon is decoration, never an announcement.
-    expect(screen.getByText("📋")).toHaveAttribute("aria-hidden", "true");
+    // The icon is decoration, never an announcement: the SVG is hidden and
+    // the message text carries the meaning (#180).
+    const icon = document.querySelector(".state-view__icon svg");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
   });
 });
 

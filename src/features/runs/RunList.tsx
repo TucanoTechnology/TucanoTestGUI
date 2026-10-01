@@ -13,6 +13,7 @@ import {
   buildRunSelectionOptions,
   type RunSelectionOptions,
 } from "./runSelection.js";
+import { PlayIcon } from "../../components/Icon.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
 interface RunRow {
@@ -266,7 +267,7 @@ export function RunList({ projectId, selectedRunId, onSelectRun }: RunListProps)
 
       {visible.length === 0 ? (
         <EmptyState
-          icon="▶"
+          icon={<PlayIcon />}
           message={rows.length === 0 ? "No test runs yet" : "No runs match the filters"}
           action={
             rows.length === 0 ? (

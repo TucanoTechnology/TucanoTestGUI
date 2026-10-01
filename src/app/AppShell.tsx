@@ -16,19 +16,28 @@ import { ConfigurationList } from "../features/configurations/ConfigurationList.
 import { ConfigurationDetail } from "../features/configurations/ConfigurationDetail.js";
 import { ReportsView } from "../features/reports/ReportsView.js";
 import { GlobalSearch } from "./GlobalSearch.js";
+import {
+  ChartIcon,
+  ClipboardIcon,
+  FolderIcon,
+  MenuIcon,
+  PlayIcon,
+  SettingsIcon,
+  TargetIcon,
+} from "../components/Icon.js";
 import { EmptyState } from "../components/StateViews.js";
 
 const NAV_ITEMS = [
-  { id: "cases", label: "Test Cases", icon: "📋", entityType: "case" },
-  { id: "runs", label: "Test Runs", icon: "▶", entityType: "run" },
-  { id: "milestones", label: "Milestones", icon: "🎯", entityType: "milestone" },
+  { id: "cases", label: "Test Cases", icon: ClipboardIcon, entityType: "case" },
+  { id: "runs", label: "Test Runs", icon: PlayIcon, entityType: "run" },
+  { id: "milestones", label: "Milestones", icon: TargetIcon, entityType: "milestone" },
   {
     id: "configurations",
     label: "Configurations",
-    icon: "⚙",
+    icon: SettingsIcon,
     entityType: "configuration",
   },
-  { id: "reports", label: "Reports", icon: "📊", entityType: null },
+  { id: "reports", label: "Reports", icon: ChartIcon, entityType: null },
 ] as const;
 
 type ModuleId = (typeof NAV_ITEMS)[number]["id"];
@@ -79,7 +88,7 @@ function AppShellContent() {
       return (
         <div className="empty-state">
           <div className="empty-state__icon" aria-hidden="true">
-            📋
+            <ClipboardIcon />
           </div>
           <p className="empty-state__message">
             Select an entity from the explorer
@@ -138,7 +147,7 @@ function AppShellContent() {
     if (!selectedProjectId) {
       return (
         <EmptyState
-          icon="📁"
+          icon={<FolderIcon />}
           message={`Select a project to view ${NAV_ITEMS.find((i) => i.id === activeModule)?.label.toLowerCase() ?? ""}`}
         />
       );
@@ -232,7 +241,7 @@ function AppShellContent() {
           aria-label="Toggle navigation panes"
           aria-expanded={sidebarOpen}
         >
-          ☰
+          <MenuIcon />
         </button>
         <span className="topbar__brand">Tucano Test</span>
         <ProjectSwitcher />
@@ -281,7 +290,7 @@ function AppShellContent() {
             aria-current={activeModule === item.id ? "page" : undefined}
           >
             <span className="navrail__icon" aria-hidden="true">
-              {item.icon}
+              <item.icon />
             </span>
           </button>
         ))}

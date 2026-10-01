@@ -14,6 +14,7 @@ import {
   buildMilestoneSelectionOptions,
   type MilestoneSelectionOptions,
 } from "./milestoneSelection.js";
+import { TargetIcon } from "../../components/Icon.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 import { ProgressBar } from "../../components/ProgressBar.js";
 
@@ -211,7 +212,7 @@ export function MilestoneList({
 
       {visible.length === 0 ? (
         <EmptyState
-          icon="🎯"
+          icon={<TargetIcon />}
           message={rows.length === 0 ? "No milestones yet" : "No milestones match the search"}
           action={
             rows.length === 0 ? (
