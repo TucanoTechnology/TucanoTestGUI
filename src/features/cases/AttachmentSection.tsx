@@ -7,6 +7,7 @@ import {
 } from "react";
 import type { Attachment, StepAttachment } from "../../api/generated/index.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
+import { FileDropZone } from "../../components/FileDropZone.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { Dialog } from "../../app/Dialog.js";
 
@@ -137,6 +138,14 @@ export function AttachmentSection({
     }
   };
 
+  // A drop can carry several files and the API takes one per request, so the
+  // zone walks them sequentially (#187): the same per-file upload the picker
+  // makes, one after another, and one failure never cancels the files behind
+  // it — each upload surfaces its own error through the shared notice.
+  const uploadAll = async (files: File[]) => {
+    for (const file of files) await upload(file);
+  };
+
   const pick = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     // Clearing the picker lets the same file be chosen again after a failure.
@@ -227,15 +236,17 @@ export function AttachmentSection({
         </ul>
       )}
 
-      <div className="form-field">
-        <label htmlFor={pickerId}>Upload attachment to {scope}</label>
-        <input
-          id={pickerId}
-          type="file"
-          onChange={pick}
-          disabled={locked}
-        />
-      </div>
+      <FileDropZone onFiles={(files) => void uploadAll(files)} disabled={locked}>
+        <div className="form-field">
+          <label htmlFor={pickerId}>Upload attachment to {scope}</label>
+          <input
+            id={pickerId}
+            type="file"
+            onChange={pick}
+            disabled={locked}
+          />
+        </div>
+      </FileDropZone>
 
       {deleting && (
         <Dialog title="Delete attachment" onClose={() => setDeleting(null)}>

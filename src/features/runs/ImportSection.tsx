@@ -2,6 +2,7 @@ import { useId, useState, type ChangeEvent } from "react";
 import type { ImportSummary } from "../../api/generated/index.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
+import { FileDropZone } from "../../components/FileDropZone.js";
 import {
   buildImportRequest,
   ImportFileError,
@@ -47,31 +48,45 @@ export function ImportSection({ busy = false, onImport }: ImportSectionProps) {
 
   const locked = busy || working;
 
+  const importFile = async (format: ImportFormat, file: File) => {
+    setWorking(true);
+    setError(null);
+    try {
+      const request = buildImportRequest(format, await file.text());
+      const summary = await onImport(request);
+      // A failed import clears the summary, so the counts on screen are only
+      // ever the ones an import that succeeded reported.
+      setImported({ filename: file.name, summary });
+    } catch (err: unknown) {
+      setImported(null);
+      setError(
+        err instanceof ImportFileError
+          ? { code: null, message: err.message }
+          : readApiError(err, `Failed to import ${file.name}`),
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
   const pick =
     (format: ImportFormat) => async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       // Clearing the picker lets the same file be picked again after a failure.
       event.target.value = "";
       if (!file) return;
+      await importFile(format, file);
+    };
 
-      setWorking(true);
-      setError(null);
-      try {
-        const request = buildImportRequest(format, await file.text());
-        const summary = await onImport(request);
-        // A failed import clears the summary, so the counts on screen are only
-        // ever the ones an import that succeeded reported.
-        setImported({ filename: file.name, summary });
-      } catch (err: unknown) {
-        setImported(null);
-        setError(
-          err instanceof ImportFileError
-            ? { code: null, message: err.message }
-            : readApiError(err, `Failed to import ${file.name}`),
-        );
-      } finally {
-        setWorking(false);
-      }
+  // A dropped file goes through the browse path's own steps (#186): the
+  // format is the zone's, the validation and the summary table never learn
+  // where the bytes came from. Several files import in sequence.
+  const dropFiles =
+    (format: ImportFormat) =>
+    (files: File[]): void => {
+      void (async () => {
+        for (const file of files) await importFile(format, file);
+      })();
     };
 
   return (
@@ -84,29 +99,33 @@ export function ImportSection({ busy = false, onImport }: ImportSectionProps) {
         Import results
       </h2>
 
-      <div className="form-field">
-        <label htmlFor={`${fieldId}-json`}>Import JSON results</label>
-        <input
-          id={`${fieldId}-json`}
-          type="file"
-          accept=".json,application/json"
-          aria-describedby={hintId}
-          disabled={locked}
-          onChange={pick("json")}
-        />
-      </div>
+      <FileDropZone onFiles={dropFiles("json")} disabled={locked}>
+        <div className="form-field">
+          <label htmlFor={`${fieldId}-json`}>Import JSON results</label>
+          <input
+            id={`${fieldId}-json`}
+            type="file"
+            accept=".json,application/json"
+            aria-describedby={hintId}
+            disabled={locked}
+            onChange={pick("json")}
+          />
+        </div>
+      </FileDropZone>
 
-      <div className="form-field">
-        <label htmlFor={`${fieldId}-junit`}>Import JUnit XML results</label>
-        <input
-          id={`${fieldId}-junit`}
-          type="file"
-          accept=".xml,application/xml"
-          aria-describedby={hintId}
-          disabled={locked}
-          onChange={pick("junit")}
-        />
-      </div>
+      <FileDropZone onFiles={dropFiles("junit")} disabled={locked}>
+        <div className="form-field">
+          <label htmlFor={`${fieldId}-junit`}>Import JUnit XML results</label>
+          <input
+            id={`${fieldId}-junit`}
+            type="file"
+            accept=".xml,application/xml"
+            aria-describedby={hintId}
+            disabled={locked}
+            onChange={pick("junit")}
+          />
+        </div>
+      </FileDropZone>
 
       <p className="import-section__hint" id={hintId}>
         {working

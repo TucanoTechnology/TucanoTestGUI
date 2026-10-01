@@ -827,6 +827,61 @@ describe("RunDetail", () => {
     });
   });
 
+  it("Pass & next records Passed and moves to the next case awaiting execution", async () => {
+    // #184: the dominant flow — record, and land on the next case without
+    // touching the table again between the two.
+    const store = resultStore();
+    await openDetail(store);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit result" }));
+    const dialog = await screen.findByRole("dialog", { name: "Edit result" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Pass & next" }));
+
+    await waitFor(() => {
+      expect(store.resultPosts).toHaveLength(1);
+    });
+    expect(store.resultPosts[0]).toMatchObject({
+      testCaseId: "TC-LOGIN-1",
+      status: "Passed",
+    });
+
+    // The dialog never closed: it is now the record form for the next case,
+    // and the transition was announced.
+    await waitFor(() => {
+      expect(
+        screen.getByRole("dialog", { name: "Record result" }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "Recorded Passed for TC-LOGIN-1. Now recording TC-LOGIN-2 — Reject a bad password.",
+    );
+    // Focus followed the form (#184): the new case's status select holds it.
+    expect(
+      within(screen.getByRole("dialog", { name: "Record result" })).getByRole(
+        "combobox",
+        { name: "Status" },
+      ),
+    ).toHaveFocus();
+
+    // One more pass empties the run: the second advance records the last
+    // case and closes, announcing the end of the walk.
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Record result" })).getByRole(
+        "button",
+        { name: "Pass & next" },
+      ),
+    );
+    await waitFor(() => {
+      expect(store.resultPosts).toHaveLength(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "Recorded Passed for TC-LOGIN-2. That was the last case awaiting execution.",
+    );
+  });
+
   it("pre-fills the form and resends every field when a result is edited", async () => {
     const store = resultStore();
     await openDetail(store);

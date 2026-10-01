@@ -8,7 +8,9 @@ import {
   buildResultRows,
   formatDuration,
   formatDurationSeconds,
+  nextPendingRow,
   parseDurationSeconds,
+  type ResultRow,
 } from "./results.js";
 
 const RESULT: TestCaseResult = {
@@ -232,3 +234,33 @@ describe("buildResultRequest", () => {
 });
 
 
+
+describe("nextPendingRow (#184)", () => {
+  const row = (testCaseId: string, status: string): ResultRow =>
+    ({ testCaseId, status }) as ResultRow;
+  const rows = [
+    row("A", "Passed"),
+    row("B", "Untested"),
+    row("C", "Retest"),
+    row("D", "Failed"),
+  ];
+
+  it("prefers the nearest later row awaiting execution", () => {
+    expect(nextPendingRow(rows, 0)).toBe(rows[1]!);
+  });
+
+  it("walks past settled rows to reach a retest", () => {
+    const later = row("C", "Retest");
+    expect(
+      nextPendingRow([row("A", "Passed"), row("B", "Passed"), later], 1),
+    ).toBe(later);
+  });
+
+  it("falls back to the next row overall when nothing awaits", () => {
+    expect(nextPendingRow(rows, 2)).toBe(rows[3]!);
+  });
+
+  it("ends the walk after the last row", () => {
+    expect(nextPendingRow(rows, 3)).toBeNull();
+  });
+});
