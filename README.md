@@ -45,7 +45,7 @@ one shows the key, because a rename never moves it.
 The GUI targets **WCAG 2.1 Level AA**. Conformance is enforced in CI at two levels:
 
 - **Unit** — each component's vitest file runs `axe-core` (tags `wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`) against the rendered DOM, and `src/styles.test.ts` computes WCAG 1.4.3 ratios for every token pairing the stylesheet relies on, so a palette edit that breaks contrast fails `npm test`.
-- **Browser** — `npm run test:e2e` (Playwright + `@axe-core/playwright`, CI job `e2e`) sweeps every page, tab and dialog of the real production bundle and fails on any violation, **including `color-contrast`**, which jsdom cannot evaluate. The run is hermetic: `vite preview` serves the build against `scripts/e2e-api.mjs`, backed by `e2e/fixtures.json` recorded from a seeded deployment by `scripts/capture-e2e-fixtures.mjs`. The same job verifies the keyboard journeys: skip link, Tab-reachable nav rail, arrow-key tabs and dialog dismissal.
+- **Browser** — `npm run test:e2e` (Playwright + `@axe-core/playwright`, CI job `e2e`) sweeps every page, tab and dialog of the real production bundle and fails on any violation, **including `color-contrast`**, which jsdom cannot evaluate. The run is hermetic: the built bundle is served by `scripts/e2e-static.mjs` against `scripts/e2e-api.mjs`, backed by `e2e/fixtures.json` recorded from a seeded deployment by `scripts/capture-e2e-fixtures.mjs`. The same job verifies the keyboard journeys: skip link, Tab-reachable nav rail, arrow-key tabs and dialog dismissal.
 
 Baseline requirements:
 

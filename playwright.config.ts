@@ -32,10 +32,13 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: "npm run build && npm run preview",
+      // `npm run test:e2e` builds first; the static server is Node built-ins
+      // only, so the Playwright container in CI never touches the host's
+      // native build toolchain.
+      command: "node scripts/e2e-static.mjs",
       port: 4173,
       reuseExistingServer: !process.env.CI,
-      timeout: 180_000,
+      timeout: 60_000,
     },
   ],
 });

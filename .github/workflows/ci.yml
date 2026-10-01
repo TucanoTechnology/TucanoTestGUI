@@ -55,10 +55,18 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Install the headless browser
-        run: npx playwright install --with-deps chromium
+      # The build happens on the host toolchain; the browser suite runs in
+      # the image Playwright pins its browsers to (matching the @playwright/test
+      # version), so no apt-get is needed on the Fedora runners and the
+      # container only ever executes Node built-ins plus the mounted CLI.
+      - name: Build the bundle
+        run: npm run build
       - name: Browser accessibility and keyboard suite
-        run: npm run test:e2e
+        run: |
+          docker run --rm --network host \
+            -v "$GITHUB_WORKSPACE:/w" -w /w \
+            mcr.microsoft.com/playwright:v1.63.0-noble \
+            npx playwright test
       - name: Upload the report on failure
         if: failure()
         uses: actions/upload-artifact@v4
