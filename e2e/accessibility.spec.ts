@@ -127,7 +127,9 @@ test.describe("accessibility", () => {
     await pickProject(page);
     
     // Switch to dark theme
-    await page.getByRole("button", { name: /switch to dark theme/i }).click();
+    const toggle = page.getByRole("button", { name: /switch to/i });
+    await toggle.waitFor({ state: "visible" });
+    await toggle.click();
     await page.waitForTimeout(100);
     
     await expectAccessible(page, "dark theme case list");

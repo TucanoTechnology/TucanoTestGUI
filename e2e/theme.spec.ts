@@ -6,11 +6,15 @@ test.describe("theme toggle", () => {
     await signIn(page);
     await pickProject(page);
 
+    // Wait for the theme toggle to be visible
+    const toggle = page.getByRole("button", { name: /switch to/i });
+    await toggle.waitFor({ state: "visible" });
+
     // Default should be light (no data-theme attribute)
     await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
 
     // Click the theme toggle
-    await page.getByRole("button", { name: /switch to dark theme/i }).click();
+    await toggle.click();
 
     // Should now be dark
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -27,7 +31,9 @@ test.describe("theme toggle", () => {
     await pickProject(page);
 
     // Switch to dark
-    await page.getByRole("button", { name: /switch to dark theme/i }).click();
+    const toggle = page.getByRole("button", { name: /switch to/i });
+    await toggle.waitFor({ state: "visible" });
+    await toggle.click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
     // Reload the page
