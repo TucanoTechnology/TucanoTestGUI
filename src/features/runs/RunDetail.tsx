@@ -20,6 +20,8 @@ import { buildRunUpdateRequest } from "./runSelection.js";
 import { ResultForm, type DefectLinkValues } from "./ResultForm.js";
 import { ImportSection } from "./ImportSection.js";
 import { describeImportSummary, type ImportRequest } from "./importResults.js";
+import { RunConfigurationsSection } from "./RunConfigurationsSection.js";
+import { RunMembershipSection } from "./RunMembershipSection.js";
 import {
   RESULT_STATUSES,
   buildResultRequest,
@@ -693,85 +695,17 @@ export function RunDetail({
                 </div>
               )}
 
-              {(() => {
-                // #182: every linked configuration is shown and removable on
-                // its own; the link control offers the project's remainder.
-                const linked = run.configurations ?? [];
-                const linkable = (configurations ?? []).filter(
-                  (entry) =>
-                    !linked.some((held) => held.configId === entry.configId),
-                );
-                return (
-                  <div className="detail-field">
-                    <div className="detail-field__label">
-                      Configurations ({linked.length})
-                    </div>
-                    {linked.length === 0 ? (
-                      <div className="detail-field__value">None</div>
-                    ) : (
-                      <ul className="entity-list">
-                        {linked.map((entry) => (
-                          <li key={entry.configId} className="entity-list__item">
-                            <span className="entity-list__name">
-                              {entry.name}
-                            </span>
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={busy}
-                              onClick={() =>
-                                void unlinkConfiguration(entry.configId ?? "")
-                              }
-                            >
-                              Unlink
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {homeProjectId && (
-                      <div className="run-detail__link">
-                        <label htmlFor={`${fieldId}-link-configuration`}>
-                          Link configuration
-                        </label>
-                        <select
-                          id={`${fieldId}-link-configuration`}
-                          value={linkConfigId}
-                          disabled={busy || optionsLoading}
-                          onChange={(event) =>
-                            setLinkConfigId(event.target.value)
-                          }
-                        >
-                          <option value="">
-                            {optionsLoading
-                              ? "Loading…"
-                              : "Choose a configuration"}
-                          </option>
-                          {linkable.map((entry) => (
-                            <option
-                              key={entry.configId}
-                              value={entry.configId ?? ""}
-                            >
-                              {entry.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={busy || linkConfigId === ""}
-                          onClick={() => {
-                            void linkConfiguration(linkConfigId);
-                            setLinkConfigId("");
-                          }}
-                        >
-                          Link
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+              <RunConfigurationsSection
+                runConfigurations={run.configurations ?? []}
+                availableConfigurations={configurations ?? []}
+                homeProjectId={homeProjectId}
+                linkConfigId={linkConfigId}
+                onLinkConfigIdChange={setLinkConfigId}
+                onLink={linkConfiguration}
+                onUnlink={unlinkConfiguration}
+                busy={busy}
+                loading={optionsLoading}
+              />
 
               {run.projects && run.projects.length > 0 && (
                 <div className="detail-field">
@@ -804,102 +738,24 @@ export function RunDetail({
               )}
 
               {homeProjectId && (
-                <fieldset
-                  className="run-extend"
-                  disabled={busy || mode !== "view"}
-                >
-                  <legend className="detail-field__label">
-                    Extend this run
-                  </legend>
-                  {(() => {
-                    // Held = already in the snapshot by any route the run
-                    // knows it: a declared case, or a result whose case the
-                    // declaration has since lost.
-                    const heldCases = new Set<string>([
-                      ...(run.testCases ?? []).map((entry) => entry.testCaseId ?? ""),
-                      ...(run.results ?? []).map((entry) => entry.testCaseId ?? ""),
-                    ]);
-                    const heldSuites = new Set(
-                      (run.testSuites ?? []).map((entry) => entry.suiteId ?? ""),
-                    );
-                    const openCases = projectCaseIds.filter(
-                      (id) => !heldCases.has(id),
-                    );
-                    const openSuites = projectSuiteIds.filter(
-                      (id) => !heldSuites.has(id),
-                    );
-                    return (
-                      <>
-                        <div className="run-extend__row">
-                          <label htmlFor={`${fieldId}-add-case`}>Add case</label>
-                          <select
-                            id={`${fieldId}-add-case`}
-                            value={addCaseId}
-                            onChange={(event) => setAddCaseId(event.target.value)}
-                          >
-                            <option value="">
-                              {openCases.length === 0
-                                ? "Nothing left to add"
-                                : "Choose a case"}
-                            </option>
-                            {openCases.map((id) => (
-                              <option key={id} value={id}>
-                                {id}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            aria-label="Add case to the run"
-                            disabled={busy || addCaseId === ""}
-                            onClick={() => {
-                              void addCaseToRun(addCaseId);
-                              setAddCaseId("");
-                            }}
-                          >
-                            Add
-                          </button>
-                        </div>
-                        <div className="run-extend__row">
-                          <label htmlFor={`${fieldId}-add-suite`}>
-                            Add suite
-                          </label>
-                          <select
-                            id={`${fieldId}-add-suite`}
-                            value={addSuiteId}
-                            onChange={(event) =>
-                              setAddSuiteId(event.target.value)
-                            }
-                          >
-                            <option value="">
-                              {openSuites.length === 0
-                                ? "Nothing left to add"
-                                : "Choose a suite"}
-                            </option>
-                            {openSuites.map((id) => (
-                              <option key={id} value={id}>
-                                {id}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            aria-label="Add suite to the run"
-                            disabled={busy || addSuiteId === ""}
-                            onClick={() => {
-                              void addSuiteToRun(addSuiteId);
-                              setAddSuiteId("");
-                            }}
-                          >
-                            Add
-                          </button>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </fieldset>
+                <RunMembershipSection
+                  projectCaseIds={projectCaseIds}
+                  projectSuiteIds={projectSuiteIds}
+                  heldCaseIds={new Set<string>([
+                    ...(run.testCases ?? []).map((entry) => entry.testCaseId ?? ""),
+                    ...(run.results ?? []).map((entry) => entry.testCaseId ?? ""),
+                  ])}
+                  heldSuiteIds={new Set(
+                    (run.testSuites ?? []).map((entry) => entry.suiteId ?? ""),
+                  )}
+                  addCaseId={addCaseId}
+                  addSuiteId={addSuiteId}
+                  onAddCaseIdChange={setAddCaseId}
+                  onAddSuiteIdChange={setAddSuiteId}
+                  onAddCase={addCaseToRun}
+                  onAddSuite={addSuiteToRun}
+                  busy={busy || mode !== "view"}
+                />
               )}
 
               {rows.length > 0 && (
