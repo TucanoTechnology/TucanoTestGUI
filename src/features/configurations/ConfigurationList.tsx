@@ -11,6 +11,7 @@ import {
 } from "./ConfigurationForm.js";
 import { buildConfigurationCreateRequest } from "./configurationRequests.js";
 import { SettingsIcon } from "../../components/Icon.js";
+import { RowBreadcrumb } from "../../components/RowBreadcrumb.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
 interface ConfigurationListProps {
@@ -39,6 +40,19 @@ export function ConfigurationList({
   const [creating, setCreating] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<ApiErrorInfo | null>(null);
+  const [projectName, setProjectName] = useState(projectId);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(() => client.projects.getProject({ id: projectId }))
+      .then((project) => {
+        if (!cancelled) setProjectName(project.name ?? project.projectId);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [client, projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -192,6 +206,7 @@ export function ConfigurationList({
                 >
                   <td className="case-table__td case-table__td--id">
                     <span className="case-table__id">{key}</span>
+                    <RowBreadcrumb projectName={projectName} />
                   </td>
                   <td className="case-table__td">{config.name}</td>
                   <td className="case-table__td">{config.browser ?? "—"}</td>

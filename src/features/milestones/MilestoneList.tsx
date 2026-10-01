@@ -15,6 +15,7 @@ import {
   type MilestoneSelectionOptions,
 } from "./milestoneSelection.js";
 import { TargetIcon } from "../../components/Icon.js";
+import { RowBreadcrumb } from "../../components/RowBreadcrumb.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 import { ProgressBar } from "../../components/ProgressBar.js";
 
@@ -56,6 +57,19 @@ export function MilestoneList({
   const [options, setOptions] = useState<MilestoneSelectionOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsError, setOptionsError] = useState<ApiErrorInfo | null>(null);
+  const [projectName, setProjectName] = useState(projectId);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(() => client.projects.getProject({ id: projectId }))
+      .then((project) => {
+        if (!cancelled) setProjectName(project.name ?? project.projectId);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [client, projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,6 +266,7 @@ export function MilestoneList({
               >
                 <td className="case-table__td case-table__td--id">
                   <span className="case-table__id">{row.id}</span>
+                  <RowBreadcrumb projectName={projectName} />
                 </td>
                 <td className="case-table__td">{row.milestone.name}</td>
                 <td className="case-table__td">{row.milestone.status ?? "—"}</td>

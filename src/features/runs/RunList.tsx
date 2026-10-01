@@ -14,6 +14,7 @@ import {
   type RunSelectionOptions,
 } from "./runSelection.js";
 import { PlayIcon } from "../../components/Icon.js";
+import { RowBreadcrumb } from "../../components/RowBreadcrumb.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
 interface RunRow {
@@ -70,6 +71,19 @@ export function RunList({ projectId, selectedRunId, onSelectRun }: RunListProps)
   const [runOptions, setRunOptions] = useState<RunSelectionOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsError, setOptionsError] = useState<ApiErrorInfo | null>(null);
+  const [projectName, setProjectName] = useState(projectId);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(() => client.projects.getProject({ id: projectId }))
+      .then((project) => {
+        if (!cancelled) setProjectName(project.name ?? project.projectId);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [client, projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,6 +322,7 @@ export function RunList({ projectId, selectedRunId, onSelectRun }: RunListProps)
                 >
                   <td className="case-table__td case-table__td--id">
                     <span className="case-table__id">{row.id}</span>
+                    <RowBreadcrumb projectName={projectName} />
                   </td>
                   <td className="case-table__td">{row.name}</td>
                   <td className="case-table__td case-table__td--date">
