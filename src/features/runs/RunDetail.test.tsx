@@ -38,6 +38,13 @@ const CONFIGURATION = {
   os: "linux",
 };
 
+const FIREFOX = {
+  configId: "firefox-win.json",
+  name: "Firefox on Windows",
+  browser: "firefox",
+  os: "windows",
+};
+
 /** A result as the API stores one, milliseconds and all. */
 const RECORDED_RESULT = {
   testCaseId: "TC-LOGIN-1",
@@ -66,6 +73,16 @@ const IMPORT_SUMMARY = {
 
 interface ApiStore {
   run: Record<string, unknown>;
+  /** #182: the home project's inventories the membership routes offer. */
+  projectCaseIds: string[];
+  projectSuiteIds: string[];
+  projectConfigIds: string[];
+  /** Bodies posted to the add-case / add-suite / link routes, oldest first. */
+  addCasePosts: unknown[];
+  addSuitePosts: unknown[];
+  configPosts: unknown[];
+  /** Configurations unlinked, by the address the DELETE took. */
+  configDeletes: string[];
   puts: unknown[];
   posts: unknown[];
   /** Bodies posted to the result route, oldest first. */
@@ -107,10 +124,86 @@ function checkoutApi(store: ApiStore) {
       url === "/api/projects/checkout.json/configurations" &&
       method === "GET"
     ) {
-      return jsonResponse(200, ["chrome-linux.json"]);
+      return jsonResponse(200, store.projectConfigIds);
     }
-    if (url === "/api/configurations/chrome-linux.json" && method === "GET") {
-      return jsonResponse(200, CONFIGURATION);
+    const configMatch = /^\/api\/configurations\/([^/]+)$/.exec(url);
+    if (configMatch && method === "GET") {
+      return jsonResponse(
+        200,
+        configMatch[1] === "firefox-win.json" ? FIREFOX : CONFIGURATION,
+      );
+    }
+    if (
+      url === "/api/projects/checkout.json/test_cases" &&
+      method === "GET"
+    ) {
+      return jsonResponse(200, store.projectCaseIds);
+    }
+    if (
+      url === "/api/projects/checkout.json/test_suites" &&
+      method === "GET"
+    ) {
+      return jsonResponse(200, store.projectSuiteIds);
+    }
+    if (url === "/api/test_runs/nightly.json/test_cases" && method === "POST") {
+      const posted = body as { testCaseId: string };
+      store.addCasePosts.push(body);
+      store.run = {
+        ...store.run,
+        testCases: [
+          ...(((store.run.testCases as Record<string, unknown>[]) ?? [])),
+          { testCaseId: posted.testCaseId, title: `Added ${posted.testCaseId}` },
+        ],
+      };
+      return jsonResponse(201, {
+        message: "Test case added to run",
+        id: posted.testCaseId,
+      });
+    }
+    if (url === "/api/test_runs/nightly.json/test_suites" && method === "POST") {
+      const posted = body as { suiteId: string };
+      store.addSuitePosts.push(body);
+      store.run = {
+        ...store.run,
+        testSuites: [
+          ...(((store.run.testSuites as Record<string, unknown>[]) ?? [])),
+          { suiteId: posted.suiteId, name: `Added ${posted.suiteId}` },
+        ],
+      };
+      return jsonResponse(201, {
+        message: "Test suite added to run",
+        id: posted.suiteId,
+      });
+    }
+    if (
+      url === "/api/test_runs/nightly.json/configurations" &&
+      method === "POST"
+    ) {
+      const posted = body as { configId: string };
+      store.configPosts.push(body);
+      store.run = {
+        ...store.run,
+        configurations: [
+          ...(((store.run.configurations as Record<string, unknown>[]) ?? [])),
+          posted.configId === "firefox-win.json" ? FIREFOX : CONFIGURATION,
+        ],
+      };
+      return jsonResponse(201, {
+        message: "Configuration linked to run",
+        id: posted.configId,
+      });
+    }
+    const configDeleteMatch =
+      /^\/api\/test_runs\/nightly\.json\/configurations\/([^/]+)$/.exec(url);
+    if (configDeleteMatch && method === "DELETE") {
+      store.configDeletes.push(url);
+      store.run = {
+        ...store.run,
+        configurations: (
+          (store.run.configurations as Record<string, unknown>[]) ?? []
+        ).filter((entry) => entry.configId !== configDeleteMatch[1]),
+      };
+      return jsonResponse(200, { message: "Configuration unlinked from run" });
     }
     if (url === "/api/test_runs/nightly.json" && method === "PUT") {
       if (store.refusal) return store.refusal;
@@ -235,6 +328,13 @@ function checkoutApi(store: ApiStore) {
 function emptyStore(run: Record<string, unknown> = RUN): ApiStore {
   return {
     run,
+    projectCaseIds: ["TC-LOGIN-1", "TC-LOGIN-2"],
+    projectSuiteIds: ["smoke.checkout.json", "regress.checkout.json"],
+    projectConfigIds: ["chrome-linux.json", "firefox-win.json"],
+    addCasePosts: [],
+    addSuitePosts: [],
+    configPosts: [],
+    configDeletes: [],
     puts: [],
     posts: [],
     resultPosts: [],
@@ -384,16 +484,28 @@ describe("RunDetail", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("nightly")).toBeInTheDocument();
     // The run's own copy of the configuration names it, without a second read.
-    expect(screen.getByText("Configuration")).toBeInTheDocument();
+    // #182: the field lists every linked configuration, not just the first.
+    expect(screen.getByText("Configurations (1)")).toBeInTheDocument();
+    // The list names what the run stored — the snapshot's own name, read
+    // without re-fetching the configuration document.
     expect(screen.getByText("chrome-linux")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Unlink" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Projects (1)")).toBeInTheDocument();
     expect(screen.getByText("Suites (1)")).toBeInTheDocument();
     expect(screen.getByText("Results (1)")).toBeInTheDocument();
     expect(screen.getByText("passed")).toBeInTheDocument();
 
-    // Reading a run costs one request: the stored run carries its configuration.
+    // The run read plus the #182 membership inventories of its home project;
+    // the run's own configuration is not re-read, the snapshot names it.
     expect(requests.map((request) => request.url)).toEqual([
       "/api/test_runs/nightly.json",
+      "/api/projects/checkout.json/test_cases",
+      "/api/projects/checkout.json/test_suites",
+      "/api/projects/checkout.json/configurations",
+      "/api/configurations/chrome-linux.json",
+      "/api/configurations/firefox-win.json",
     ]);
 
     const { default: axe } = await import("axe-core");
@@ -445,10 +557,19 @@ describe("RunDetail", () => {
     expect(alert).toHaveTextContent("run id is ambiguous");
   });
 
-  it("reads the configurations only when the edit form needs them", async () => {
+  it("reads the home project's inventories for the membership controls (#182)", async () => {
     const store = emptyStore();
     const { requests } = await openDetail(store);
-    expect(requests).toHaveLength(1);
+    // The run read plus the three listings and the configuration documents
+    // the link control offers. The table itself still costs no extra read.
+    expect(requests.map((request) => request.url)).toEqual([
+      "/api/test_runs/nightly.json",
+      "/api/projects/checkout.json/test_cases",
+      "/api/projects/checkout.json/test_suites",
+      "/api/projects/checkout.json/configurations",
+      "/api/configurations/chrome-linux.json",
+      "/api/configurations/firefox-win.json",
+    ]);
 
     const form = await openEdit();
 
@@ -460,10 +581,11 @@ describe("RunDetail", () => {
     expect(
       within(form).getByRole("option", { name: "Chrome on Linux" }),
     ).toBeInTheDocument();
-    expect(requests.map((request) => request.url)).toEqual([
-      "/api/test_runs/nightly.json",
+    // The edit form re-reads the configurations for its own select.
+    expect(requests.map((request) => request.url).slice(6)).toEqual([
       "/api/projects/checkout.json/configurations",
       "/api/configurations/chrome-linux.json",
+      "/api/configurations/firefox-win.json",
     ]);
   });
 
@@ -699,9 +821,15 @@ describe("RunDetail", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByRole("row")).toHaveLength(3);
 
-    // The table is built from the run document, so it costs no extra read.
+    // The table is built from the run document; the only other reads are
+    // the #182 inventories the membership controls offer.
     expect(requests.map((request) => request.url)).toEqual([
       "/api/test_runs/nightly.json",
+      "/api/projects/checkout.json/test_cases",
+      "/api/projects/checkout.json/test_suites",
+      "/api/projects/checkout.json/configurations",
+      "/api/configurations/chrome-linux.json",
+      "/api/configurations/firefox-win.json",
     ]);
   });
 
@@ -880,6 +1008,107 @@ describe("RunDetail", () => {
     expect(screen.getByTestId("announcement")).toHaveTextContent(
       "Recorded Passed for TC-LOGIN-2. That was the last case awaiting execution.",
     );
+  });
+
+  it("links and unlinks configurations independently of each other (#182)", async () => {
+    const store = emptyStore(RUN); // RUN links chrome-linux at creation.
+    await openDetail(store);
+
+    expect(await screen.findByText("Configurations (1)")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
+    await waitFor(() => {
+      expect(store.configDeletes).toEqual([
+        "/api/test_runs/nightly.json/configurations/chrome-linux.json",
+      ]);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Configurations (0)")).toBeInTheDocument();
+    });
+
+    // The unlinked one and the project's other configuration are both now
+    // linkable; linking does not go through the edit form at all.
+    const select = screen.getByLabelText("Link configuration");
+    expect(
+      within(select).getByRole("option", { name: "Firefox on Windows" }),
+    ).toBeInTheDocument();
+    expect(
+      within(select).getByRole("option", { name: "Chrome on Linux" }),
+    ).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "firefox-win.json" } });
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+
+    await waitFor(() => {
+      expect(store.configPosts).toEqual([{ configId: "firefox-win.json" }]);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Configurations (1)")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Firefox on Windows")).toBeInTheDocument();
+    // The linked one leaves the offer; the unlinked one stays in it.
+    expect(
+      within(screen.getByLabelText("Link configuration")).queryByRole(
+        "option",
+        { name: "Firefox on Windows" },
+      ),
+    ).not.toBeInTheDocument();
+    // The linked configuration is still announced through its own list entry.
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "firefox-win.json linked to the run.",
+    );
+  });
+
+  it("adds a case and a suite from the home project without touching the snapshot", async () => {
+    const store = resultStore();
+    store.projectCaseIds = ["TC-LOGIN-1", "TC-LOGIN-2", "TC-PAY-1"];
+    await openDetail(store);
+
+    const caseSelect = await screen.findByLabelText("Add case");
+    // Held cases (both declaration and recorded-result routes) are not
+    // offered: only the project case the run has never seen.
+    expect(
+      within(caseSelect).queryByRole("option", { name: "TC-LOGIN-1" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(caseSelect, { target: { value: "TC-PAY-1" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add case to the run" }),
+    );
+    await waitFor(() => {
+      expect(store.addCasePosts).toEqual([{ testCaseId: "TC-PAY-1" }]);
+    });
+
+    // The added case lands as an Untested row beside the existing state —
+    // the recorded result on TC-LOGIN-1 survives the refresh untouched.
+    await waitFor(() => {
+      expect(screen.getByText("Results (3)")).toBeInTheDocument();
+    });
+    expect(screen.getByText("TC-PAY-1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Status for TC-LOGIN-1" }),
+    ).toHaveValue("Failed");
+    expect(screen.getByTestId("announcement")).toHaveTextContent(
+      "TC-PAY-1 added to the run.",
+    );
+    // The held set is recomputed from the refreshed run: it is no longer
+    // offered.
+    expect(
+      within(screen.getByLabelText("Add case")).queryByRole("option", {
+        name: "TC-PAY-1",
+      }),
+    ).not.toBeInTheDocument();
+
+    // Suites the same way: the run holds smoke, so regress is the offer.
+    const suiteSelect = screen.getByLabelText("Add suite");
+    fireEvent.change(suiteSelect, { target: { value: "regress.checkout.json" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add suite to the run" }),
+    );
+    await waitFor(() => {
+      expect(store.addSuitePosts).toEqual([{ suiteId: "regress.checkout.json" }]);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Suites (2)")).toBeInTheDocument();
+    });
   });
 
   it("pre-fills the form and resends every field when a result is edited", async () => {
