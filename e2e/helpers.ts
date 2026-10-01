@@ -43,3 +43,14 @@ export async function expectAccessible(page: Page, where: string): Promise<void>
   );
   expect(violations, `axe violations on ${where}`).toEqual([]);
 }
+export async function setTheme(page: any, theme: "light" | "dark") {
+  const currentTheme = await page.evaluate(() => 
+    document.documentElement.getAttribute("data-theme")
+  );
+  if (currentTheme !== theme) {
+    await page.getByRole("button", { 
+      name: new RegExp(`switch to ${theme} theme`, "i") 
+    }).click();
+    await page.waitForTimeout(100); // Wait for theme to apply
+  }
+}

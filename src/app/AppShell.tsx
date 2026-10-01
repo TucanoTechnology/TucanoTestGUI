@@ -19,6 +19,7 @@ import { ConfigurationListPanel } from "../features/configurations/Configuration
 import { ConfigurationDetail } from "../features/configurations/ConfigurationDetail.js";
 import { ReportsView } from "../features/reports/ReportsView.js";
 import { GlobalSearch } from "./GlobalSearch.js";
+import { ThemeToggle } from "./ThemeToggle.js";
 import {
   ChartIcon,
   ClipboardIcon,
@@ -270,6 +271,7 @@ function AppShellContent() {
             });
           }}
         />
+        <ThemeToggle />
         <div className="topbar__spacer" />
         <div className="topbar__user">
           <span className="topbar__username">{username}</span>
