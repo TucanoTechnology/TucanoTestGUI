@@ -2,6 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthProvider } from "../../app/AuthProvider.js";
 import {
+  ProjectProvider,
+  useProjectContext,
+} from "../../app/ProjectContext.js";
+import {
   errorEnvelope,
   jsonResponse,
   mockApi,
@@ -12,6 +16,25 @@ import { ReportsView } from "./ReportsView.js";
 
 const PROJECT = { projectId: "checkout.json", name: "Checkout" };
 const CONFIGURATION = { configId: "chrome", name: "Chrome on desktop" };
+
+const MILESTONE = { milestoneId: "v1.0.json", name: "Release 1" };
+
+const LAST_RESULTS = {
+  cases: [
+    {
+      testCaseId: "TC-CART-1",
+      status: "Passed",
+      runId: "nightly.json",
+      timestamp: "1789655960",
+    },
+    {
+      testCaseId: "TC-LOGIN-1",
+      status: "Failed",
+      runId: "weekly.json",
+      timestamp: "1789651200",
+    },
+  ],
+};
 
 const COVERAGE = {
   totalCases: 4,
@@ -49,13 +72,28 @@ const SCOPED_SUMMARY = {
   totalDurationMs: 600,
 };
 
+/** Probe so run links from the latest-results table are observable. */
+function SelectionProbe() {
+  const { selection } = useProjectContext();
+  return (
+    <span data-testid="selection">
+      {selection ? `${selection.type}:${selection.id}` : "none"}
+    </span>
+  );
+}
+
 function renderView() {
   return render(
     <AuthProvider>
-      {/* The shell mounts this view in the centre pane, which is a landmark. */}
-      <main aria-label="Reports">
-        <ReportsView />
-      </main>
+      <ProjectProvider>
+        <main aria-label="Reports">
+          {/* Inside the landmark: page content outside one is an axe
+              `region` violation, and this probe must not manufacture one. */}
+          <SelectionProbe />
+          {/* The shell mounts this view in the centre pane, which is a landmark. */}
+          <ReportsView />
+        </main>
+      </ProjectProvider>
     </AuthProvider>,
   );
 }
@@ -72,6 +110,17 @@ function respondOptions(url: string, method: string): Response | null {
   }
   if (url === `/api/configurations/${CONFIGURATION.configId}`) {
     return jsonResponse(200, CONFIGURATION);
+  }
+  // #183: the milestone offer and the latest-results report answer for every
+  // case; individual tests override when they care about the payload.
+  if (url === `/api/projects/${PROJECT.projectId}/milestones`) {
+    return jsonResponse(200, [MILESTONE.milestoneId]);
+  }
+  if (url === `/api/milestones/${MILESTONE.milestoneId}`) {
+    return jsonResponse(200, MILESTONE);
+  }
+  if (url.startsWith("/api/reports/last-results")) {
+    return jsonResponse(200, LAST_RESULTS);
   }
   return null;
 }
@@ -415,9 +464,13 @@ describe("ReportsView", () => {
 
     renderView();
 
-    expect(screen.getAllByRole("status")).toHaveLength(2);
+    // #183: three independent reports now announce their own loading.
+    expect(screen.getAllByRole("status")).toHaveLength(3);
     expect(screen.getByText("Loading the coverage report…")).toBeInTheDocument();
     expect(screen.getByText("Loading the summary report…")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading the latest results…"),
+    ).toBeInTheDocument();
   });
 
   it("has no accessibility violations", async () => {
@@ -441,5 +494,98 @@ describe("ReportsView", () => {
       rules: { "color-contrast": { enabled: false } },
     });
     expect(results.violations).toEqual([]);
+  });
+
+  it("narrows the summary by milestone and date range, each independently optional (#183)", async () => {
+    const requests = mockApi((request) => {
+      const options = respondOptions(request.url, request.method);
+      if (options) return options;
+      if (request.url.startsWith("/api/reports/coverage")) {
+        return jsonResponse(200, COVERAGE);
+      }
+      if (request.url.startsWith("/api/reports/summary")) {
+        return jsonResponse(200, SUMMARY);
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`);
+    });
+
+    renderView();
+    await summaryRegion();
+
+    // The milestone offer is async (listing, then documents): gate on the
+    // option existing before setting the select, or the change no-ops.
+    const milestoneSelect = await screen.findByLabelText("Milestone");
+    await waitFor(() => {
+      expect(
+        within(milestoneSelect).getByRole("option", { name: "Release 1" }),
+      ).toBeInTheDocument();
+    });
+    fireEvent.change(milestoneSelect, { target: { value: "v1.0.json" } });
+    await waitFor(() => {
+      expect(
+        reportUrls(requests, "summary").at(-1),
+      ).toContain("milestoneId=v1.0.json");
+    });
+
+    fireEvent.change(screen.getByLabelText("From"), {
+      target: { value: "2026-09-01" },
+    });
+    await waitFor(() => {
+      const last = reportUrls(requests, "summary").at(-1) ?? "";
+      expect(last).toContain("milestoneId=v1.0.json");
+      expect(last).toContain("from=2026-09-01");
+    });
+
+    fireEvent.change(screen.getByLabelText("To"), {
+      target: { value: "2026-09-30" },
+    });
+    await waitFor(() => {
+      const last = reportUrls(requests, "summary").at(-1) ?? "";
+      expect(last).toContain("to=2026-09-30");
+    });
+
+    // Clearing the milestone returns to the wider report.
+    fireEvent.change(screen.getByLabelText("Milestone"), {
+      target: { value: "" },
+    });
+    await waitFor(() => {
+      const last = reportUrls(requests, "summary").at(-1) ?? "";
+      expect(last).not.toContain("milestoneId");
+      expect(last).toContain("from=2026-09-01");
+    });
+  });
+
+  it("lists the latest result per case and links the recording run (#183)", async () => {
+    mockApi((request) => {
+      const options = respondOptions(request.url, request.method);
+      if (options) return options;
+      if (request.url.startsWith("/api/reports/coverage")) {
+        return jsonResponse(200, COVERAGE);
+      }
+      if (request.url.startsWith("/api/reports/summary")) {
+        return jsonResponse(200, SUMMARY);
+      }
+      throw new Error(`Unexpected request: ${request.method} ${request.url}`);
+    });
+
+    renderView();
+    const latest = await screen.findByRole("region", { name: "Latest results" });
+    const table = within(latest).getByRole("table", {
+      name: "Latest result per case",
+    });
+    expect(within(table).getAllByRole("row")).toHaveLength(3);
+    expect(
+      within(table).getByRole("rowheader", { name: "TC-CART-1" }),
+    ).toBeInTheDocument();
+    expect(within(table).getByRole("cell", { name: "Passed" })).toHaveTextContent(
+      "Passed",
+    );
+
+    fireEvent.click(
+      within(table).getByRole("button", { name: "Open run weekly.json" }),
+    );
+    expect(screen.getByTestId("selection")).toHaveTextContent(
+      "run:weekly.json",
+    );
   });
 });

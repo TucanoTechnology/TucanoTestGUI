@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import type {
   CoverageReport,
+  LastResultsReport,
   SummaryReport,
 } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { useProjectContext } from "../../app/ProjectContext.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { formatDurationMs, formatPercentage } from "./reportFormatters.js";
 
@@ -122,9 +124,16 @@ function CoverageReportSection({ projectId }: { projectId: string }) {
 function SummaryReportSection({
   projectId,
   configurationId,
+  milestoneId,
+  from,
+  to,
 }: {
   projectId: string;
   configurationId: string;
+  /** #183: the two filters the endpoint has always taken. */
+  milestoneId: string;
+  from: string;
+  to: string;
 }) {
   const { client } = useAuth();
   const [report, setReport] = useState<SummaryReport | null>(null);
@@ -140,6 +149,9 @@ function SummaryReportSection({
       client.reports.getSummaryReport({
         ...(projectId ? { projectId } : {}),
         ...(configurationId ? { configurationId } : {}),
+        ...(milestoneId ? { milestoneId } : {}),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
       }),
     )
       .then((loaded) => {
@@ -156,7 +168,7 @@ function SummaryReportSection({
     return () => {
       cancelled = true;
     };
-  }, [client, projectId, configurationId]);
+  }, [client, projectId, configurationId, milestoneId, from, to]);
 
   return (
     <section className="report" aria-labelledby="summary-report-heading">
@@ -217,6 +229,117 @@ function SummaryReportSection({
 }
 
 /**
+/**
+ * What the latest recorded result of every covered case says right now
+ * (#183): the dashboard question coverage and summary do not answer — the
+ * endpoint exists precisely for it. A case no in-scope run has recorded is
+ * absent rather than padded, matching the report's own contract.
+ */
+function LatestResultsSection({ projectId }: { projectId: string }) {
+  const { client } = useAuth();
+  const { setSelection } = useProjectContext();
+  const [report, setReport] = useState<LastResultsReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    apiFetch(() =>
+      client.reports.getLastResultsReport(projectId ? { projectId } : {}),
+    )
+      .then((loaded) => {
+        if (cancelled) return;
+        setReport(loaded);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(readApiError(err, "Failed to load the latest results"));
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [client, projectId]);
+
+  return (
+    <section className="report" aria-labelledby="latest-report-heading">
+      <h2 id="latest-report-heading" className="report__title">
+        Latest results
+      </h2>
+
+      {loading ? (
+        <ReportLoading label="Loading the latest results…" />
+      ) : error ? (
+        <ApiErrorNotice error={error} />
+      ) : report ? (
+        <>
+          <p className="report__scope">
+            {report.projectId
+              ? `The latest result each case holds in ${report.projectId}`
+              : "The latest result each case holds in every project"}
+          </p>
+          {report.cases.length === 0 ? (
+            <p className="report__note">
+              No run in scope has recorded a result yet.
+            </p>
+          ) : (
+            <table className="report__table">
+              <caption>Latest result per case</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Case</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Recorded</th>
+                  <th scope="col">Run</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.cases.map((entry) => (
+                  <tr key={entry.testCaseId}>
+                    <th scope="row">{entry.testCaseId}</th>
+                    <td>
+                      <span
+                        className={`status-badge status-badge--${entry.status.toLowerCase()}`}
+                      >
+                        {entry.status}
+                      </span>
+                    </td>
+                    <td>{entry.timestamp}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        aria-label={`Open run ${entry.runId}`}
+                        onClick={() =>
+                          setSelection({
+                            type: "run",
+                            id: entry.runId,
+                            ...(report.projectId
+                              ? { projectId: report.projectId }
+                              : {}),
+                          })
+                        }
+                      >
+                        {entry.runId}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+/**
  * The reports module: read-only coverage and summary reports for a scope the
  * two filters pick. The reports are independent views of independent
  * endpoints, so each one loads, fails and re-fetches on its own.
@@ -227,6 +350,13 @@ export function ReportsView() {
   const [configurationId, setConfigurationId] = useState("");
   const [projects, setProjects] = useState<ReportOption[]>([]);
   const [configurations, setConfigurations] = useState<ReportOption[]>([]);
+  // #183: the two remaining summary filters and the milestone offer behind
+  // the third. A milestone is a project's child, so its listing follows the
+  // project filter — and spans every loaded project when none is chosen.
+  const [milestones, setMilestones] = useState<ReportOption[]>([]);
+  const [milestoneId, setMilestoneId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [optionsError, setOptionsError] = useState<ApiErrorInfo | null>(null);
 
   useEffect(() => {
@@ -301,11 +431,48 @@ export function ReportsView() {
     };
   }, [client, projectId]);
 
+  useEffect(() => {
+    if (projects.length === 0 && projectId === "") return;
+    let cancelled = false;
+    const sources = projectId === "" ? projects.map((p) => p.id) : [projectId];
+    const load = async () => {
+      const perProject = await Promise.all(
+        sources.map(async (id) => {
+          const ids = await apiFetch(() =>
+            client.projects.listProjectMilestones({ id }),
+          );
+          return Promise.all(
+            ids.map(async (milestoneId) => {
+              const milestone = await apiFetch(() =>
+                client.milestones.getMilestone({ id: milestoneId }),
+              );
+              return { id: milestoneId, name: milestone.name ?? milestoneId };
+            }),
+          );
+        }),
+      );
+      return perProject.flat();
+    };
+    load()
+      .then((loaded) => {
+        if (!cancelled) setMilestones(loaded);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setOptionsError(readApiError(err, "Failed to load milestones"));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, projectId, projects]);
+
   const selectProject = (value: string) => {
     setProjectId(value);
     // The configuration belongs to the project it was chosen under, so it
     // cannot survive the project changing.
     setConfigurationId("");
+    setMilestoneId("");
   };
 
   return (
@@ -349,6 +516,45 @@ export function ReportsView() {
               : "Narrows the summary report to the runs that reference it."}
           </p>
         </div>
+
+        <div className="report-filters__field">
+          <label htmlFor="report-milestone-filter">Milestone</label>
+          <select
+            id="report-milestone-filter"
+            value={milestoneId}
+            onChange={(event) => setMilestoneId(event.target.value)}
+          >
+            <option value="">Every milestone</option>
+            {milestones.map((milestone) => (
+              <option key={milestone.id} value={milestone.id}>
+                {milestone.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* #183: the bounds are the run's own timestamp, inclusive and each
+            independently optional — the API's rule, restated as the hint. */}
+        <div className="report-filters__field">
+          <label htmlFor="report-from-filter">From</label>
+          <input
+            id="report-from-filter"
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(event) => setFrom(event.target.value)}
+          />
+        </div>
+        <div className="report-filters__field">
+          <label htmlFor="report-to-filter">To</label>
+          <input
+            id="report-to-filter"
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(event) => setTo(event.target.value)}
+          />
+        </div>
       </div>
 
       {optionsError && <ApiErrorNotice error={optionsError} />}
@@ -357,7 +563,11 @@ export function ReportsView() {
       <SummaryReportSection
         projectId={projectId}
         configurationId={configurationId}
+        milestoneId={milestoneId}
+        from={from}
+        to={to}
       />
+      <LatestResultsSection projectId={projectId} />
     </div>
   );
 }
