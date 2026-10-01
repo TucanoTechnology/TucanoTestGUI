@@ -40,11 +40,13 @@ describe("design tokens", () => {
   it("no colour literal outside :root", () => {
     const rootMatch = css.match(/:root\s*\{[^}]+\}/s);
     const rootBlock = rootMatch ? rootMatch[0] : "";
+    const darkBlock = css.match(/:root\[data-theme="dark"\]\s*\{[^}]+\}/s)?.[0] ?? "";
     // Comments carry issue citations like `#173`, which are hex literals to a
     // naive scan and never to a renderer; strip comment blocks before asking
     // what colours the rules themselves declare.
     const outsideRoot = css
       .replace(rootBlock, "")
+      .replace(darkBlock, "")
       .replace(/\/\*[\s\S]*?\*\//g, "");
     const hexLiterals = outsideRoot.match(/#[0-9a-fA-F]{3,8}\b/g);
     const rgbaLiterals = outsideRoot.match(/rgba?\(/g);
@@ -171,6 +173,53 @@ describe("design tokens", () => {
       expect(
         ratio,
         `${fgToken} (${fg}) on ${bgToken} (${bg}) is ${ratio.toFixed(2)}:1, below 4.5:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  const DARK_BLOCK = css.match(/:root\[data-theme="dark"\]\s*\{[^}]+\}/s)?.[0] ?? "";
+  const darkTokenValues = new Map<string, string>();
+  for (const match of DARK_BLOCK.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+    darkTokenValues.set(match[1]!, match[2]!.trim());
+  }
+
+  it("keeps every text token at 4.5:1 on every surface it is drawn on (dark theme)", () => {
+    for (const text of TEXT_TOKENS) {
+      for (const surface of SURFACE_TOKENS) {
+        const fg = darkTokenValues.get(text);
+        const bg = darkTokenValues.get(surface);
+        expect(fg, `${text} is undeclared in dark theme`).toBeTruthy();
+        expect(bg, `${surface} is undeclared in dark theme`).toBeTruthy();
+        const ratio = contrastRatio(fg!, bg!);
+        expect(
+          ratio,
+          `${text} (${fg}) on ${surface} (${bg}) is ${ratio.toFixed(2)}:1 in dark theme, below 4.5:1`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("keeps the semantic badge and control pairings at 4.5:1 (dark theme)", () => {
+    const pairs: [string, string][] = [
+      ["--color-text-success", "--color-success-light"],
+      ["--color-text-danger", "--color-danger-light"],
+      ["--color-text-warning", "--color-warning-light"],
+      ["--color-text-info", "--color-info-light"],
+      ["--color-text-danger", "--color-surface"],
+      ["--color-text-warning", "--color-surface"],
+      ["--color-text-info", "--color-surface"],
+      ["--color-primary-text", "--color-primary"],
+      ["--color-primary-hover", "--color-primary-light"],
+    ];
+    for (const [fgToken, bgToken] of pairs) {
+      const fg = darkTokenValues.get(fgToken);
+      const bg = darkTokenValues.get(bgToken);
+      expect(fg, `${fgToken} is undeclared in dark theme`).toBeTruthy();
+      expect(bg, `${bgToken} is undeclared in dark theme`).toBeTruthy();
+      const ratio = contrastRatio(fg!, bg!);
+      expect(
+        ratio,
+        `${fgToken} (${fg}) on ${bgToken} (${bg}) is ${ratio.toFixed(2)}:1 in dark theme, below 4.5:1`,
       ).toBeGreaterThanOrEqual(4.5);
     }
   });
