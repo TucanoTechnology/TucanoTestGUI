@@ -3,6 +3,7 @@ import type { TestConfiguration } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { echoedDocument } from "../../app/echo.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { Dialog } from "../../app/Dialog.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
@@ -80,7 +81,15 @@ export function ConfigurationDetail({
         }),
       );
       setMode("view");
-      setReloadToken((token) => token + 1);
+      // The write answers with the stored document (#459): paint it and skip
+      // this panel's re-read. A server without the echo answers `document`
+      // absent, and the read is exactly what this did before.
+      const echoed = echoedDocument<TestConfiguration>(updated);
+      if (echoed) {
+        setConfig(echoed);
+      } else {
+        setReloadToken((token) => token + 1);
+      }
       refreshProjects();
       announce(updated.message);
     } catch (err: unknown) {

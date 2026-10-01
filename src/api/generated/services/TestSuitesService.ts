@@ -53,7 +53,7 @@ export class TestSuitesService {
   }
   /**
    * Update a test suite
-   * @returns MessageResponse Updated
+   * @returns MessageResponse Updated. `document` carries the suite marker as stored; a read expands it as always.
    * @throws ApiError
    */
   public updateTestSuite({

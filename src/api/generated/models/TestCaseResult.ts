@@ -17,6 +17,9 @@ export type TestCaseResult = {
    */
   durationMs?: number;
   attachments?: Array<Attachment>;
+  /**
+   * Legacy in-result storage: links written by a deployment before the case-owned move (#460) surface here unchanged and survive re-recordings, but the API writes no link into a result any more — the case document is the store, surfaced by the defect routes.
+   */
   defectLinks?: Array<DefectLink>;
 };
 

@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type {
-  Attachment,
-  DefectLink,
   TestCaseResult,
   TestRun,
 } from "../../api/generated/index.js";
@@ -11,7 +9,6 @@ import {
   formatDuration,
   formatDurationSeconds,
   parseDurationSeconds,
-  rerecordBlocker,
 } from "./results.js";
 
 const RESULT: TestCaseResult = {
@@ -20,21 +17,6 @@ const RESULT: TestCaseResult = {
   timestamp: "1789655960",
   notes: "lock message missing",
   durationMs: 800,
-};
-
-const DEFECT: DefectLink = {
-  linkId: "link-1",
-  defectId: "OPS-1",
-  defectUrl: "https://acme.atlassian.net/browse/OPS-1",
-  trackerType: "jira",
-  linkedAt: "1789655960",
-};
-
-const ATTACHMENT: Attachment = {
-  filename: "log-1789655960.txt",
-  originalName: "log.txt",
-  mimeType: "text/plain",
-  size: 2048,
 };
 
 const RUN: TestRun = {
@@ -249,48 +231,4 @@ describe("buildResultRequest", () => {
   });
 });
 
-describe("rerecordBlocker", () => {
-  it("blocks nothing while the result carries no defect link or attachment", () => {
-    expect(rerecordBlocker(undefined)).toBeNull();
-    expect(rerecordBlocker(RESULT)).toBeNull();
-  });
 
-  it("names the links a re-record would discard", () => {
-    const blocked = rerecordBlocker({
-      ...RESULT,
-      defectLinks: [DEFECT, { ...DEFECT, linkId: "link-2", defectId: "OPS-2" }],
-    });
-
-    expect(blocked).toContain("2 linked defects");
-    expect(blocked).toContain("TucanoTestAPI#284");
-  });
-
-  it("names a lone linked defect in the singular", () => {
-    expect(rerecordBlocker({ ...RESULT, defectLinks: [DEFECT] })).toContain(
-      "1 linked defect.",
-    );
-  });
-
-  it("blocks a re-record of a result that carries an attachment", () => {
-    const blocked = rerecordBlocker({
-      ...RESULT,
-      attachments: [ATTACHMENT],
-    });
-
-    expect(blocked).toContain("1 attachment");
-    expect(blocked).toContain("TucanoTestAPI#284");
-  });
-
-  it("names both counts when the result carries both", () => {
-    const blocked = rerecordBlocker({
-      ...RESULT,
-      defectLinks: [DEFECT],
-      attachments: [
-        ATTACHMENT,
-        { ...ATTACHMENT, filename: "trace-1789655960.txt" },
-      ],
-    });
-
-    expect(blocked).toContain("1 linked defect and 2 attachments");
-  });
-});

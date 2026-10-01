@@ -40,7 +40,7 @@ export class MilestonesService {
   }
   /**
    * Update a milestone
-   * @returns MessageResponse Updated
+   * @returns MessageResponse Updated. `document` carries the milestone as stored.
    * @throws ApiError
    */
   public updateMilestone({

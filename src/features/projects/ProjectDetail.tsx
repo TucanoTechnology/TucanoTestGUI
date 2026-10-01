@@ -5,6 +5,7 @@ import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
+import { echoedDocument } from "../../app/echo.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 import { toJsonKey } from "../../app/keys.js";
@@ -96,7 +97,15 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         client.projects.updateProject({ id: projectId, requestBody }),
       );
       setMode("view");
-      setReloadToken((token) => token + 1);
+      // The write answers with the stored document (#459): paint it and skip
+      // this panel's re-read. A server without the echo answers `document`
+      // absent, and the read is exactly what this did before.
+      const echoed = echoedDocument<Project>(updated);
+      if (echoed) {
+        setProject(echoed);
+      } else {
+        setReloadToken((token) => token + 1);
+      }
       refreshProjects();
       announce(updated.message);
     } catch (err: unknown) {

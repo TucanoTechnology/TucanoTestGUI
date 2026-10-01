@@ -29,6 +29,7 @@ import {
 } from "./CaseForm.js";
 import { StepsEditor } from "./StepsEditor.js";
 import { AttachmentSection } from "./AttachmentSection.js";
+import { echoedDocument } from "../../app/echo.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
 const TABS = ["Details", "Steps", "Attachments", "History"] as const;
@@ -152,7 +153,18 @@ export function CaseDetail({
         const updated = await apiFetch(() =>
           client.testCases.updateTestCase({ id: caseId, requestBody: field }),
         );
-        setReloadToken((token) => token + 1);
+        // The stored case — new `version`, new `lastModified` and all — rides
+        // back in the echo (#459); painting it skips this panel's re-read.
+        const echoed = echoedDocument<TestCase>(updated);
+        if (echoed) {
+          setSnapshot((previous) =>
+            previous && previous.location
+              ? { ...previous, location: { ...previous.location, testCase: echoed } }
+              : previous,
+          );
+        } else {
+          setReloadToken((token) => token + 1);
+        }
         refreshProjects();
         announce(updated.message);
       } catch (err: unknown) {
@@ -177,7 +189,12 @@ export function CaseDetail({
       const updated = await apiFetch(() =>
         client.testCases.updateTestCase({ id: caseId, requestBody: { steps } }),
       );
-      setReloadToken((token) => token + 1);
+      const echoed = echoedDocument<TestCase>(updated);
+      if (echoed && location) {
+        setSnapshot({ key: target, location: { ...location, testCase: echoed } });
+      } else {
+        setReloadToken((token) => token + 1);
+      }
       announce(updated.message);
       return true;
     } catch (err: unknown) {
@@ -488,6 +505,30 @@ export function CaseDetail({
                 }}
               />
             </label>
+            {/* The case's own defect links (#460): written through the run
+                result routes, stored and read with the case. */}
+            <div className="case-detail__field case-detail__field--wide">
+              <span>Defects ({(testCase.defectLinks ?? []).length})</span>
+              {(testCase.defectLinks ?? []).length > 0 ? (
+                <ul className="entity-list">
+                  {(testCase.defectLinks ?? []).map((defect) => (
+                    <li key={defect.linkId} className="entity-list__item">
+                      <span className="entity-list__name">
+                        {defect.defectId}
+                      </span>
+                      <span className="entity-list__meta">
+                        {defect.trackerType}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="form-field__hint">
+                  No defects are linked to this case. Links are made from a
+                  run&apos;s result.
+                </p>
+              )}
+            </div>
             <label className="case-detail__field case-detail__field--wide">
               Expected Result
               <textarea

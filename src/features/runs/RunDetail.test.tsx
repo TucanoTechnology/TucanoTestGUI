@@ -72,6 +72,8 @@ interface ApiStore {
   resultPosts: unknown[];
   /** Bodies posted to the defect link route, oldest first. */
   defectPosts: unknown[];
+  /** The case-level defect list #460 stores: what the defects route reads. */
+  caseDefects: Record<string, unknown>[];
   /** The two import routes, oldest first, with the headers they were sent. */
   importPosts: {
     url: string;
@@ -89,20 +91,6 @@ interface ApiStore {
 }
 
 /** Applies `update` to the result the run records for `caseId`. */
-function replaceResult(
-  store: ApiStore,
-  caseId: string,
-  update: (result: Record<string, unknown>) => Record<string, unknown>,
-) {
-  const results =
-    (store.run.results as Record<string, unknown>[] | undefined) ?? [];
-  store.run = {
-    ...store.run,
-    results: results.map((result) =>
-      result.testCaseId === caseId ? update(result) : result,
-    ),
-  };
-}
 
 function checkoutApi(store: ApiStore) {
   return ({
@@ -128,7 +116,8 @@ function checkoutApi(store: ApiStore) {
       if (store.refusal) return store.refusal;
       store.puts.push(body);
       store.run = { ...store.run, ...(body as Record<string, unknown>) };
-      return jsonResponse(200, { message: "Resource updated" });
+      // #459: the stored document rides back.
+      return jsonResponse(200, { message: "Resource updated", document: store.run });
     }
     if (url === "/api/test_runs/nightly.json/duplicate" && method === "POST") {
       if (store.refusal) return store.refusal;
@@ -168,28 +157,40 @@ function checkoutApi(store: ApiStore) {
           },
         ],
       };
-      return jsonResponse(200, { message: "Test result recorded in run" });
+      const stored = (
+        (store.run.results as Record<string, unknown>[]).find(
+          (result) => result.testCaseId === posted.testCaseId,
+        ) ?? {}
+      );
+      return jsonResponse(200, {
+        message: "Test result recorded in run",
+        result: stored,
+      });
+    }
+
+    // #460: the list lives on the case; the route reads it from there.
+    const listMatch =
+      /^\/api\/test_runs\/nightly\.json\/results\/([^/]+)\/defects$/.exec(url);
+    if (listMatch && method === "GET") {
+      return jsonResponse(200, { defects: store.caseDefects });
     }
 
     const linkMatch =
       /^\/api\/test_runs\/nightly\.json\/results\/([^/]+)\/defects$/.exec(url);
     if (linkMatch && method === "POST") {
       if (store.refusal) return store.refusal;
-      const caseId = linkMatch[1] ?? "";
       const posted = body as {
         defectId: string;
         defectUrl: string;
         trackerType: string;
       };
       store.defectPosts.push(body);
-      replaceResult(store, caseId, (result) => ({
-        ...result,
-        defectLinks: [
-          ...((result.defectLinks as Record<string, unknown>[] | undefined) ??
-            []),
-          { linkId: "link-1", linkedAt: "1789655960", ...posted },
-        ],
-      }));
+      // The link lands on the case document, not the run (#460).
+      store.caseDefects.push({
+        linkId: `link-${store.caseDefects.length + 1}`,
+        linkedAt: "1789655960",
+        ...posted,
+      });
       return jsonResponse(201, {
         id: "link-1",
         message: "Defect linked to test result",
@@ -202,15 +203,11 @@ function checkoutApi(store: ApiStore) {
       );
     if (unlinkMatch && method === "DELETE") {
       if (store.refusal) return store.refusal;
-      const caseId = unlinkMatch[1] ?? "";
       const linkId = unlinkMatch[2] ?? "";
       store.deletes.push(url);
-      replaceResult(store, caseId, (result) => ({
-        ...result,
-        defectLinks: (
-          (result.defectLinks as Record<string, unknown>[] | undefined) ?? []
-        ).filter((link) => link.linkId !== linkId),
-      }));
+      store.caseDefects = store.caseDefects.filter(
+        (link) => link.linkId !== linkId,
+      );
       return jsonResponse(200, { message: "Defect unlinked from test result" });
     }
 
@@ -242,6 +239,7 @@ function emptyStore(run: Record<string, unknown> = RUN): ApiStore {
     posts: [],
     resultPosts: [],
     defectPosts: [],
+    caseDefects: [],
     importPosts: [],
     deletes: [],
   };
@@ -259,16 +257,18 @@ function resultStore(): ApiStore {
   });
 }
 
-/** `resultStore` with the recorded result already linking a defect. */
+/** `resultStore` whose CASE carries a defect link (#460). */
 function linkedStore(): ApiStore {
-  return emptyStore({
+  const store = emptyStore({
     ...RUN,
     testCases: [
       { testCaseId: "TC-LOGIN-1", title: "Log in" },
       { testCaseId: "TC-LOGIN-2", title: "Reject a bad password" },
     ],
-    results: [{ ...RECORDED_RESULT, defectLinks: [DEFECT] }],
+    results: [{ ...RECORDED_RESULT }],
   });
+  store.caseDefects.push({ ...DEFECT });
+  return store;
 }
 
 function Harness({ runId }: { runId: string }) {
@@ -933,7 +933,7 @@ describe("RunDetail", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the defects a recorded result already links", async () => {
+  it("renders the defects the CASE links, fetched when the form opens", async () => {
     const store = linkedStore();
     const { requests } = await openDetail(store);
 
@@ -941,7 +941,7 @@ describe("RunDetail", () => {
     const dialog = await screen.findByRole("dialog", { name: "Edit result" });
 
     expect(
-      within(dialog).getByRole("heading", { name: "Linked defects (1)" }),
+      await within(dialog).findByRole("heading", { name: "Linked defects (1)" }),
     ).toBeInTheDocument();
     expect(within(dialog).getByText("OPS-1")).toBeInTheDocument();
     expect(
@@ -950,13 +950,14 @@ describe("RunDetail", () => {
     expect(
       within(dialog).getByRole("button", { name: "Unlink OPS-1" }),
     ).toBeInTheDocument();
-    // The links travel with the run document, so opening the form reads nothing.
-    expect(requests.map((request) => request.url)).toEqual([
-      "/api/test_runs/nightly.json",
-    ]);
+    // #460: the list is the case's, fetched from the defects route; the run
+    // document carries nothing to read.
+    expect(
+      requests.map((request) => request.url.split("/").slice(-2).join("/")),
+    ).toContain("TC-LOGIN-1/defects");
   });
 
-  it("links a defect and reads the run again", async () => {
+  it("links a defect onto the case and re-reads the list, not the run", async () => {
     const store = resultStore();
     const { requests } = await openDetail(store);
 
@@ -987,16 +988,23 @@ describe("RunDetail", () => {
     expect(screen.getByTestId("announcement")).toHaveTextContent(
       "Defect linked to test result",
     );
-    // The run is read again rather than the table being guessed at locally.
+    // #460: the link wrote the case document — the defect list is what gets
+    // re-read; the (much larger) run document is read exactly once.
     await waitFor(() => {
       expect(
         requests.filter(
           (request) =>
-            request.url === "/api/test_runs/nightly.json" &&
-            request.method === "GET",
+            request.url.endsWith("/defects") && request.method === "GET",
         ),
       ).toHaveLength(2);
     });
+    expect(
+      requests.filter(
+        (request) =>
+          request.url === "/api/test_runs/nightly.json" &&
+          request.method === "GET",
+      ),
+    ).toHaveLength(1);
     expect(
       await within(dialog).findByRole("heading", {
         name: "Linked defects (1)",
@@ -1029,47 +1037,38 @@ describe("RunDetail", () => {
     ).toBeInTheDocument();
   });
 
-  it("refuses to re-record a result that holds a linked defect", async () => {
+  it("records a result whose case links defects — the link lives beyond the result", async () => {
     const store = linkedStore();
-    await openDetail(store);
+    const { requests } = await openDetail(store);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit result" }));
     const dialog = await screen.findByRole("dialog", { name: "Edit result" });
-
-    expect(
-      within(dialog).getByText(/This result holds 1 linked defect\./),
-    ).toBeInTheDocument();
+    // #460 made the guard this replaced obsolete: a recording cannot touch
+    // what no result field holds any more.
     const save = within(dialog).getByRole("button", { name: "Save result" });
-    expect(save).toBeDisabled();
-    expect(save).toHaveAccessibleDescription(/TucanoTestAPI#284/);
+    expect(save).toBeEnabled();
 
-    // A disabled button is not the only way in; the form refuses too.
-    fireEvent.submit(
-      within(dialog).getByRole("form", { name: "Save result form" }),
-    );
-    expect(store.resultPosts).toEqual([]);
-  });
-
-  it("releases the guard once the last linked defect is removed", async () => {
-    const store = linkedStore();
-    await openDetail(store);
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit result" }));
-    const dialog = await screen.findByRole("dialog", { name: "Edit result" });
-    expect(
-      within(dialog).getByRole("button", { name: "Save result" }),
-    ).toBeDisabled();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Unlink OPS-1" }));
+    fireEvent.change(within(dialog).getByLabelText("Status"), {
+      target: { value: "Passed" },
+    });
+    fireEvent.submit(within(dialog).getByRole("form", { name: "Save result form" }));
 
     await waitFor(() => {
-      expect(
-        within(dialog).getByRole("button", { name: "Save result" }),
-      ).toBeEnabled();
+      expect(store.resultPosts).toHaveLength(1);
     });
+    // The echoed result updates the row in place: the run is read exactly
+    // once (the open), and the case's list stands where it was.
     expect(
-      within(dialog).queryByText(/TucanoTestAPI#284/),
-    ).not.toBeInTheDocument();
+      requests.filter(
+        (request) =>
+          request.url === "/api/test_runs/nightly.json" &&
+          request.method === "GET",
+      ),
+    ).toHaveLength(1);
+    expect(store.caseDefects).toHaveLength(1);
+    expect(
+      await screen.findByRole("combobox", { name: "Status for TC-LOGIN-1" }),
+    ).toHaveValue("Passed");
   });
 
   it("has no accessibility violations with the result dialog open", async () => {

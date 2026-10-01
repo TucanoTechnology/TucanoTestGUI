@@ -1,8 +1,9 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 import type { Milestone, MilestoneProgress } from "../../api/generated/index.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { echoedDocument } from "../../app/echo.js";
 import { ApiErrorNotice } from "../../app/ApiErrorNotice.js";
 import { Dialog } from "../../app/Dialog.js";
 import { toJsonKey } from "../../app/keys.js";
@@ -44,6 +45,21 @@ export function MilestoneDetail({
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsError, setOptionsError] = useState<ApiErrorInfo | null>(null);
   const [newId, setNewId] = useState("");
+
+  // Progress is derived over the linked runs, so an edit re-reads just it;
+  // the milestone document itself arrives in the write's echo (#459). A
+  // failed refresh keeps the last progress the API actually reported.
+  const loadProgress = useCallback(async () => {
+    try {
+      setProgress(
+        await apiFetch(() =>
+          client.milestones.getMilestoneProgress({ id: milestoneId }),
+        ),
+      );
+    } catch {
+      // left as stored
+    }
+  }, [client, milestoneId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,7 +165,16 @@ export function MilestoneDetail({
         client.milestones.updateMilestone({ id: milestoneId, requestBody }),
       );
       setMode("view");
-      setReloadToken((token) => token + 1);
+      // The write answers with the stored document (#459): paint it and skip
+      // this panel's re-read of the milestone. Progress is derived from the
+      // linked runs, so it is read again either way.
+      void loadProgress();
+      const echoed = echoedDocument<Milestone>(updated);
+      if (echoed) {
+        setMilestone(echoed);
+      } else {
+        setReloadToken((token) => token + 1);
+      }
       refreshProjects();
       announce(updated.message);
     } catch (err: unknown) {

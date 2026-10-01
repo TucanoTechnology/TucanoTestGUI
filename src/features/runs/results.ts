@@ -134,25 +134,3 @@ export function buildResultRequest(
   }
   return request;
 }
-
-/**
- * Why a recorded result cannot be recorded again, or `null` when it can.
- *
- * The record route replaces the whole result, and `TestResultRequest` cannot
- * express a defect link or an attachment, so re-recording a result that holds
- * either drops it (`TucanoTestAPI#284`). The two counts are the only fields on
- * a result the request cannot carry.
- */
-export function rerecordBlocker(result: TestCaseResult | undefined): string | null {
-  const linked = result?.defectLinks?.length ?? 0;
-  const attachments = result?.attachments?.length ?? 0;
-  if (linked === 0 && attachments === 0) return null;
-
-  const holds: string[] = [];
-  if (linked > 0) holds.push(`${linked} linked defect${linked === 1 ? "" : "s"}`);
-  if (attachments > 0) {
-    holds.push(`${attachments} attachment${attachments === 1 ? "" : "s"}`);
-  }
-
-  return `This result holds ${holds.join(" and ")}. Recording it again would discard them, because the API replaces the whole result and its request cannot carry them (see TucanoTestAPI#284). Unlink them first if the record itself must change.`;
-}
