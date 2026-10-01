@@ -5,6 +5,7 @@ import type {
   TestCase,
 } from "../../api/generated/index.js";
 import { ClipboardIcon } from "../../components/Icon.js";
+import { RowBreadcrumb } from "../../components/RowBreadcrumb.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
@@ -639,7 +640,14 @@ export function CaseList({
                   </td>
                   <td className="case-table__td case-table__td--id">
                     <span className="case-table__id">{testCase.testCaseId}</span>
-                    <span className="case-table__parent">{row.parentPath}</span>
+                    <RowBreadcrumb
+                      projectName={projectName}
+                      suiteName={
+                        row.parentPath === "project root"
+                          ? undefined
+                          : row.parentPath
+                      }
+                    />
                     <button
                       type="button"
                       className="btn btn-ghost case-table__place"

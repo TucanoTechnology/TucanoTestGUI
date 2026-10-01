@@ -2318,3 +2318,24 @@ textarea {
   padding: var(--space-3);
   margin: var(--space-3) 0;
 }
+
+/* ------------------------------------------------------------------ */
+/* Row breadcrumb (#195)                                               */
+/* ------------------------------------------------------------------ */
+
+.row-breadcrumb {
+  display: block;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.row-breadcrumb__sep {
+  margin: 0 4px;
+  opacity: 0.6;
+}
+
+.row-breadcrumb__crumb--current {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}

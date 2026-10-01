@@ -208,8 +208,8 @@ describe("CaseList", () => {
     expect(screen.getByText("TC-CART-1")).toBeInTheDocument();
     expect(screen.getByText("Smoke")).toBeInTheDocument();
     expect(screen.getByText("(v3)")).toBeInTheDocument();
-    // A project-level case states its root parent.
-    expect(screen.getByText("project root")).toBeInTheDocument();
+    // A project-level case shows just the project name in the breadcrumb.
+    expect(screen.getAllByText("Checkout").length).toBeGreaterThan(0);
     // The Last Results column reads the report: TC-CART-1 failed in the
     // nightly run, and the case no run covered is absent — an em dash, never
     // a fabricated Untested.

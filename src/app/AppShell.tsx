@@ -9,10 +9,13 @@ import { DIRECT_SUITE_ID, SuiteTree } from "../features/suites/SuiteTree.js";
 import { CaseList } from "../features/cases/CaseList.js";
 import { CaseDetail } from "../features/cases/CaseDetail.js";
 import { RunList } from "../features/runs/RunList.js";
+import { RunListPanel } from "../features/runs/RunListPanel.js";
 import { RunDetail } from "../features/runs/RunDetail.js";
 import { MilestoneList } from "../features/milestones/MilestoneList.js";
+import { MilestoneListPanel } from "../features/milestones/MilestoneListPanel.js";
 import { MilestoneDetail } from "../features/milestones/MilestoneDetail.js";
 import { ConfigurationList } from "../features/configurations/ConfigurationList.js";
+import { ConfigurationListPanel } from "../features/configurations/ConfigurationListPanel.js";
 import { ConfigurationDetail } from "../features/configurations/ConfigurationDetail.js";
 import { ReportsView } from "../features/reports/ReportsView.js";
 import { GlobalSearch } from "./GlobalSearch.js";
@@ -299,27 +302,81 @@ function AppShellContent() {
       <div className="panes">
         <aside
           className="pane-left"
-          aria-label={selectedProjectId ? "Suite tree" : "Project explorer"}
+          aria-label={
+            selectedProjectId
+              ? activeModule === "cases"
+                ? "Suite tree"
+                : activeModule === "runs"
+                  ? "Runs"
+                  : activeModule === "milestones"
+                    ? "Milestones"
+                    : activeModule === "configurations"
+                      ? "Configurations"
+                      : "Project explorer"
+              : "Project explorer"
+          }
         >
           {selectedProjectId ? (
-            <SuiteTree
-              projectId={selectedProjectId}
-              selectedSuiteId={suiteScope}
-              onSelectSuite={selectSuite}
-              onSelectCase={(suiteId, caseId) => {
-                // One click lands the case: scope the list to its suite,
-                // select the case, and make sure the centre module showing
-                // cases is the one on screen (#178).
-                setActiveModule("cases");
-                setSuiteScope(suiteId);
-                setSelection({
-                  type: "case",
-                  id: caseId,
-                  projectId: selectedProjectId ?? undefined,
-                });
-                setSidebarOpen(false);
-              }}
-            />
+            activeModule === "cases" ? (
+              <SuiteTree
+                projectId={selectedProjectId}
+                selectedSuiteId={suiteScope}
+                onSelectSuite={selectSuite}
+                onSelectCase={(suiteId, caseId) => {
+                  // One click lands the case: scope the list to its suite,
+                  // select the case, and make sure the centre module showing
+                  // cases is the one on screen (#178).
+                  setActiveModule("cases");
+                  setSuiteScope(suiteId);
+                  setSelection({
+                    type: "case",
+                    id: caseId,
+                    projectId: selectedProjectId ?? undefined,
+                  });
+                  setSidebarOpen(false);
+                }}
+              />
+            ) : activeModule === "runs" ? (
+              <RunListPanel
+                projectId={selectedProjectId}
+                selectedRunId={selection?.type === "run" ? selection.id : null}
+                onSelectRun={(runId) =>
+                  setSelection({
+                    type: "run",
+                    id: runId,
+                    projectId: selectedProjectId,
+                  })
+                }
+              />
+            ) : activeModule === "milestones" ? (
+              <MilestoneListPanel
+                projectId={selectedProjectId}
+                selectedMilestoneId={
+                  selection?.type === "milestone" ? selection.id : null
+                }
+                onSelectMilestone={(milestoneId) =>
+                  setSelection({
+                    type: "milestone",
+                    id: milestoneId,
+                    projectId: selectedProjectId,
+                  })
+                }
+              />
+            ) : activeModule === "configurations" ? (
+              <ConfigurationListPanel
+                projectId={selectedProjectId}
+                selectedConfigId={
+                  selection?.type === "configuration" ? selection.id : null
+                }
+                onSelectConfiguration={(configId) =>
+                  setSelection({
+                    type: "configuration",
+                    id: configId,
+                    projectId: selectedProjectId,
+                  })
+                }
+              />
+            ) : null
           ) : (
             <ProjectExplorer />
           )}
