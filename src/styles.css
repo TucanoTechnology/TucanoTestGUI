@@ -50,7 +50,6 @@
 
   /* Typography */
   --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-size-xs: 11px;
   --font-size-sm: 12px;
   --font-size-base: 13px;
   --font-size-md: 14px;
@@ -64,13 +63,18 @@
   --line-height-tight: 1.25;
   --line-height-normal: 1.5;
 
-  /* Borders */
-  --radius-sm: 3px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  /* Borders — #180: the scale lifted to 6/8/12 for the rounded card and
+     pill language; every consumer takes it through the token, never a
+     literal. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-full: 9999px;
 
-  /* Shadows */
+  /* Shadows — #180 adds the two-tier pairing cards use: resting and raised
+     (hover). The two layers make the lift read as depth, not a smudge. */
+  --shadow-rest: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 8px rgba(0, 0, 0, 0.04);
+  --shadow-raise: 0 2px 4px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.08);
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.08);
   --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
@@ -146,6 +150,15 @@ textarea {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+
+  /* #180's hover lifts are motion in their end state too: with reduced
+     motion the cards stay flat and the feedback is the colour change alone. */
+  .report-panel:hover,
+  .case-table__row:hover,
+  .entity-list__item:hover {
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -219,7 +232,7 @@ textarea {
 }
 
 .project-switcher__error {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-danger);
 }
 
@@ -384,7 +397,7 @@ textarea {
 
 .btn-sm {
   padding: var(--space-1) var(--space-2);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 input,
@@ -485,7 +498,7 @@ textarea {
 
 .suite-tree__count {
   flex-shrink: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   background: var(--color-surface-active);
   padding: 1px 6px;
@@ -574,7 +587,7 @@ textarea {
 .error-display__code {
   font-weight: var(--font-weight-semibold);
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 /* ---------------------------------------------------------------------------
@@ -586,7 +599,7 @@ textarea {
   align-items: center;
   padding: 2px var(--space-2);
   border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-tight);
   background: var(--color-surface-active);
@@ -641,7 +654,7 @@ textarea {
   align-items: center;
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   background: var(--color-primary-light);
   color: var(--color-primary-hover);
   border: 1px solid transparent;
@@ -689,7 +702,7 @@ textarea {
 }
 
 .detail-field__label {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -755,7 +768,7 @@ textarea {
 }
 
 .form-field__hint {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
 
@@ -868,7 +881,7 @@ textarea {
 }
 
 .entity-list__meta {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -910,7 +923,7 @@ textarea {
 }
 
 .data-table th {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -924,7 +937,7 @@ textarea {
 
 .data-table__id {
   font-family: ui-monospace, SFMono-Regular, monospace;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -988,7 +1001,7 @@ textarea {
 }
 
 .login-form__debug-title {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1032,7 +1045,7 @@ textarea {
 
 .explorer__notice {
   padding: var(--space-2) var(--space-3);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -1089,7 +1102,7 @@ textarea {
 
 .tree-node__count {
   flex-shrink: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   background: var(--color-surface-active);
   padding: 1px 6px;
@@ -1139,7 +1152,7 @@ textarea {
 }
 
 .option__meta {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -1203,7 +1216,7 @@ textarea {
   border-radius: var(--radius-full);
   background: var(--color-primary-light);
   color: var(--color-primary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
 }
 
@@ -1247,7 +1260,7 @@ textarea {
 }
 
 .import-section__hint {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -1261,7 +1274,7 @@ textarea {
 }
 
 .import-summary__source {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -1272,7 +1285,7 @@ textarea {
 }
 
 .import-summary__stat-label {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-secondary);
@@ -1305,7 +1318,7 @@ textarea {
 }
 
 .attachment__preview-note {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -1340,7 +1353,7 @@ textarea {
 }
 
 .report__note {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -1358,7 +1371,7 @@ textarea {
 }
 
 .report-filters__hint {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -1375,7 +1388,7 @@ textarea {
 }
 
 .report__stat-label {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-secondary);
@@ -1401,7 +1414,7 @@ textarea {
 }
 
 .report__table th {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -1439,7 +1452,7 @@ textarea {
 }
 
 .state-view__code {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   font-family: monospace;
 }
@@ -1547,7 +1560,7 @@ textarea {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
   border-bottom: 2px solid var(--color-border);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -1584,11 +1597,11 @@ textarea {
 .case-table__id {
   font-weight: var(--font-weight-medium);
   font-family: monospace;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .case-table__parent {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
 
@@ -1599,7 +1612,7 @@ textarea {
 .case-table__version {
   font-weight: var(--font-weight-normal);
   color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .case-table__td--date {
@@ -1620,7 +1633,7 @@ textarea {
   gap: 4px;
   padding: 2px 8px;
   border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
 }
 
@@ -1749,12 +1762,12 @@ textarea {
 
 .case-detail__id {
   font-family: monospace;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
 .case-detail__parent {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
 
@@ -1871,7 +1884,7 @@ textarea {
 .history-list__fields {
   flex: 1;
   color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
 }
 
 .history-snapshot__description {
@@ -1925,7 +1938,7 @@ textarea {
   display: flex;
   gap: var(--space-3);
   flex-wrap: wrap;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -2019,7 +2032,7 @@ textarea {
 
 .tree-node__key {
   font-family: monospace;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2086,7 +2099,7 @@ textarea {
 }
 
 .global-search__type {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--color-text-muted);
@@ -2102,7 +2115,7 @@ textarea {
 
 .global-search__id {
   font-family: monospace;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
@@ -2157,4 +2170,88 @@ textarea {
 .case-list__scroll--virtual .case-table__row {
   height: 48px;
   overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Modernisation pass (#180): sticky headers, tabular figures, chip     */
+/* weight, hover elevation and the empty-state accent — all token-     */
+/* driven, all AA-neutral (no pairing changes, only shape and depth).  */
+/* ------------------------------------------------------------------ */
+
+/* The centre list's header stays on screen while the pane scrolls —
+   the column labels are the map, and a scrolling map should not leave. */
+.case-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-surface);
+}
+
+/* Figures line up: identifiers, dates and codes read as columns, not as
+   a jitter of glyph widths. */
+.case-table__id,
+.case-table__td--date,
+.tree-node__key,
+.suite-tree__count,
+.state-view__code,
+.history-list__version,
+.run-list__select,
+.bulk-toolbar__select {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chips: the tints and text colours are #172's measured pairings; the
+   pass lifts weight and keeps the pill, so the chip reads as a chip. */
+.status-badge {
+  font-weight: var(--font-weight-semibold);
+}
+
+.badge {
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Elevation: cards rest with the two-tier shadow and lift one step on
+   hover; rows raise their own surface rather than moving (a table that
+   shifts under the cursor reads as a bug, not as depth). */
+.report-panel {
+  box-shadow: var(--shadow-rest);
+  transition:
+    transform var(--transition-normal),
+    box-shadow var(--transition-normal);
+}
+
+.report-panel:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-raise);
+}
+
+.case-table__row {
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.case-table__row:hover {
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.entity-list__item {
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.entity-list__item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* The empty state sits on a soft accent wash — decorative paint behind
+   decorative icons; the message text pairs against the tinted end of
+   the gradient, and secondary on primary-light is a measured pairing in
+   styles.test.ts (≥ 4.5:1). */
+.state-view--empty {
+  background:
+    radial-gradient(
+      110% 80% at 50% 0%,
+      var(--color-primary-light) 0%,
+      transparent 62%
+    );
+  border-radius: var(--radius-lg);
 }
