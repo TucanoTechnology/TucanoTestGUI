@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { WarningIcon } from "./Icon.js";
 
 /**
  * The three non-content states every list and detail panel shares (#133):
@@ -8,7 +9,8 @@ import type { ReactNode } from "react";
  */
 
 interface EmptyStateProps {
-  icon: string;
+  /** The icon system's component output (#180); decorative, so never text. */
+  icon: ReactNode;
   message: string;
   action?: ReactNode;
 }
@@ -59,7 +61,7 @@ export function ErrorState({ code, message, onRetry }: ErrorStateProps) {
   return (
     <div className="state-view state-view--error" role="alert">
       <span className="state-view__icon" aria-hidden="true">
-        ⚠️
+        <WarningIcon />
       </span>
       <p className="state-view__message">{message}</p>
       {code && <p className="state-view__code">Error code: {code}</p>}

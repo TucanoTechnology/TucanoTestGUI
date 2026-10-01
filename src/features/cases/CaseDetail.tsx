@@ -27,6 +27,7 @@ import {
   type CasePriority,
   type CaseSeverity,
 } from "./CaseForm.js";
+import { ClockIcon } from "../../components/Icon.js";
 import { StepsEditor } from "./StepsEditor.js";
 import { AttachmentSection } from "./AttachmentSection.js";
 import { echoedDocument } from "../../app/echo.js";
@@ -737,7 +738,7 @@ function HistoryTab({ caseId }: { caseId: string }) {
   if (entries.length === 0) {
     return (
       <EmptyState
-        icon="🕘"
+        icon={<ClockIcon />}
         message="No revisions yet — they arrive with the first qualifying update."
       />
     );

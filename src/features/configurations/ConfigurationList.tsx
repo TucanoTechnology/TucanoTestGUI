@@ -10,6 +10,7 @@ import {
   type ConfigurationFormValues,
 } from "./ConfigurationForm.js";
 import { buildConfigurationCreateRequest } from "./configurationRequests.js";
+import { SettingsIcon } from "../../components/Icon.js";
 import { EmptyState, ErrorState, LoadingSkeleton } from "../../components/StateViews.js";
 
 interface ConfigurationListProps {
@@ -143,7 +144,7 @@ export function ConfigurationList({
 
       {visible.length === 0 ? (
         <EmptyState
-          icon="⚙"
+          icon={<SettingsIcon />}
           message={
             rows.length === 0
               ? "No configurations yet"

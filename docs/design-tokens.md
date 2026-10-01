@@ -4,20 +4,23 @@ Every colour, spacing, radius, type and layout value in the GUI lives in the `:r
 of [`src/styles.css`](../src/styles.css). Components reference the tokens through `var(...)` instead
 of literals, so the palette can be reviewed and changed in one place.
 
-`src/styles.css` holds the **token layer, the global resets and the utilities**, and three tickets
-have landed rules on top of them so far:
+`src/styles.css` holds the **token layer, the global resets and the utilities**, with landed rules
+grouped as:
 
 - the **application-shell layout** — the top bar, the icon nav rail, the three-pane grid and its
   narrow-viewport behaviour;
 - the **shared control primitives** — `.btn` with its variants, and the bare `input`/`select`/
   `textarea` box; and
 - the **suite tree** — the left pane's hierarchy, its two pinned virtual nodes and the case rows a
-  suite expands into.
+  suite expands into; and
+- the **module surfaces** — the case list and detail, runs, milestones, configurations, reports and
+  the shared state views, styled by the design-phase tickets (#129–#133), and the modernisation
+  pass (#180) which re-scaled the radius and shadow tiers, lifted the type floor and added the
+  sticky table headers, tabular figures and hover elevation — all through these tokens, never
+  literals.
 
-Every other surface (the case list and table, the case detail, the runs, milestones, configurations
-and reports surfaces, and the shared state views) is styled by the ticket that owns it (#129–#133),
-so those surfaces still render unstyled in a browser until their ticket lands. The token names and
-values are frozen: later tickets consume them, they do not re-define them.
+The token names are frozen: later tickets consume them; rescaling a value is a design decision
+recorded here, not a silent edit.
 
 ## What the suite enforces
 
@@ -45,9 +48,9 @@ rules that land in later tickets, so an unreferenced token is expected state her
 | Brand | `--color-primary`, `--color-primary-hover`, `--color-primary-light`, `--color-primary-text` | `--color-primary-text` is the label colour on a filled primary control |
 | Semantic | `--color-{success,warning,danger,info}` and their `-light` backgrounds | Status and feedback. The API's status and priority vocabularies map onto these rather than getting tokens of their own |
 | Spacing | `--space-1` … `--space-12` | 4px base: 4, 8, 12, 16, 20, 24, 32, 40, 48 |
-| Typography | `--font-family`, `--font-size-xs` … `--font-size-2xl`, `--font-weight-{normal,medium,semibold,bold}`, `--line-height-{tight,normal}` | 11–24px sizes |
-| Borders | `--radius-{sm,md,lg,full}` | |
-| Shadows | `--shadow-{sm,md,lg}` | |
+| Typography | `--font-family`, `--font-size-sm` … `--font-size-2xl`, `--font-weight-{normal,medium,semibold,bold}`, `--line-height-{tight,normal}` | 12–24px. #180 retired `--font-size-xs` (11px) — the floor is 12px — and date/ID/code cells carry `font-variant-numeric: tabular-nums` |
+| Borders | `--radius-{sm,md,lg,full}` | 6/8/12px + pill (#180 re-scale; formerly 3/6/8) |
+| Shadows | `--shadow-{rest,raise,sm,md,lg}` | `rest`/`raise` (#180) are the two-tier pair cards use at rest and on hover; the hover lift is a `transform`, so `prefers-reduced-motion` pins it flat |
 | Layout | `--topbar-height`, `--navrail-width`, `--leftpane-width`, `--rightpane-width` | The shell geometry shared by the three-pane layout |
 | Transitions | `--transition-{fast,normal}` | |
 
@@ -67,28 +70,19 @@ kept here as a global accessibility guarantee.
 The GUI targets **WCAG 2.1 Level AA**: 4.5:1 for text (1.4.3) and 3:1 for focus rings and markers
 (1.4.11).
 
-Two things are worth knowing about how that is checked:
+Two levels check it, and both run in CI:
 
-- `axe-core` runs in `src/App.test.tsx`, but it cannot evaluate its own colour-contrast rule under
-  jsdom, because there is no canvas. Colour contrast therefore cannot be asserted from the unit
-  suite at all.
-- `src/styles.test.ts` covers structure — no literal outside the token layer — not arithmetic.
-  It does not compute WCAG ratios, so a passing `npm test` is not evidence that a pair meets 4.5:1.
+- `src/styles.test.ts` computes WCAG 1.4.3 ratios against the `:root` **values** — every text
+  token over every surface it is drawn on, plus the named badge and control pairings — so a token
+  edit that breaks a measured pair fails `npm test` with the ratio in the message.
+- The Playwright suite (`npm run test:e2e`, CI job `e2e`) runs axe with `color-contrast` **live**
+  over every page, tab and dialog of the built bundle — the runtime gate jsdom could never be.
 
-Before release, verify any new colour pair in a real browser (or with an axe browser run), and check
-it against the token it is composited on rather than against white alone.
-
-Three pairs are known to be under the 4.5:1 text floor and are carried to the design-system and
-accessibility ticket, which owns the audit rather than each surface's own ticket:
-
-| Pair | Ratio | Used by |
-| --- | --- | --- |
-| `--color-primary` on `--color-primary-light` | ≈ 4.24:1 | `.navrail__item--active`, `.suite-tree__node--active` |
-| `--color-text-secondary` on `--color-bg` | ≈ 4.45:1 | Secondary text against the centre pane |
-| `--color-text-muted` on `--color-surface` | ≈ 2.07:1 | Non-essential text only, per the note above |
-
-`--color-primary-hover` on `--color-primary-light` is ≈ 5.49:1, so a darker active-row foreground
-clears the floor without a new token.
+The pairs that once sat under the floor (`--color-text-muted` at ≈ 2:1, the pastel badge texts,
+primary-on-primary-light) were re-tuned by #172/#174 to values that clear 4.5:1 on every surface
+they are drawn on, and the tables above and in `styles.test.ts` are the record. A new pairing goes
+into the `styles.test.ts` table in the same change that draws it — checked against the token it is
+composited on, never against white alone.
 
 ## Decisions recorded here
 
@@ -99,8 +93,9 @@ clears the floor without a new token.
   companion) instead of the previous per-status and per-priority token families. Mapping the API's
   status and priority unions onto these is the responsibility of the tickets that render them, so
   no `--status-*` or `--priority-*` token exists.
-- `--color-text-muted` is the lightest text value in the layer. It is reserved for non-essential
-  text; verify it against its actual background before putting real content in it.
+- `--color-text-muted` is the lightest text value in the layer (#172: `#5b6470`, measured ≥ 4.9:1
+  on every surface it is drawn on). It stays reserved for meta text — keys, parent paths, codes —
+  and the `styles.test.ts` pair grid is what keeps that promise when a token moves.
 - `.btn` and the bare form-control box live in a shared-controls section rather than in any one
   component's ticket: the shell's JSX and every later module's JSX use `.btn`, `.btn-primary`, and
   `.btn-ghost`, and no design ticket owns those class names. `.btn-danger`'s hover state deepens the

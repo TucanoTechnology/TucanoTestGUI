@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import type { Project } from "../../api/generated/index.js";
+import { ChevronDownIcon, ChevronRightIcon, FileIcon, FolderIcon } from "../../components/Icon.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
@@ -250,7 +251,7 @@ export function ProjectExplorer() {
                       toggleExpand(project.projectId);
                     }}
                   >
-                    <span aria-hidden="true">{isExpanded ? "▾" : "▸"}</span>
+                    <span aria-hidden="true">{isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}</span>
                   </button>
                   <button
                     className={`tree-node ${isActive ? "tree-node--active" : ""}`}
@@ -301,9 +302,9 @@ export function ProjectExplorer() {
                             >
                               {suite.testCases && suite.testCases.length > 0
                                 ? suiteExpanded
-                                  ? "▾"
-                                  : "▸"
-                                : "📁"}
+                                  ? <ChevronDownIcon />
+                                  : <ChevronRightIcon />
+                                : <FolderIcon />}
                             </span>
                             <span className="tree-node__label">
                               {suite.name}
@@ -339,7 +340,7 @@ export function ProjectExplorer() {
                                         className="tree-node__icon"
                                         aria-hidden="true"
                                       >
-                                        📄
+                                        <FileIcon />
                                       </span>
                                       <span className="tree-node__label">
                                         {tc.title}
@@ -366,7 +367,7 @@ export function ProjectExplorer() {
                             aria-current={isCaseActive ? "true" : undefined}
                           >
                             <span className="tree-node__icon" aria-hidden="true">
-                              📄
+                              <FileIcon />
                             </span>
                             <span className="tree-node__label">{tc.title}</span>
                           </button>

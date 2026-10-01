@@ -4,6 +4,7 @@ import type {
   Project,
   TestCase,
 } from "../../api/generated/index.js";
+import { ClipboardIcon } from "../../components/Icon.js";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
@@ -555,7 +556,7 @@ export function CaseList({
 
       {visible.length === 0 ? (
         <EmptyState
-          icon="📋"
+          icon={<ClipboardIcon />}
           message={
             needle.length > 0
               ? "No test cases match the search"
