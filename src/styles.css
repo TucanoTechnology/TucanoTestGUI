@@ -474,6 +474,7 @@ textarea {
   text-align: left;
   transition: background var(--transition-fast);
   border-radius: var(--radius-sm);
+  color: var(--color-text);
 }
 
 .suite-tree__node:hover {
@@ -2391,4 +2392,17 @@ textarea {
 .theme-toggle {
   font-size: 1.2em;
   padding: 4px 8px;
+}
+
+/* Dark theme overrides for elements that need different colors (#188) */
+:root[data-theme="dark"] .topbar__brand {
+  color: var(--color-text);
+}
+
+:root[data-theme="dark"] .suite-tree__node--active {
+  color: var(--color-text);
+}
+
+:root[data-theme="dark"] .btn-danger {
+  background: #b91c1c;
 }

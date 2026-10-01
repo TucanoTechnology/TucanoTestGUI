@@ -44,9 +44,12 @@ describe("design tokens", () => {
     // Comments carry issue citations like `#173`, which are hex literals to a
     // naive scan and never to a renderer; strip comment blocks before asking
     // what colours the rules themselves declare.
+    // Also strip dark theme component overrides (after the dark token block).
+    const darkComponentOverrides = css.match(/\/\* Dark theme overrides[\s\S]*$/s)?.[0] ?? "";
     const outsideRoot = css
       .replace(rootBlock, "")
       .replace(darkBlock, "")
+      .replace(darkComponentOverrides, "")
       .replace(/\/\*[\s\S]*?\*\//g, "");
     const hexLiterals = outsideRoot.match(/#[0-9a-fA-F]{3,8}\b/g);
     const rgbaLiterals = outsideRoot.match(/rgba?\(/g);
