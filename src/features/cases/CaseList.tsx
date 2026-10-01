@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   LastCaseResult,
   Project,
@@ -25,6 +25,17 @@ import {
   ErrorState,
   LoadingSkeleton,
 } from "../../components/StateViews.js";
+
+/**
+ * Row windowing (#173). Above this many visible cases the DOM carries only
+ * the scroll view plus overscan; the elided head and tail are held open by
+ * two spacer rows so the scroll bar keeps its meaning. Below the threshold
+ * nothing is windowed and the table is plain.
+ */
+const VIRTUALIZE_AT = 1000;
+/** The fixed pixel height of a list row in windowed mode (see styles.css). */
+const ROW_HEIGHT = 48;
+const OVERSCAN = 8;
 
 /** A row of the table: the case document and the parent that carries it. */
 interface CaseRow {
@@ -90,6 +101,12 @@ export function CaseList({
   const [reloadToken, setReloadToken] = useState(0);
 
   const [filter, setFilter] = useState("");
+  // Windowing geometry: the scroll container reports its top offset and
+  // height; only the intersection with the overscan reaches the DOM once the
+  // list is long. Inline pixel geometry is the one style no token can carry.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewHeight, setViewHeight] = useState(0);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [bulkTagValue, setBulkTagValue] = useState("");
   const [bulkRunId, setBulkRunId] = useState("");
@@ -194,6 +211,32 @@ export function CaseList({
           row.testCase.title.toLowerCase().includes(needle),
       )
     : scoped;
+
+  const virtual = visible.length > VIRTUALIZE_AT;
+  const windowStart = virtual
+    ? Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+    : 0;
+  const windowEnd = virtual
+    ? Math.min(visible.length, Math.ceil((scrollTop + viewHeight) / ROW_HEIGHT) + OVERSCAN)
+    : visible.length;
+  const window = visible.slice(windowStart, windowEnd);
+  const padTop = windowStart * ROW_HEIGHT;
+  const padBottom = Math.max(0, (visible.length - windowEnd) * ROW_HEIGHT);
+
+  // A new filter is a new question; the view goes back to its top so the
+  // answer starts in the window rather than scrolled past it.
+  useEffect(() => {
+    setScrollTop(0);
+    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    if (scrollRef.current) setViewHeight(scrollRef.current.clientHeight);
+  }, [filter, projectId, suiteFilter]);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setScrollTop(el.scrollTop);
+    setViewHeight(el.clientHeight);
+  };
 
   const allChecked =
     visible.length > 0 && visible.every((row) => checked.has(row.testCase.testCaseId));
@@ -538,6 +581,14 @@ export function CaseList({
           }
         />
       ) : (
+        <div
+          ref={scrollRef}
+          className={`case-list__scroll ${virtual ? "case-list__scroll--virtual" : ""}`}
+          onScroll={onScroll}
+          tabIndex={virtual ? 0 : undefined}
+          role={virtual ? "region" : undefined}
+          aria-label={virtual ? "Test cases, scrollable" : undefined}
+        >
         <table className="case-table" role="grid" aria-label="Test cases">
           <thead>
             <tr>
@@ -556,7 +607,12 @@ export function CaseList({
             </tr>
           </thead>
           <tbody>
-            {visible.map((row) => {
+            {virtual && padTop > 0 && (
+              <tr aria-hidden="true" style={{ height: padTop }}>
+                <td colSpan={6} />
+              </tr>
+            )}
+            {window.map((row) => {
               const { testCase } = row;
               return (
                 <tr
@@ -633,8 +689,14 @@ export function CaseList({
                 </tr>
               );
             })}
+            {virtual && padBottom > 0 && (
+              <tr aria-hidden="true" style={{ height: padBottom }}>
+                <td colSpan={6} />
+              </tr>
+            )}
           </tbody>
         </table>
+        </div>
       )}
 
       {creating && (
