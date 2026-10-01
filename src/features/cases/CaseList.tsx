@@ -10,6 +10,10 @@ import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
 import { useProjectContext } from "../../app/ProjectContext.js";
 import { Dialog } from "../../app/Dialog.js";
+import {
+  PlacementDialog,
+  type PlacementTarget,
+} from "../../app/PlacementDialog.js";
 import { parseTags } from "../../app/tags.js";
 import { formatTimestamp } from "../../app/format.js";
 import {
@@ -108,6 +112,10 @@ export function CaseList({
   const [scrollTop, setScrollTop] = useState(0);
   const [viewHeight, setViewHeight] = useState(0);
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  // #181: the row action's dialog state; one placement at a time.
+  const [placement, setPlacement] = useState<PlacementTarget | null>(
+    null,
+  );
   const [bulkTagValue, setBulkTagValue] = useState("");
   const [bulkRunId, setBulkRunId] = useState("");
   const [bulkStatus, setBulkStatus] = useState<ResultStatus>("Passed");
@@ -632,6 +640,21 @@ export function CaseList({
                   <td className="case-table__td case-table__td--id">
                     <span className="case-table__id">{testCase.testCaseId}</span>
                     <span className="case-table__parent">{row.parentPath}</span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost case-table__place"
+                      aria-label={`Move or copy ${testCase.testCaseId}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setPlacement({
+                          kind: "case",
+                          resourceId: testCase.testCaseId ?? "",
+                          label: testCase.testCaseId ?? "",
+                        });
+                      }}
+                    >
+                      Move/Copy
+                    </button>
                   </td>
                   <td className="case-table__td">
                     <span className="case-table__title">
@@ -705,6 +728,12 @@ export function CaseList({
             onCancel={() => setCreating(false)}
           />
         </Dialog>
+      )}
+      {placement && (
+        <PlacementDialog
+          target={placement}
+          onClose={() => setPlacement(null)}
+        />
       )}
     </div>
   );
