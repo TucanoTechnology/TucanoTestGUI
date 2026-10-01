@@ -187,6 +187,13 @@ textarea {
   border-bottom: 1px solid var(--color-border);
   height: var(--topbar-height);
   box-shadow: var(--shadow-sm);
+  /* #191: the explicit position is load-bearing, not decoration. The top
+     bar's z-index only creates a stacking context because CSS Grid makes an
+     exception for grid items; naming the positioning rule outright keeps the
+     context — and the search dropdown floating in it above the panes — safe
+     from a refactor that moves the bar out of the grid or reads this line
+     as dead code. e2e/search-stacking.spec.ts is the guard. */
+  position: relative;
   z-index: 1;
 }
 
