@@ -62,11 +62,48 @@ export function RunDetail({
   // The detail panel shows either the results table or the import form; the
   // run's own fields stay above both.
   const [activeTab, setActiveTab] = useState<"cases" | "import">("cases");
+  // #182: the home project's linkable inventory, read for the extend panel
+  // and the configuration select. Identities are the label the API stores,
+  // so the listings' id arrays are enough.
+  const [projectCaseIds, setProjectCaseIds] = useState<string[]>([]);
+  const [projectSuiteIds, setProjectSuiteIds] = useState<string[]>([]);
+  const [linkConfigId, setLinkConfigId] = useState("");
+  const [addCaseId, setAddCaseId] = useState("");
+  const [addSuiteId, setAddSuiteId] = useState("");
   // The run the document on screen was read with. A reload reads the same run
   // again to pick up what an action changed, and the panel stays on screen
   // while it does, so the state the sections own survives the read. A run that
   // has not been read yet has no document to show and blanks the panel.
   const loadedRunId = useRef<string | null>(null);
+
+  // A run names its home project in its own document, and a rename never
+  // moves the run, so the selection's project is only a fallback.
+  const homeProjectId = projectId ?? run?.projects?.[0]?.projectId;
+
+  // #182 grew the project's configuration list from an edit-form detail into
+  // something the view needs too: the link control offers the ones the run
+  // does not already hold.
+  const loadConfigurationOptions = async () => {
+    if (!homeProjectId) return;
+    setOptionsLoading(true);
+    try {
+      const configIds = await apiFetch(() =>
+        client.projects.listProjectConfigurations({ id: homeProjectId }),
+      );
+      const loaded = await Promise.all(
+        configIds.map((configId) =>
+          apiFetch(() =>
+            client.configurations.getConfiguration({ id: configId }),
+          ),
+        ),
+      );
+      setConfigurations(loaded);
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to load configurations"));
+    } finally {
+      setOptionsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +127,98 @@ export function RunDetail({
       cancelled = true;
     };
   }, [client, runId, reloadToken]);
+
+  // The home project's inventories ride the run read: the extend panel and
+  // the link control are only as fresh as the document they filter. A run
+  // without a reachable home (deleted project) simply gets no panel.
+  useEffect(() => {
+    const home = projectId ?? run?.projects?.[0]?.projectId;
+    if (!run || !home) return;
+    let cancelled = false;
+    Promise.all([
+      apiFetch(() => client.projects.listProjectTestCases({ id: home })),
+      apiFetch(() => client.projects.listProjectTestSuites({ id: home })),
+    ])
+      .then(([caseIds, suiteIds]) => {
+        if (cancelled) return;
+        setProjectCaseIds(caseIds as unknown as string[]);
+        setProjectSuiteIds(suiteIds as unknown as string[]);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setActionError(readApiError(err, "Failed to load the project's cases and suites"));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, run, projectId]);
+
+  useEffect(() => {
+    if (run && homeProjectId && configurations === null) {
+      void loadConfigurationOptions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run, homeProjectId, configurations]);
+
+  // --- extend-the-run actions (#182) --------------------------------------
+  // Each posts one route, then re-reads the run: the server owns the
+  // snapshot's content (a placed case is captured with its current revision),
+  // so the honest refresh is the document, not a guessed append.
+
+  const mutateRunMembership = async (
+    label: string,
+    call: () => Promise<{ message: string }>,
+  ) => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await call();
+      announce(label);
+      setReloadToken((token) => token + 1);
+    } catch (err: unknown) {
+      setActionError(readApiError(err, label));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const linkConfiguration = (configId: string) =>
+    mutateRunMembership(`${configId} linked to the run.`, () =>
+      apiFetch(() =>
+        client.testRuns.addTestRunConfiguration({
+          id: runId,
+          requestBody: { configId },
+        }),
+      ),
+    );
+
+  const unlinkConfiguration = (configId: string) =>
+    mutateRunMembership(`${configId} unlinked from the run.`, () =>
+      apiFetch(() =>
+        client.testRuns.removeTestRunConfiguration({ id: runId, configId }),
+      ),
+    );
+
+  const addCaseToRun = (testCaseId: string) =>
+    mutateRunMembership(`${testCaseId} added to the run.`, () =>
+      apiFetch(() =>
+        client.testRuns.addTestRunTestCase({
+          id: runId,
+          requestBody: { testCaseId },
+        }),
+      ),
+    );
+
+  const addSuiteToRun = (suiteId: string) =>
+    mutateRunMembership(`${suiteId} added to the run.`, () =>
+      apiFetch(() =>
+        client.testRuns.addTestRunTestSuite({
+          id: runId,
+          requestBody: { suiteId },
+        }),
+      ),
+    );
 
   const loadDefects = async (caseId: string): Promise<void> => {
     setCaseDefects(null);
@@ -135,38 +264,11 @@ export function RunDetail({
     setMode("view");
   };
 
-  // The stored run already carries the configuration it links, so the project's
-  // configurations are only read when the edit form has to offer them.
   const startEdit = async () => {
     if (!run) return;
     setActionError(null);
     setMode("edit");
-    setOptionsLoading(true);
-
-    // A run names its home project in its own document, and a rename never
-    // moves the run, so the selection's project is only a fallback.
-    const homeProjectId = projectId ?? run.projects?.[0]?.projectId;
-
-    try {
-      let loaded: TestConfiguration[] = [];
-      if (homeProjectId) {
-        const configIds = await apiFetch(() =>
-          client.projects.listProjectConfigurations({ id: homeProjectId }),
-        );
-        loaded = await Promise.all(
-          configIds.map((configId) =>
-            apiFetch(() =>
-              client.configurations.getConfiguration({ id: configId }),
-            ),
-          ),
-        );
-      }
-      setConfigurations(loaded);
-    } catch (err: unknown) {
-      setActionError(readApiError(err, "Failed to load configurations"));
-    } finally {
-      setOptionsLoading(false);
-    }
+    await loadConfigurationOptions();
   };
 
   const updateRun = async (values: RunFormValues) => {
@@ -591,12 +693,85 @@ export function RunDetail({
                 </div>
               )}
 
-              <div className="detail-field">
-                <div className="detail-field__label">Configuration</div>
-                <div className="detail-field__value">
-                  {configuration ? configuration.name : "None"}
-                </div>
-              </div>
+              {(() => {
+                // #182: every linked configuration is shown and removable on
+                // its own; the link control offers the project's remainder.
+                const linked = run.configurations ?? [];
+                const linkable = (configurations ?? []).filter(
+                  (entry) =>
+                    !linked.some((held) => held.configId === entry.configId),
+                );
+                return (
+                  <div className="detail-field">
+                    <div className="detail-field__label">
+                      Configurations ({linked.length})
+                    </div>
+                    {linked.length === 0 ? (
+                      <div className="detail-field__value">None</div>
+                    ) : (
+                      <ul className="entity-list">
+                        {linked.map((entry) => (
+                          <li key={entry.configId} className="entity-list__item">
+                            <span className="entity-list__name">
+                              {entry.name}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={busy}
+                              onClick={() =>
+                                void unlinkConfiguration(entry.configId ?? "")
+                              }
+                            >
+                              Unlink
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {homeProjectId && (
+                      <div className="run-detail__link">
+                        <label htmlFor={`${fieldId}-link-configuration`}>
+                          Link configuration
+                        </label>
+                        <select
+                          id={`${fieldId}-link-configuration`}
+                          value={linkConfigId}
+                          disabled={busy || optionsLoading}
+                          onChange={(event) =>
+                            setLinkConfigId(event.target.value)
+                          }
+                        >
+                          <option value="">
+                            {optionsLoading
+                              ? "Loading…"
+                              : "Choose a configuration"}
+                          </option>
+                          {linkable.map((entry) => (
+                            <option
+                              key={entry.configId}
+                              value={entry.configId ?? ""}
+                            >
+                              {entry.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={busy || linkConfigId === ""}
+                          onClick={() => {
+                            void linkConfiguration(linkConfigId);
+                            setLinkConfigId("");
+                          }}
+                        >
+                          Link
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {run.projects && run.projects.length > 0 && (
                 <div className="detail-field">
@@ -626,6 +801,105 @@ export function RunDetail({
                     ))}
                   </ul>
                 </div>
+              )}
+
+              {homeProjectId && (
+                <fieldset
+                  className="run-extend"
+                  disabled={busy || mode !== "view"}
+                >
+                  <legend className="detail-field__label">
+                    Extend this run
+                  </legend>
+                  {(() => {
+                    // Held = already in the snapshot by any route the run
+                    // knows it: a declared case, or a result whose case the
+                    // declaration has since lost.
+                    const heldCases = new Set<string>([
+                      ...(run.testCases ?? []).map((entry) => entry.testCaseId ?? ""),
+                      ...(run.results ?? []).map((entry) => entry.testCaseId ?? ""),
+                    ]);
+                    const heldSuites = new Set(
+                      (run.testSuites ?? []).map((entry) => entry.suiteId ?? ""),
+                    );
+                    const openCases = projectCaseIds.filter(
+                      (id) => !heldCases.has(id),
+                    );
+                    const openSuites = projectSuiteIds.filter(
+                      (id) => !heldSuites.has(id),
+                    );
+                    return (
+                      <>
+                        <div className="run-extend__row">
+                          <label htmlFor={`${fieldId}-add-case`}>Add case</label>
+                          <select
+                            id={`${fieldId}-add-case`}
+                            value={addCaseId}
+                            onChange={(event) => setAddCaseId(event.target.value)}
+                          >
+                            <option value="">
+                              {openCases.length === 0
+                                ? "Nothing left to add"
+                                : "Choose a case"}
+                            </option>
+                            {openCases.map((id) => (
+                              <option key={id} value={id}>
+                                {id}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            aria-label="Add case to the run"
+                            disabled={busy || addCaseId === ""}
+                            onClick={() => {
+                              void addCaseToRun(addCaseId);
+                              setAddCaseId("");
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                        <div className="run-extend__row">
+                          <label htmlFor={`${fieldId}-add-suite`}>
+                            Add suite
+                          </label>
+                          <select
+                            id={`${fieldId}-add-suite`}
+                            value={addSuiteId}
+                            onChange={(event) =>
+                              setAddSuiteId(event.target.value)
+                            }
+                          >
+                            <option value="">
+                              {openSuites.length === 0
+                                ? "Nothing left to add"
+                                : "Choose a suite"}
+                            </option>
+                            {openSuites.map((id) => (
+                              <option key={id} value={id}>
+                                {id}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            aria-label="Add suite to the run"
+                            disabled={busy || addSuiteId === ""}
+                            onClick={() => {
+                              void addSuiteToRun(addSuiteId);
+                              setAddSuiteId("");
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </fieldset>
               )}
 
               {rows.length > 0 && (

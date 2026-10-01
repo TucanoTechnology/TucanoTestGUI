@@ -2288,3 +2288,26 @@ textarea {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
+
+/* #182: the run-membership controls sit inline with the detail fields; the
+   row is a labelled select and its action, sharing the form-field spacing. */
+.run-detail__link,
+.run-extend__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.run-detail__link select,
+.run-extend__row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.run-extend {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  margin: var(--space-3) 0;
+}
