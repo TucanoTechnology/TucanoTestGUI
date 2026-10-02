@@ -77,7 +77,7 @@ export function RunConfigurationsSection({
           </select>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-secondary"
             disabled={busy || linkConfigId === ""}
             onClick={() => {
               onLink(linkConfigId);

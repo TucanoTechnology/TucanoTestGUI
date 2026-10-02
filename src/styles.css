@@ -2406,3 +2406,19 @@ textarea {
 :root[data-theme="dark"] .btn-danger {
   background: #b91c1c;
 }
+
+/* ------------------------------------------------------------------ */
+/* Button variants (#200)                                              */
+/* ------------------------------------------------------------------ */
+
+.btn-secondary {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-light);
+}
