@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { EmptyState } from "../../components/StateViews.js";
 import { Dialog } from "../../app/Dialog.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 import { SettingsIcon } from "../../components/Icon.js";
@@ -107,7 +108,7 @@ export function ConfigurationListPanel({
       ) : error ? (
         <p className="suite-tree__error">{error.message}</p>
       ) : configurations.length === 0 ? (
-        <p className="suite-tree__empty">No configurations yet</p>
+        <EmptyState icon={<SettingsIcon />} message="No configurations yet" />
       ) : (
         <div className="suite-tree__nodes" role="tree">
           {configurations.map((configId) => (
