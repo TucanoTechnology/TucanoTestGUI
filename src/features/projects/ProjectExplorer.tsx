@@ -141,7 +141,7 @@ export function ProjectExplorer() {
       <div className="explorer__toolbar">
         {systemAdmin ? (
           <button type="button" className="btn btn-primary" onClick={openCreate}>
-            New Project
+            + New Project
           </button>
         ) : (
           // `POST /projects` is the one create answered `forbidden` to everyone

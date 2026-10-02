@@ -363,7 +363,7 @@ export function SuiteTree({
                       className="btn btn-primary"
                       onClick={openCreate}
                     >
-                      + Create suite
+                      + New Suite
                     </button>
                   }
                 />
