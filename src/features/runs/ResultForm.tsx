@@ -215,7 +215,7 @@ export function ResultForm({
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-secondary"
             disabled={busy}
             title="Record Passed and open the next case awaiting execution"
             onClick={(event) => {

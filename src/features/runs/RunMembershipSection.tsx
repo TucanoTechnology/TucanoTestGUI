@@ -53,7 +53,7 @@ export function RunMembershipSection({
         </select>
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-secondary"
           disabled={busy || addCaseId === ""}
           onClick={() => {
             onAddCase(addCaseId);
@@ -82,7 +82,7 @@ export function RunMembershipSection({
         </select>
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-secondary"
           disabled={busy || addSuiteId === ""}
           onClick={() => {
             onAddSuite(addSuiteId);
