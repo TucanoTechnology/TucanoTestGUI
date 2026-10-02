@@ -201,7 +201,7 @@ describe("CaseList", () => {
     expect(
       screen.getByRole("button", { name: "Create test run" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "+ Create" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "+ New Case" })).toBeInTheDocument();
 
     // The ID column carries the identifier and the parent path; the version
     // rides beside the title so the revision a run pins is visible (#162).
@@ -298,7 +298,7 @@ describe("CaseList", () => {
     renderList();
     await waitFor(() => expect(rows()).toHaveLength(3));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "+ Create" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "+ New Case" })[0]!);
     const form = await screen.findByRole("form", { name: "Create case form" });
     fireEvent.change(within(form).getByLabelText("Case ID"), {
       target: { value: "TC-NEW-1" },

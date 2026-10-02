@@ -219,7 +219,7 @@ describe("SuiteTree", () => {
       await screen.findByText("No suites yet"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "+ Create suite" }),
+      screen.getByRole("button", { name: "+ New Suite" }),
     ).toBeInTheDocument();
   });
 

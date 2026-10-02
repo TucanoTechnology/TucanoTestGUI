@@ -130,7 +130,7 @@ function renderExplorer(me: MeResponse | null = null) {
 async function openCreateForm() {
   // The control is offered on the account's authority, so it is there a tick
   // after the stored session has been restored.
-  fireEvent.click(await screen.findByRole("button", { name: "New Project" }));
+  fireEvent.click(await screen.findByRole("button", { name: "+ New Project" }));
   const dialog = await screen.findByRole("dialog", { name: "New project" });
   return {
     dialog,
@@ -485,7 +485,7 @@ describe("ProjectExplorer", () => {
     expect(await screen.findByText("viewer:not-system-admin")).toBeInTheDocument();
     expect(await screen.findByText("Checkout")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "New Project" }),
+      screen.queryByRole("button", { name: "+ New Project" }),
     ).not.toBeInTheDocument();
     // The refusal is not silent: the toolbar says why, and the role the account
     // does hold on `checkout.json` belongs to that project's own controls.
@@ -508,7 +508,7 @@ describe("ProjectExplorer", () => {
 
     expect(await screen.findByText("admin:system-admin")).toBeInTheDocument();
     expect(
-      await screen.findByRole("button", { name: "New Project" }),
+      await screen.findByRole("button", { name: "+ New Project" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("Only a system administrator can create a project."),

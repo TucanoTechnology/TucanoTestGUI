@@ -468,7 +468,7 @@ export function CaseList({
               setCreating(true);
             }}
           >
-            + Create
+            + New Case
           </button>
           <input
             type="search"
@@ -580,7 +580,7 @@ export function CaseList({
                   setCreating(true);
                 }}
               >
-                + Create
+                + New Case
               </button>
             ) : undefined
           }
