@@ -231,6 +231,12 @@ function AppShellContent() {
   return (
     <div
       className={`app-layout ${sidebarOpen ? "app-layout--sidebar-open" : ""}`}
+      onClick={(event) => {
+        // Close sidebar when clicking the backdrop (not on the sidebar itself)
+        if (sidebarOpen && event.target === event.currentTarget) {
+          setSidebarOpen(false);
+        }
+      }}
     >
       {/* First stop on the keyboard: jump past the bar, rail and explorer
           into the working pane. Hidden until focus, per WCAG 2.4.1. */}
@@ -318,6 +324,14 @@ function AppShellContent() {
               : "Project explorer"
           }
         >
+          <button
+            type="button"
+            className="pane-left__close btn btn-icon"
+            aria-label="Close navigation"
+            onClick={() => setSidebarOpen(false)}
+          >
+            ✕
+          </button>
           {selectedProjectId ? (
             activeModule === "cases" ? (
               <SuiteTree
