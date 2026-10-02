@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../../api/client.js";
 import { readApiError, type ApiErrorInfo } from "../../api/errors.js";
 import { useAuth } from "../../app/AuthProvider.js";
+import { EmptyState } from "../../components/StateViews.js";
 import { Dialog } from "../../app/Dialog.js";
 import { EntityForm, type EntityFormValues } from "../../app/EntityForm.js";
 import { TargetIcon } from "../../components/Icon.js";
@@ -105,7 +106,7 @@ export function MilestoneListPanel({
       ) : error ? (
         <p className="suite-tree__error">{error.message}</p>
       ) : milestones.length === 0 ? (
-        <p className="suite-tree__empty">No milestones yet</p>
+        <EmptyState icon={<TargetIcon />} message="No milestones yet" />
       ) : (
         <div className="suite-tree__nodes" role="tree">
           {milestones.map((milestoneId) => (
