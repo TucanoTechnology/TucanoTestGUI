@@ -24,6 +24,8 @@ import { parseTags } from "../../app/tags.js";
 import {
   CASE_PRIORITIES,
   CASE_SEVERITIES,
+  CaseForm,
+  type CaseFormValues,
   type CasePriority,
   type CaseSeverity,
 } from "./CaseForm.js";
@@ -83,7 +85,7 @@ export function CaseDetail({
     location: CaseLocation | null;
   } | null>(null);
   const [error, setError] = useState<ApiErrorInfo | null>(null);
-  const [mode, setMode] = useState<"view" | "duplicate" | "delete">("view");
+  const [mode, setMode] = useState<"view" | "edit" | "duplicate" | "delete">("view");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<ApiErrorInfo | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -257,6 +259,43 @@ export function CaseDetail({
       }),
     );
 
+  const updateCase = async (values: CaseFormValues) => {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const requestBody: TestCaseUpdateRequest = {};
+      if (values.title !== testCase?.title) requestBody.title = values.title;
+      if (values.expectedResult !== testCase?.expectedResult)
+        requestBody.expectedResult = values.expectedResult;
+      if (values.description !== testCase?.description)
+        requestBody.description = values.description;
+      if (values.preconditions !== testCase?.preconditions)
+        requestBody.preconditions = values.preconditions;
+      if (values.priority && values.priority !== testCase?.priority)
+        requestBody.priority = values.priority;
+      if (values.severity && values.severity !== testCase?.severity)
+        requestBody.severity = values.severity;
+      if (JSON.stringify(values.tags) !== JSON.stringify(testCase?.tags))
+        requestBody.tags = values.tags;
+
+      if (Object.keys(requestBody).length > 0) {
+        const updated = await apiFetch(() =>
+          client.testCases.updateTestCase({
+            id: caseId,
+            requestBody,
+          }),
+        );
+        setReloadToken((token) => token + 1);
+        announce(updated.message);
+      }
+      setMode("view");
+    } catch (err: unknown) {
+      setActionError(readApiError(err, "Failed to update test case"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const duplicateCase = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -357,6 +396,16 @@ export function CaseDetail({
           {testCase.title}
         </h2>
         <div className="detail-actions">
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setActionError(null);
+              setMode("edit");
+            }}
+          >
+            Edit
+          </button>
           <button
             type="button"
             className="btn btn-ghost"
@@ -586,6 +635,28 @@ export function CaseDetail({
 
         {activeTab === "History" && <HistoryTab caseId={caseId} />}
       </div>
+
+      {mode === "edit" && testCase && (
+        <Dialog title="Edit case" onClose={() => setMode("view")}>
+          <CaseForm
+            submitLabel="Save changes"
+            caseId={testCase.testCaseId}
+            initialValues={{
+              title: testCase.title ?? "",
+              expectedResult: testCase.expectedResult ?? "",
+              description: testCase.description ?? "",
+              preconditions: testCase.preconditions ?? "",
+              priority: testCase.priority ?? "",
+              severity: testCase.severity ?? "",
+              tags: testCase.tags ?? [],
+            }}
+            busy={busy}
+            error={actionError}
+            onSubmit={updateCase}
+            onCancel={() => setMode("view")}
+          />
+        </Dialog>
+      )}
 
       {mode === "duplicate" && (
         <Dialog title="Duplicate case" onClose={() => setMode("view")}>
