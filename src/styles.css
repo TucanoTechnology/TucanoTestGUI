@@ -2461,3 +2461,111 @@ textarea {
   font-size: var(--font-size-base);
   margin: 0;
 }
+
+/* ------------------------------------------------------------------ */
+/* Responsive tables (#201)                                            */
+/* ------------------------------------------------------------------ */
+
+/* Tables scroll horizontally on narrow viewports */
+@media (max-width: 768px) {
+  .case-table,
+  .report__table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .case-table th,
+  .case-table td,
+  .report__table th,
+  .report__table td {
+    min-width: 120px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive dialogs (#201)                                           */
+/* ------------------------------------------------------------------ */
+
+/* Dialogs adapt to viewport height */
+@media (max-height: 600px) {
+  .dialog {
+    max-height: 95vh;
+  }
+}
+
+/* Full-screen dialogs on very small screens */
+@media (max-width: 480px) {
+  .dialog {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive action buttons (#201)                                    */
+/* ------------------------------------------------------------------ */
+
+/* Keep button groups together on narrow viewports */
+@media (max-width: 640px) {
+  .detail-actions,
+  .dialog__actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: var(--space-2);
+  }
+
+  .detail-actions button,
+  .dialog__actions button {
+    flex-shrink: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Touch targets (#201)                                                */
+/* ------------------------------------------------------------------ */
+
+/* Minimum 44px touch target for all interactive elements */
+@media (pointer: coarse) {
+  .btn,
+  .btn-sm {
+    min-height: 44px;
+  }
+
+  .case-table__row {
+    min-height: 44px;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Sidebar overlay improvements (#201)                                 */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 1024px) {
+  /* Backdrop for sidebar overlay */
+  .app-layout--sidebar-open::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 19;
+  }
+
+  /* Close button for sidebar */
+  .pane-left__close {
+    display: block;
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 21;
+  }
+}
+
+@media (min-width: 1025px) {
+  .pane-left__close {
+    display: none;
+  }
+}
